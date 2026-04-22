@@ -1,9 +1,10 @@
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import type { ReactNode } from "react";
 
 interface AnalysisCardProps {
   title: string;
   description?: string;
-  children: React.ReactNode;
+  children: ReactNode;
 }
 
 export const AnalysisCard = ({ title, description, children }: AnalysisCardProps) => (

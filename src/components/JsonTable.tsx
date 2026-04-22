@@ -38,7 +38,7 @@ export const JsonTable = ({ data, emptyLabel = "No records returned." }: JsonTab
           <TableRow className="bg-muted/60 hover:bg-muted/60">
             {columns.map((column) => (
               <TableHead key={column} className="whitespace-nowrap capitalize">
-                {column.replaceAll("_", " ")}
+                {column.replace(/_/g, " ")}
               </TableHead>
             ))}
           </TableRow>
