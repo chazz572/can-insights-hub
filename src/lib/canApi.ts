@@ -3,12 +3,17 @@ const API_BASE_URL = "http://localhost:8000/api";
 export type JsonRecord = Record<string, unknown>;
 
 export interface AnalysisResult {
-  summary?: unknown;
-  basic_view?: JsonRecord;
-  diagnostics?: JsonRecord;
-  reverse_engineering?: JsonRecord;
-  vehicle_behavior?: JsonRecord;
-  signals_detected?: unknown;
+  summary?: string;
+  total_messages?: number;
+  unique_ids?: number;
+  id_stats?: JsonRecord[];
+  anomalies?: JsonRecord[];
+  reverse_engineering?: JsonRecord[];
+  vehicle_behavior?: {
+    possible_speed_ids?: unknown[];
+    possible_rpm_ids?: unknown[];
+    possible_pedal_ids?: unknown[];
+  };
   [key: string]: unknown;
 }
 
