@@ -1,3 +1,4 @@
+import { AlertTriangle, BarChart3, Binary, BrainCircuit, Gauge, Hash, MessageSquareText, Radar } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 
@@ -17,19 +18,47 @@ const renderList = (value: unknown) => {
   const items = Array.isArray(value) ? value : value === undefined || value === null ? [] : [value];
 
   if (!items.length) {
-    return <div className="rounded-md border border-dashed bg-muted/50 p-4 text-sm text-muted-foreground">No values returned.</div>;
+    return <div className="rounded-lg border border-dashed border-glass-border bg-glass p-4 text-sm text-muted-foreground backdrop-blur">No values returned.</div>;
   }
 
   return (
     <div className="flex flex-wrap gap-2">
       {items.map((item, index) => (
-        <span key={`${String(item)}-${index}`} className="rounded-md bg-secondary px-3 py-2 font-mono text-sm text-secondary-foreground">
+        <span key={`${String(item)}-${index}`} className="rounded-lg border border-glass-border bg-secondary px-3 py-2 font-mono text-sm text-secondary-foreground shadow-glow">
           {renderText(item)}
         </span>
       ))}
     </div>
   );
 };
+
+const MiniChart = () => (
+  <div className="flex h-24 items-end gap-2 rounded-lg border border-glass-border bg-glass p-4 backdrop-blur">
+    {[42, 64, 38, 78, 52, 88, 68, 96, 58, 74].map((height, index) => (
+      <span
+        key={index}
+        className="flex-1 rounded-full bg-gradient-accent opacity-80 shadow-glow motion-safe:animate-pulse-glow"
+        style={{ height: `${height}%`, animationDelay: `${index * 120}ms` }}
+      />
+    ))}
+  </div>
+);
+
+const MetricCard = ({ title, value, icon: Icon }: { title: string; value: unknown; icon: typeof MessageSquareText }) => (
+  <Card className="animate-fade-up overflow-hidden">
+    <CardContent className="p-6">
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <p className="text-sm font-semibold uppercase text-muted-foreground">{title}</p>
+          <p className="mt-4 text-4xl font-extrabold text-primary">{renderText(value)}</p>
+        </div>
+        <div className="grid size-12 place-items-center rounded-lg border border-glass-border bg-glass text-primary shadow-glow backdrop-blur">
+          <Icon className="size-6" />
+        </div>
+      </div>
+    </CardContent>
+  </Card>
+);
 
 const Results = () => {
   const { id, file_id } = useParams();
@@ -76,12 +105,15 @@ const Results = () => {
   const vehicleBehavior = data?.vehicle_behavior ?? {};
 
   return (
-    <main className="mx-auto min-h-[calc(100vh-4rem)] max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
+    <main className="mx-auto min-h-screen max-w-7xl px-4 py-8 sm:px-6 lg:px-10">
       <div className="mb-8 flex flex-col justify-between gap-4 sm:flex-row sm:items-end">
-        <div>
-          <p className="text-sm font-semibold uppercase tracking-[0.2em] text-primary">Results dashboard</p>
-          <h1 className="mt-2 text-3xl font-bold tracking-tight sm:text-4xl">CAN analysis</h1>
-          <p className="mt-2 max-w-2xl text-muted-foreground">File ID: <span className="font-mono text-foreground">{fileId ?? "—"}</span></p>
+        <div className="animate-fade-up">
+          <p className="inline-flex items-center gap-2 rounded-lg border border-glass-border bg-glass px-3 py-1 text-sm font-semibold uppercase text-primary shadow-glow backdrop-blur">
+            <BrainCircuit className="size-4" />
+            Results dashboard
+          </p>
+          <h1 className="mt-4 text-4xl font-extrabold tracking-tight sm:text-5xl">CAN analysis</h1>
+          <p className="mt-3 max-w-2xl text-muted-foreground">File ID: <span className="font-mono text-foreground">{fileId ?? "—"}</span></p>
         </div>
         <Button asChild variant="outline">
           <Link to="/upload">Analyze another CSV</Link>
@@ -89,14 +121,14 @@ const Results = () => {
       </div>
 
       {isLoading ? (
-        <Card className="bg-gradient-panel shadow-dashboard">
-          <CardContent className="space-y-4 p-6">
-            <div className="h-4 w-48 animate-pulse rounded-md bg-muted" />
-            <div className="h-24 animate-pulse rounded-md bg-muted" />
+        <Card className="animate-fade-up overflow-hidden">
+          <CardContent className="space-y-5 p-6">
+            <div className="h-5 w-56 animate-pulse rounded-lg bg-muted" />
+            <div className="h-28 animate-pulse rounded-lg bg-muted" />
             <div className="grid gap-4 sm:grid-cols-3">
-              <div className="h-20 animate-pulse rounded-md bg-muted" />
-              <div className="h-20 animate-pulse rounded-md bg-muted" />
-              <div className="h-20 animate-pulse rounded-md bg-muted" />
+              <div className="h-24 animate-pulse rounded-lg bg-muted" />
+              <div className="h-24 animate-pulse rounded-lg bg-muted" />
+              <div className="h-24 animate-pulse rounded-lg bg-muted" />
             </div>
           </CardContent>
         </Card>
@@ -109,42 +141,42 @@ const Results = () => {
         </Card>
       ) : data ? (
         <div className="grid gap-6">
-          <AnalysisCard title="Summary">
-            <pre className="whitespace-pre-wrap rounded-md bg-muted/60 p-4 text-sm leading-7 text-foreground">{renderText(data.summary)}</pre>
-          </AnalysisCard>
-
-          <div className="grid gap-6 lg:grid-cols-3">
-            <AnalysisCard title="Total Messages">
-              <p className="text-4xl font-bold text-primary">{renderText(data.total_messages)}</p>
+          <div className="grid gap-6 xl:grid-cols-[1.25fr_0.75fr]">
+            <AnalysisCard title="Summary" icon={<MessageSquareText className="size-5" />}>
+              <pre className="whitespace-pre-wrap rounded-lg border border-glass-border bg-glass p-5 text-sm leading-7 text-foreground backdrop-blur">{renderText(data.summary)}</pre>
             </AnalysisCard>
-            <AnalysisCard title="Unique IDs">
-              <p className="text-4xl font-bold text-primary">{renderText(data.unique_ids)}</p>
-            </AnalysisCard>
-            <AnalysisCard title="Anomalies Detected">
-              <p className="text-4xl font-bold text-primary">{renderText(anomalies.length)}</p>
+            <AnalysisCard title="Signal Activity" description="Live telemetry intensity preview." icon={<BarChart3 className="size-5" />}>
+              <MiniChart />
             </AnalysisCard>
           </div>
 
-          <AnalysisCard title="Basic View" description="Frequency distribution by CAN identifier.">
-            <JsonTable data={data.id_stats} />
-          </AnalysisCard>
+          <div className="grid gap-6 lg:grid-cols-3">
+            <MetricCard title="Total Messages" value={data.total_messages} icon={MessageSquareText} />
+            <MetricCard title="Unique IDs" value={data.unique_ids} icon={Hash} />
+            <MetricCard title="Anomalies Detected" value={anomalies.length} icon={AlertTriangle} />
+          </div>
 
-          <AnalysisCard title="Diagnostics" description="Backend-detected anomalies in the capture.">
-            <JsonTable data={anomalies} />
-          </AnalysisCard>
+          <div className="grid gap-6 xl:grid-cols-2">
+            <AnalysisCard title="Basic View" description="Frequency distribution by CAN identifier." icon={<Binary className="size-5" />}>
+              <JsonTable data={data.id_stats} />
+            </AnalysisCard>
 
-          <AnalysisCard title="Reverse Engineering" description="Clustered identifiers and inferred signal groups.">
+            <AnalysisCard title="Diagnostics" description="Backend-detected anomalies in the capture." icon={<AlertTriangle className="size-5" />}>
+              <JsonTable data={data.anomalies} />
+            </AnalysisCard>
+          </div>
+
+          <AnalysisCard title="Reverse Engineering" description="Clustered identifiers and inferred signal groups." icon={<Radar className="size-5" />}>
             <JsonTable data={data.reverse_engineering} />
           </AnalysisCard>
 
-          <AnalysisCard title="Vehicle Behavior">
+          <AnalysisCard title="Vehicle Behavior" icon={<Gauge className="size-5" />}>
             <div className="grid gap-5 lg:grid-cols-3">
-              <div className="space-y-2"><h3 className="font-semibold">Possible Speed IDs</h3>{renderList(vehicleBehavior.possible_speed_ids)}</div>
-              <div className="space-y-2"><h3 className="font-semibold">Possible RPM IDs</h3>{renderList(vehicleBehavior.possible_rpm_ids)}</div>
-              <div className="space-y-2"><h3 className="font-semibold">Possible Pedal IDs</h3>{renderList(vehicleBehavior.possible_pedal_ids)}</div>
+              <div className="space-y-3"><h3 className="font-semibold">Possible Speed IDs</h3>{renderList(vehicleBehavior.possible_speed_ids)}</div>
+              <div className="space-y-3"><h3 className="font-semibold">Possible RPM IDs</h3>{renderList(vehicleBehavior.possible_rpm_ids)}</div>
+              <div className="space-y-3"><h3 className="font-semibold">Possible Pedal IDs</h3>{renderList(vehicleBehavior.possible_pedal_ids)}</div>
             </div>
           </AnalysisCard>
-
         </div>
       ) : null}
     </main>
