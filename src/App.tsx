@@ -12,7 +12,6 @@ import Results from "./pages/Results.tsx";
 import NotFound from "./pages/NotFound.tsx";
 
 const queryClient = new QueryClient();
-const routerBasename = import.meta.env.BASE_URL === "/" ? undefined : import.meta.env.BASE_URL.replace(/\/$/, "");
 
 const App = () => {
   const [backendError, setBackendError] = useState<string | null>(null);
@@ -28,7 +27,7 @@ const App = () => {
       <TooltipProvider>
         <Toaster />
         <Sonner />
-        <BrowserRouter basename={routerBasename}>
+        <BrowserRouter>
           <AppNav />
           {backendError ? <div className="border-b border-destructive/40 bg-destructive/10 px-4 py-3 text-sm text-destructive">{backendError}</div> : null}
           <Routes>
