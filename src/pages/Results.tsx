@@ -71,8 +71,9 @@ const Results = () => {
     };
   }, [fileId]);
 
-  const anomalies = analysis?.anomalies ?? [];
-  const vehicleBehavior = analysis?.vehicle_behavior ?? {};
+  const data = analysis;
+  const anomalies = data?.anomalies ?? [];
+  const vehicleBehavior = data?.vehicle_behavior ?? {};
 
   return (
     <main className="mx-auto min-h-[calc(100vh-4rem)] max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
@@ -106,18 +107,18 @@ const Results = () => {
             <p className="mt-2 text-sm text-destructive">{error}</p>
           </CardContent>
         </Card>
-      ) : analysis ? (
+      ) : data ? (
         <div className="grid gap-6">
           <AnalysisCard title="Summary">
-            <pre className="whitespace-pre-wrap rounded-md bg-muted/60 p-4 text-sm leading-7 text-foreground">{renderText(analysis.summary)}</pre>
+            <pre className="whitespace-pre-wrap rounded-md bg-muted/60 p-4 text-sm leading-7 text-foreground">{renderText(data.summary)}</pre>
           </AnalysisCard>
 
           <div className="grid gap-6 lg:grid-cols-3">
             <AnalysisCard title="Total Messages">
-              <p className="text-4xl font-bold text-primary">{renderText(analysis.total_messages)}</p>
+              <p className="text-4xl font-bold text-primary">{renderText(data.total_messages)}</p>
             </AnalysisCard>
             <AnalysisCard title="Unique IDs">
-              <p className="text-4xl font-bold text-primary">{renderText(analysis.unique_ids)}</p>
+              <p className="text-4xl font-bold text-primary">{renderText(data.unique_ids)}</p>
             </AnalysisCard>
             <AnalysisCard title="Anomalies Detected">
               <p className="text-4xl font-bold text-primary">{renderText(anomalies.length)}</p>
@@ -125,7 +126,7 @@ const Results = () => {
           </div>
 
           <AnalysisCard title="Basic View" description="Frequency distribution by CAN identifier.">
-            <JsonTable data={analysis.id_stats} />
+            <JsonTable data={data.id_stats} />
           </AnalysisCard>
 
           <AnalysisCard title="Diagnostics" description="Backend-detected anomalies in the capture.">
@@ -133,7 +134,7 @@ const Results = () => {
           </AnalysisCard>
 
           <AnalysisCard title="Reverse Engineering" description="Clustered identifiers and inferred signal groups.">
-            <JsonTable data={analysis.reverse_engineering} />
+            <JsonTable data={data.reverse_engineering} />
           </AnalysisCard>
 
           <AnalysisCard title="Vehicle Behavior">
