@@ -71,9 +71,7 @@ const Results = () => {
     };
   }, [fileId]);
 
-  const basicView = analysis?.basic_view ?? {};
-  const diagnostics = analysis?.diagnostics ?? {};
-  const reverseEngineering = analysis?.reverse_engineering ?? {};
+  const anomalies = analysis?.anomalies ?? [];
   const vehicleBehavior = analysis?.vehicle_behavior ?? {};
 
   return (
@@ -116,26 +114,26 @@ const Results = () => {
 
           <div className="grid gap-6 lg:grid-cols-3">
             <AnalysisCard title="Total Messages">
-              <p className="text-4xl font-bold text-primary">{renderText(basicView.total_messages)}</p>
+              <p className="text-4xl font-bold text-primary">{renderText(analysis.total_messages)}</p>
             </AnalysisCard>
             <AnalysisCard title="Unique IDs">
-              <p className="text-4xl font-bold text-primary">{renderText(basicView.unique_ids)}</p>
+              <p className="text-4xl font-bold text-primary">{renderText(analysis.unique_ids)}</p>
             </AnalysisCard>
             <AnalysisCard title="Anomalies Detected">
-              <p className="text-4xl font-bold text-primary">{renderText(diagnostics.anomalies_detected)}</p>
+              <p className="text-4xl font-bold text-primary">{renderText(anomalies.length)}</p>
             </AnalysisCard>
           </div>
 
           <AnalysisCard title="Basic View" description="Frequency distribution by CAN identifier.">
-            <JsonTable data={basicView.id_frequency} />
+            <JsonTable data={analysis.id_stats} />
           </AnalysisCard>
 
           <AnalysisCard title="Diagnostics" description="Backend-detected anomalies in the capture.">
-            <JsonTable data={diagnostics.anomalies} />
+            <JsonTable data={anomalies} />
           </AnalysisCard>
 
           <AnalysisCard title="Reverse Engineering" description="Clustered identifiers and inferred signal groups.">
-            <JsonTable data={reverseEngineering.clusters} />
+            <JsonTable data={analysis.reverse_engineering} />
           </AnalysisCard>
 
           <AnalysisCard title="Vehicle Behavior">
@@ -146,9 +144,6 @@ const Results = () => {
             </div>
           </AnalysisCard>
 
-          <AnalysisCard title="Signals Detected">
-            <JsonTable data={analysis.signals_detected} />
-          </AnalysisCard>
         </div>
       ) : null}
     </main>
