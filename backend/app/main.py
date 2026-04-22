@@ -3,11 +3,11 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.api.upload.router import router as upload_router
 from app.api.analyze.router import router as analyze_router
 
-app = FastAPI(title="CAN Insights Hub API")
+app = FastAPI(title="CAN Insights Hub API", docs_url=None, redoc_url=None, openapi_url=None)
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=["http://localhost:8080"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -19,3 +19,7 @@ app.include_router(analyze_router, prefix="/api")
 @app.get("/")
 def root():
     return {"message": "CAN Insights Hub Backend Running"}
+
+@app.get("/api/health")
+def health():
+    return {"status": "ok"}

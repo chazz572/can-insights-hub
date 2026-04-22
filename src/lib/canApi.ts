@@ -45,3 +45,16 @@ export const analyzeFile = async (fileId: string): Promise<AnalysisResult> => {
     },
   }).then((response) => parseJsonResponse<AnalysisResult>(response));
 };
+
+export const checkBackendHealth = async (): Promise<void> => {
+  const payload = await fetch(`${API_BASE_URL}/health`, {
+    method: "GET",
+    headers: {
+      Accept: "application/json",
+    },
+  }).then((response) => parseJsonResponse<{ status?: string }>(response));
+
+  if (payload.status !== "ok") {
+    throw new Error("Backend health check failed.");
+  }
+};
