@@ -29,14 +29,18 @@ const App = () => {
         <Sonner />
         <BrowserRouter>
           <AppNav />
-          {backendError ? <div className="border-b border-destructive/40 bg-destructive/10 px-4 py-3 text-sm text-destructive">{backendError}</div> : null}
-          <Routes>
-            <Route path="/" element={<Home />} />
-            <Route path="/upload" element={<Upload />} />
-            <Route path="/results/:file_id" element={<Results />} />
-            {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
-            <Route path="*" element={<NotFound />} />
-          </Routes>
+          <div className="min-h-screen pb-24 md:pl-72 md:pb-0">
+            {backendError ? (
+              <div className="border-b border-destructive/40 bg-destructive/10 px-4 py-3 text-sm text-destructive backdrop-blur">{backendError}</div>
+            ) : null}
+            <Routes>
+              <Route path="/" element={<Home />} />
+              <Route path="/upload" element={<Upload />} />
+              <Route path="/results/:file_id" element={<Results />} />
+              {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
+              <Route path="*" element={<NotFound />} />
+            </Routes>
+          </div>
         </BrowserRouter>
       </TooltipProvider>
     </QueryClientProvider>

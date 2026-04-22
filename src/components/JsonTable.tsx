@@ -28,16 +28,16 @@ export const JsonTable = ({ data, emptyLabel = "No records returned." }: JsonTab
   const columns = Array.from(new Set(rows.flatMap((row) => Object.keys(row))));
 
   if (!rows.length || !columns.length) {
-    return <div className="rounded-md border border-dashed bg-muted/50 p-4 text-sm text-muted-foreground">{emptyLabel}</div>;
+    return <div className="rounded-lg border border-dashed border-glass-border bg-glass p-4 text-sm text-muted-foreground backdrop-blur">{emptyLabel}</div>;
   }
 
   return (
-    <div className="overflow-hidden rounded-md border bg-card">
+    <div className="overflow-hidden rounded-lg border border-glass-border bg-glass backdrop-blur">
       <Table>
         <TableHeader>
-          <TableRow className="bg-muted/60 hover:bg-muted/60">
+          <TableRow className="bg-secondary/60 hover:bg-secondary/60">
             {columns.map((column) => (
-              <TableHead key={column} className="whitespace-nowrap capitalize">
+              <TableHead key={column} className="whitespace-nowrap capitalize text-muted-foreground">
                 {column.replace(/_/g, " ")}
               </TableHead>
             ))}
@@ -45,9 +45,9 @@ export const JsonTable = ({ data, emptyLabel = "No records returned." }: JsonTab
         </TableHeader>
         <TableBody>
           {rows.map((row, rowIndex) => (
-            <TableRow key={rowIndex}>
+            <TableRow key={rowIndex} className="hover:bg-secondary/40">
               {columns.map((column) => (
-                <TableCell key={column} className="max-w-[24rem] break-words font-mono text-xs">
+                <TableCell key={column} className="max-w-[24rem] break-words font-mono text-xs text-foreground/90">
                   {renderValue(row[column])}
                 </TableCell>
               ))}
