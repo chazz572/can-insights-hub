@@ -31,8 +31,6 @@ const renderList = (value: unknown) => {
   );
 };
 
-const asRecord = (value: unknown): Record<string, unknown> => (value && typeof value === "object" && !Array.isArray(value) ? (value as Record<string, unknown>) : {});
-
 const Results = () => {
   const { id, file_id } = useParams();
   const fileId = file_id ?? id;
@@ -74,16 +72,7 @@ const Results = () => {
   }, [fileId]);
 
   const data = analysis;
-  const basicView = asRecord(data?.basic_view);
-  const diagnostics = asRecord(data?.diagnostics);
-  const reverseEngineering = data?.reverse_engineering;
-  const reverseEngineeringRecord = asRecord(reverseEngineering);
-  const anomalies = data?.anomalies ?? (Array.isArray(diagnostics.anomalies) ? diagnostics.anomalies : []);
-  const totalMessages = data?.total_messages ?? basicView.total_messages;
-  const uniqueIds = data?.unique_ids ?? basicView.unique_ids;
-  const idStats = data?.id_stats ?? basicView.id_frequency;
-  const reverseEngineeringRows = Array.isArray(reverseEngineering) ? reverseEngineering : reverseEngineeringRecord.clusters;
-  const anomaliesDetected = anomalies.length || diagnostics.anomalies_detected;
+  const anomalies = data?.anomalies ?? [];
   const vehicleBehavior = data?.vehicle_behavior ?? {};
 
   return (
@@ -126,18 +115,18 @@ const Results = () => {
 
           <div className="grid gap-6 lg:grid-cols-3">
             <AnalysisCard title="Total Messages">
-              <p className="text-4xl font-bold text-primary">{renderText(totalMessages)}</p>
+              <p className="text-4xl font-bold text-primary">{renderText(data.total_messages)}</p>
             </AnalysisCard>
             <AnalysisCard title="Unique IDs">
-              <p className="text-4xl font-bold text-primary">{renderText(uniqueIds)}</p>
+              <p className="text-4xl font-bold text-primary">{renderText(data.unique_ids)}</p>
             </AnalysisCard>
             <AnalysisCard title="Anomalies Detected">
-              <p className="text-4xl font-bold text-primary">{renderText(anomaliesDetected)}</p>
+              <p className="text-4xl font-bold text-primary">{renderText(anomalies.length)}</p>
             </AnalysisCard>
           </div>
 
           <AnalysisCard title="Basic View" description="Frequency distribution by CAN identifier.">
-            <JsonTable data={idStats} />
+            <JsonTable data={data.id_stats} />
           </AnalysisCard>
 
           <AnalysisCard title="Diagnostics" description="Backend-detected anomalies in the capture.">
@@ -145,7 +134,7 @@ const Results = () => {
           </AnalysisCard>
 
           <AnalysisCard title="Reverse Engineering" description="Clustered identifiers and inferred signal groups.">
-            <JsonTable data={reverseEngineeringRows} />
+            <JsonTable data={data.reverse_engineering} />
           </AnalysisCard>
 
           <AnalysisCard title="Vehicle Behavior">
