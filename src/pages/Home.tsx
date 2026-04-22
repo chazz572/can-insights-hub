@@ -12,7 +12,7 @@ const Home = () => (
           <p className="mb-4 text-sm font-semibold uppercase tracking-[0.24em] text-accent">CAN bus intelligence</p>
           <h1 className="max-w-3xl text-4xl font-bold leading-tight sm:text-5xl lg:text-6xl">CAN AI Analyzer</h1>
           <p className="mt-6 max-w-2xl text-lg leading-8 text-primary-foreground/80">
-            Upload a CSV capture and turn raw CAN traffic into structured diagnostics, signal candidates, and vehicle behavior insights.
+            Upload a CSV capture and turn raw CAN traffic into structured anomaly reports, signal candidates, and vehicle behavior insights.
           </p>
           <div className="mt-8 flex flex-col gap-3 sm:flex-row">
             <Button asChild variant="analyzer" size="lg">
