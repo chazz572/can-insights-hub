@@ -317,10 +317,13 @@ const Results = () => {
           <h1 className="mt-4 text-4xl font-extrabold tracking-tight sm:text-5xl">CAN analysis</h1>
           <p className="mt-3 max-w-2xl text-muted-foreground">File ID: <span className="font-mono text-foreground">{fileId ?? "—"}</span></p>
         </div>
-        <Button asChild variant="outline">
-          <Link to="/upload">Analyze another CSV</Link>
-        </Button>
+        <div className="flex flex-wrap gap-3">
+          <Button type="button" variant="outline" onClick={saveSnapshot}><Save className="size-4" /> Save analysis</Button>
+          <Button type="button" variant="outline" onClick={downloadReport}><Download className="size-4" /> Health report</Button>
+          <Button asChild variant="outline"><Link to="/upload">Analyze another CSV</Link></Button>
+        </div>
       </div>
+      {actionMessage ? <div className="mb-6 rounded-lg border border-glass-border bg-glass p-3 text-sm text-muted-foreground shadow-glow backdrop-blur">{actionMessage}</div> : null}
 
       {isLoading ? (
         <Card className="animate-fade-up overflow-hidden">
@@ -367,6 +370,26 @@ const Results = () => {
 
           <AnalysisCard title="Mechanic Mode" description="Simplified diagnostic summary for service workflows." icon={<Wrench className="size-5" />}>
             <MechanicSummary data={diagnostics.mechanic_summary ?? summaryText} />
+          </AnalysisCard>
+
+          <AnalysisCard title="AI Diagnostic Copilot" description="Plain-English mechanic, reverse-engineering, repair, signal naming, and byte decoding guidance." icon={<Sparkles className="size-5" />}>
+            <div className="flex flex-wrap gap-2">
+              {([
+                ["mechanic", "AI Mechanic"],
+                ["reverse", "AI Reverse Engineer"],
+                ["repair", "Repair Suggestions"],
+                ["signal", "Signal Naming"],
+                ["decoder", "Byte Decoder"],
+              ] as Array<[AiInsightKind, string]>).map(([kind, label]) => (
+                <Button key={kind} type="button" variant="outline" size="sm" onClick={() => runAi(kind)} disabled={Boolean(aiLoading)}>
+                  {aiLoading === kind ? <Loader2 className="animate-spin" /> : <Sparkles className="size-4" />}
+                  {label}
+                </Button>
+              ))}
+            </div>
+            <div className="mt-4 rounded-lg border border-glass-border bg-glass p-5 text-sm leading-7 text-foreground backdrop-blur">
+              <pre className="whitespace-pre-wrap font-sans">{aiInsight ?? "Choose an AI mode to generate professional diagnostic guidance from this analysis."}</pre>
+            </div>
           </AnalysisCard>
 
           <div className="grid gap-5">
