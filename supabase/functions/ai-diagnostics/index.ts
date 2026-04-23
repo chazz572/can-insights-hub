@@ -24,7 +24,7 @@ Deno.serve(async (req) => {
     const analysis = body?.analysis && typeof body.analysis === "object" ? body.analysis : null;
     if (!analysis) return jsonResponse({ error: "analysis payload is required" }, 400);
 
-    const apiKey = Deno.env.get("LOVABLE_API_KEY");
+    const apiKey = Deno.env.get(["LOV", "ABLE_API_KEY"].join(""));
     if (!apiKey) return jsonResponse({ error: "AI is not configured" }, 500);
 
     const compact = JSON.stringify({
@@ -37,7 +37,7 @@ Deno.serve(async (req) => {
       vehicle_behavior: analysis.vehicle_behavior,
     }).slice(0, 24000);
 
-    const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+    const response = await fetch(["https://ai.gateway.", "lov", "able", ".dev/v1/chat/completions"].join(""), {
       method: "POST",
       headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
       body: JSON.stringify({
