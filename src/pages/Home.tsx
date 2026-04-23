@@ -37,12 +37,11 @@ const Home = () => (
     <section className="mx-auto max-w-7xl space-y-6">
       {/* Service order header */}
       <div className="data-panel riveted relative overflow-hidden">
-        <div className="hazard-stripe h-2 w-full" />
         <div className="grid items-center gap-8 p-6 lg:grid-cols-[1.1fr_0.9fr] lg:p-10">
           <div>
-            <div className="mb-4 inline-flex items-center gap-2 rounded-sm border-2 border-primary bg-primary/10 px-3 py-1.5">
+            <div className="mb-4 inline-flex items-center gap-2 rounded-sm border border-glass-border bg-card/60 px-3 py-1.5">
               <span className="status-led" />
-              <span className="font-mono text-[11px] font-bold uppercase tracking-widest text-primary">Service Bay · Online</span>
+              <span className="font-mono text-[11px] font-bold uppercase tracking-widest text-foreground">Service Bay · Online</span>
             </div>
             <h1 className="font-display text-4xl font-bold leading-[1.05] text-foreground sm:text-5xl lg:text-6xl">
               CAN Diagnostics<br />
@@ -76,7 +75,7 @@ const Home = () => (
           <div className="data-panel scanline-panel relative p-5">
             <div className="mb-4 flex items-center justify-between border-b-2 border-dashed border-glass-border pb-3">
               <div>
-                <p className="font-mono text-[10px] uppercase tracking-widest text-primary">— Work Order —</p>
+                <p className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">— Work Order —</p>
                 <h2 className="mt-1 font-display text-xl font-bold uppercase">Intake → Output</h2>
               </div>
               <div className="rounded-sm border border-glass-border bg-background/60 px-2 py-1 font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
@@ -85,13 +84,13 @@ const Home = () => (
             </div>
             <div className="space-y-2">
               {workflow.map((item) => (
-                <div key={item.label} className="group flex items-center gap-3 rounded-sm border border-glass-border bg-card/40 p-3 transition-colors hover:border-primary/50">
-                  <span className="grid size-12 shrink-0 place-items-center rounded-sm bg-primary font-display text-base font-bold text-primary-foreground shadow-[inset_0_-2px_0_hsl(0_0%_0%/0.4)]">
+                <div key={item.label} className="group flex items-center gap-3 rounded-sm border border-glass-border bg-card/40 p-3 transition-colors hover:border-primary/40">
+                  <span className="grid size-12 shrink-0 place-items-center rounded-sm border border-glass-border bg-secondary font-display text-base font-bold text-foreground">
                     {item.step}
                   </span>
                   <div className="min-w-0 flex-1">
                     <p className="flex items-center gap-2 font-display text-sm font-bold uppercase tracking-wider text-foreground">
-                      <item.icon className="size-3.5 text-primary" />
+                      <item.icon className="size-3.5 text-muted-foreground" />
                       {item.label}
                     </p>
                     <p className="mt-0.5 font-sans text-xs leading-5 text-muted-foreground">{item.detail}</p>
@@ -105,7 +104,6 @@ const Home = () => (
             </div>
           </div>
         </div>
-        <div className="hazard-stripe h-2 w-full" />
       </div>
 
       {/* Service stations */}
@@ -131,7 +129,6 @@ const Home = () => (
 
       {/* Tool inventory */}
       <div className="data-panel relative overflow-hidden p-5 sm:p-6">
-        <div className="absolute right-0 top-0 hazard-stripe h-full w-2" />
         <div className="mb-5 flex flex-col items-start justify-between gap-3 sm:flex-row sm:items-center">
           <div>
             <p className="stencil text-xs text-primary">— Tool Inventory —</p>
