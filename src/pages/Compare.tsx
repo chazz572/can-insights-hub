@@ -3,6 +3,7 @@ import { CheckCircle2, FileText, GitCompareArrows, Loader2, Radar, ShieldCheck, 
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { EcuSwapPanel } from "@/components/EcuSwapPanel";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { analyzeFile, uploadCanFiles, type AnalysisResult } from "@/lib/canApi";
@@ -140,6 +141,7 @@ const Compare = () => {
       </CardContent>
     </Card>
     <Card className="mt-6 border-primary/30 bg-gradient-subtle"><CardContent className="flex items-center gap-4 p-5"><ShieldCheck className="size-8 text-primary" /><p className="text-sm leading-6 text-foreground">Saved comparison records are supported by the SaaS data layer and ready for production workflows.</p></CardContent></Card>
+    {result ? <div className="mt-6"><EcuSwapPanel before={result.before} after={result.after} /></div> : null}
   </main>
   );
 };

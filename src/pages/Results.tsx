@@ -5,6 +5,7 @@ import { Link, useParams } from "react-router-dom";
 import { Bar, BarChart, CartesianGrid, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 
 import { AnalysisCard } from "@/components/AnalysisCard";
+import { IntelligenceSuite } from "@/components/IntelligenceSuite";
 import { JsonTable } from "@/components/JsonTable";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -654,6 +655,8 @@ const Results = () => {
               {fileType === "dbc" ? <JsonTable data={diagnostics.dbc && typeof diagnostics.dbc === "object" ? (diagnostics.dbc as JsonRecord).signals : []} /> : fileType === "log_dbc" ? <JsonTable data={diagnostics.decoded_signals} /> : <MiniChart />}
             </AnalysisCard>
           </div>
+
+          {fileType !== "dbc" ? <IntelligenceSuite analysis={data} /> : null}
 
           {fileType === "dbc" ? <DbcViewer diagnostics={diagnostics} /> : fileType === "log_dbc" ? <LogDbcPipelinePanels data={data} diagnostics={diagnostics} idStats={idStats} /> : <LogPipelinePanels data={data} diagnostics={diagnostics} idStats={idStats} anomalies={anomalies} vehicleBehavior={vehicleBehavior} partialDbcDraft={partialDbcDraft} />}
 
