@@ -67,46 +67,45 @@ const buildDetailedReport = ({ data, fileId, anomalies, diagnostics, summaryText
   const vehicleBehavior = data.vehicle_behavior ?? {};
   const generatedAt = new Date().toLocaleString();
   const protocol = diagnostics.protocol && typeof diagnostics.protocol === "object" ? diagnostics.protocol as JsonRecord : {};
+  const issueLevel = anomalies.length > 5 || componentHealth < 55 ? "serious" : anomalies.length || componentHealth < 80 ? "worth checking" : "mostly normal";
+  const speedIds = (vehicleBehavior.possible_speed_ids ?? []).map(renderText).join(", ") || "none found";
+  const rpmIds = (vehicleBehavior.possible_rpm_ids ?? []).map(renderText).join(", ") || "none found";
+  const pedalIds = (vehicleBehavior.possible_pedal_ids ?? []).map(renderText).join(", ") || "none found";
 
   return [
-    "CANAI Detailed Vehicle Health Report",
-    `Generated: ${generatedAt}`,
-    `File ID: ${fileId ?? "—"}`,
+    "CANAI Mechanic Health Report",
+    `Checked: ${generatedAt}`,
     "",
-    "Executive Snapshot",
-    `- Total Messages: ${data.total_messages ?? "—"}`,
-    `- Unique CAN IDs: ${data.unique_ids ?? "—"}`,
-    `- Anomalies Detected: ${anomalies.length}`,
-    `- Suspect / Repeating IDs: ${suspectIds}`,
-    `- Component Health Score: ${componentHealth}/100`,
-    `- Estimated CAN Bus Load: ${busLoad}%`,
-    `- Likely Protocol: ${renderText(protocol.likely_protocol ?? "Unknown")}`,
-    `- Extended ID Ratio: ${renderText(protocol.extended_id_ratio ?? "—")}`,
+    "What I’m Seeing",
+    `I looked over the car’s communication log. The scan saw ${data.total_messages ?? "a number of"} messages from ${data.unique_ids ?? "multiple"} control modules. Overall, this looks ${issueLevel}. The health score is ${componentHealth}/100, and the network activity looks about ${busLoad}% loaded during this capture.`,
     "",
-    "Mechanic Summary",
+    "What This Means In Plain English",
+    anomalies.length
+      ? `The car had ${anomalies.length} message${anomalies.length === 1 ? "" : "s"} that looked unusual compared with the rest of the log. That does not automatically mean a bad part, but it does mean those moments deserve a closer look.`
+      : "I did not see obvious abnormal message patterns in this capture. If the car still has symptoms, I would want another log while the problem is actively happening.",
+    suspectIds
+      ? `There were ${suspectIds} repeating message groups that may be tied to live vehicle behavior. These are useful clues for tracking speed, RPM, pedal input, battery behavior, or module chatter.`
+      : "I did not find strong repeating signal groups from this capture.",
+    "",
+    "Likely Signals Found",
+    `Speed-related messages: ${speedIds}`,
+    `RPM-related messages: ${rpmIds}`,
+    `Pedal-related messages: ${pedalIds}`,
+    "",
+    "Mechanic Notes",
     renderText(diagnostics.mechanic_summary ?? summaryText),
     "",
-    "Action Notes For Shop Review",
+    "What I Would Do Next",
     anomalies.length
-      ? "- Inspect the listed anomaly frames first, then compare payload length and byte changes against normal operating captures."
-      : "- No payload anomalies were flagged by the current heuristic pass; verify with a second drive-cycle capture if symptoms persist.",
-    "- Prioritize high-frequency IDs when hunting for speed, RPM, pedal, battery, inverter, and chassis signals.",
-    "- Treat candidate signals as leads, not final decoded definitions, until confirmed against vehicle state changes.",
+      ? "1. Recheck the vehicle while the symptom is happening and compare it to this log."
+      : "1. Keep this report as a baseline and run another scan if the issue comes back.",
+    "2. Watch the suspected speed, RPM, and pedal messages while driving or testing safely.",
+    "3. If warning lights or drivability problems are present, pair this CAN review with a normal diagnostic scan tool report.",
+    "4. Do not replace parts based only on this report; use it to guide the next inspection.",
     "",
-    formatReportRows("Top CAN ID Frequency", data.id_stats, 20),
-    formatReportRows("Anomaly Frames", anomalies, 20),
-    formatReportRows("Reverse Engineering Candidates", data.reverse_engineering, 20),
-    "Vehicle Behavior Candidates",
-    `- Possible Speed IDs: ${(vehicleBehavior.possible_speed_ids ?? []).map(renderText).join(", ") || "None"}`,
-    `- Possible RPM IDs: ${(vehicleBehavior.possible_rpm_ids ?? []).map(renderText).join(", ") || "None"}`,
-    `- Possible Pedal IDs: ${(vehicleBehavior.possible_pedal_ids ?? []).map(renderText).join(", ") || "None"}`,
-    "",
-    formatReportRows("Byte Entropy Analysis", diagnostics.byte_analysis, 8),
-    formatReportRows("Active Bit Candidates", diagnostics.signals && typeof diagnostics.signals === "object" ? (diagnostics.signals as JsonRecord).active_bit_candidates : undefined, 24),
-    formatReportRows("Timing / Jitter Review", diagnostics.timing, 20),
-    formatReportRows("System Classification", diagnostics.systems, 20),
-    "Raw Diagnostic Package",
-    JSON.stringify({ summary: data.summary, diagnostics: data.diagnostics }, null, 2),
+    "For Reference",
+    `Log ID: ${fileId ?? "—"}`,
+    `Network type detected: ${renderText(protocol.likely_protocol ?? "unknown")}`,
   ].join("\n");
 };
 
