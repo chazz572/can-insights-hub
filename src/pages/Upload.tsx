@@ -9,11 +9,12 @@ import { Label } from "@/components/ui/label";
 import { uploadCanFiles, type UploadResult } from "@/lib/canApi";
 import { cn } from "@/lib/utils";
 
-const supported = ["CSV", "candump", "CRTD", "ASC", "BLF", "MF4/MDF", "CANedge", "DBC", "TXT", "J1939"];
+const supported = ["CSV", "TRC", "candump", "CRTD", "ASC", "BLF", "MF4/MDF", "CANedge", "DBC", "TXT", "J1939"];
 const extensionFormat: Record<string, string> = {
   csv: "CSV/J1939",
   log: "candump/CANedge",
   txt: "TXT/candump",
+  trc: "TRC",
   crtd: "CRTD",
   asc: "ASC",
   blf: "BLF",
@@ -36,7 +37,7 @@ const Upload = () => {
   const [isComplete, setIsComplete] = useState(false);
 
   const hasBatch = files.length > 1;
-  const acceptedTypes = useMemo(() => ".csv,.log,.txt,.crtd,.asc,.blf,.mf4,.mdf,.jsonl,.dbc,text/csv,text/plain", []);
+  const acceptedTypes = useMemo(() => ".csv,.log,.txt,.trc,.crtd,.asc,.blf,.mf4,.mdf,.jsonl,.dbc,text/csv,text/plain", []);
 
   useEffect(() => {
     if (!isLoading) return;
@@ -115,7 +116,7 @@ const Upload = () => {
             <UploadCloud className="size-7" />
           </div>
           <CardTitle className="text-3xl">Universal CAN Log Upload</CardTitle>
-          <CardDescription>Auto-detect CSV, candump, CRTD, ASC, BLF, MF4/MDF, CANedge, DBC, J1939, and generic text logs, then normalize them into the internal CSV pipeline.</CardDescription>
+          <CardDescription>Auto-detect CSV, TRC, candump, CRTD, ASC, BLF, MF4/MDF, CANedge, DBC, J1939, and generic text logs, then normalize them into the internal CSV pipeline.</CardDescription>
         </CardHeader>
         <CardContent>
           <form className="space-y-6" onSubmit={handleSubmit}>
