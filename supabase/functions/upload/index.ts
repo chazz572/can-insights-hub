@@ -43,6 +43,10 @@ const canIdAliases = (storedId: string, metadata = "") => {
   });
   return [...aliases].filter((id) => id !== "NaN");
 };
+const formatCanIdHex = (id: string) => {
+  const numeric = Number(id);
+  return Number.isFinite(numeric) ? `0x${numeric.toString(16).toUpperCase()}` : "0x0";
+};
 const cleanByte = (value: string) => value.replace(/^0x/i, "").replace(/[^a-fA-F0-9]/g, "").slice(0, 2).padStart(2, "0").toUpperCase();
 const isId = (value: string) => /^[0-9a-fA-F]{1,8}[xh]?$/.test(value.replace(/^0x/i, ""));
 const isByte = (value: string) => /^(0x)?[0-9a-fA-F]{1,2}$/.test(value);
@@ -84,7 +88,7 @@ const normalizeFrame = (timestamp: string, id: string, bytes: string[], dlc?: nu
   const normalizedId = cleanId(id, idBase);
   const normalizedBytes = bytes.map(cleanByte).filter((byte) => /^[0-9A-F]{2}$/.test(byte)).slice(0, 8);
   if (!normalizedId || !normalizedBytes.length) return null;
-  const idMetadata = `raw_can_id=${id};normalized_can_id=${normalizedId};id_base=${idBase}`;
+  const idMetadata = `raw_can_id=${id};normalized_can_id=${normalizedId};normalized_can_id_hex=${formatCanIdHex(normalizedId)};id_base=${idBase};id_width=${Number(normalizedId) > 0x7ff ? 29 : 11}`;
   return { timestamp: timestamp || "0", id: normalizedId, dlc: Math.min(Number.isFinite(Number(dlc)) ? Number(dlc) : normalizedBytes.length, 8), data: normalizedBytes, metadata: [metadata, idMetadata].filter(Boolean).join(";") };
 };
 
