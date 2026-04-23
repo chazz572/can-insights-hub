@@ -381,8 +381,53 @@ const TroubleTimeline = ({ anomalies, timing }: { anomalies: unknown[]; timing: 
 };
 
 const ModuleActivityMap = ({ systems }: { systems: unknown }) => {
-  const rows = toRecordArray(systems).slice(0, 12);
-  return <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-6">{(rows.length ? rows : Array.from({ length: 6 }, (_, index) => ({ id: `M${index + 1}`, category: "module" }))).map((row, index) => <div key={index} className="rounded-lg border border-glass-border bg-glass p-3 text-center"><Car className="mx-auto mb-2 size-5 text-primary" /><p className="truncate font-mono text-xs text-foreground">{renderText(row.id ?? row.key)}</p><p className="mt-1 truncate text-xs text-muted-foreground">{renderText(row.category ?? "active")}</p></div>)}</div>;
+  const rows = toRecordArray(systems).slice(0, 18);
+  const modules: Array<Record<string, unknown>> = rows.length ? rows : Array.from({ length: 6 }, (_, index) => ({ id: `M${index + 1}`, category: "module", module_type: "active" }));
+  const groups = modules.reduce((acc: Record<string, Array<Record<string, unknown>>>, row) => {
+    const group = renderText(row.module_type ?? row.category ?? "active_module").replace(/_/g, " ");
+    acc[group] = [...(acc[group] ?? []), row];
+    return acc;
+  }, {});
+
+  return (
+    <div className="grid gap-4">
+      <div className="grid gap-3 sm:grid-cols-3">
+        {(Object.entries(groups) as Array<[string, Array<Record<string, unknown>>]>).slice(0, 3).map(([group, items]) => (
+          <div key={group} className="rounded-lg border border-glass-border bg-glass p-4 backdrop-blur">
+            <p className="text-xs font-bold uppercase text-muted-foreground">{titleCase(group)}</p>
+            <p className="mt-2 text-3xl font-extrabold text-primary">{items.length}</p>
+            <p className="mt-1 text-xs text-muted-foreground">active identifier{items.length === 1 ? "" : "s"}</p>
+          </div>
+        ))}
+      </div>
+
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
+        {modules.map((row, index) => {
+          const confidence = Math.round((numericValue(row, ["confidence_score", "confidence"]) || 0.55) * 100);
+          const moduleType = renderText(row.module_type ?? row.category ?? "active").replace(/_/g, " ");
+          return (
+            <div key={`${renderText(row.id ?? row.key)}-${index}`} className="rounded-lg border border-glass-border bg-glass p-4 backdrop-blur transition-all duration-300 hover:border-primary/40 hover:shadow-glow">
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <p className="font-mono text-sm font-bold text-foreground">ID {renderText(row.id ?? row.key)}</p>
+                  <p className="mt-1 truncate text-xs font-semibold uppercase text-primary">{titleCase(moduleType)}</p>
+                </div>
+                <span className="grid size-10 shrink-0 place-items-center rounded-lg border border-glass-border bg-gradient-subtle text-primary shadow-glow"><Car className="size-5" /></span>
+              </div>
+              <div className="mt-4 h-2 overflow-hidden rounded-full bg-secondary">
+                <div className="h-full rounded-full bg-gradient-accent" style={{ width: `${Math.min(100, Math.max(8, confidence))}%` }} />
+              </div>
+              <div className="mt-3 flex items-center justify-between gap-3 text-xs text-muted-foreground">
+                <span>{confidence}% heuristic confidence</span>
+                <span className="font-mono">{renderText(row.category ?? "CAN")}</span>
+              </div>
+              {row.reasoning ? <p className="mt-3 line-clamp-2 text-xs leading-5 text-muted-foreground">{renderText(row.reasoning)}</p> : null}
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
 };
 
 const Results = () => {
