@@ -8,6 +8,14 @@ const corsHeaders = {
 type JsonRecord = Record<string, unknown>;
 type CsvIndexes = { timestampIndex: number; idIndex: number; dataIndex: number };
 type ParsedRecord = { id: string; data: string; timestamp: number };
+type IdProfile = {
+  count: number;
+  lengths: Map<number, number>;
+  timestamps: number[];
+  byteCounts: Array<Map<number, number>>;
+  previousData: string | null;
+  changes: number;
+};
 
 const jsonResponse = (body: unknown) =>
   new Response(JSON.stringify(body), {
@@ -94,6 +102,11 @@ const forEachCsvRecord = (csv: string, callback: (record: ParsedRecord) => void)
 
 const cleanHex = (value: string) => value.replace(/[^a-fA-F0-9]/g, "").toUpperCase();
 const byteValues = (value: string) => cleanHex(value).match(/.{1,2}/g)?.slice(0, 8).map((byte) => Number.parseInt(byte, 16)).filter((byte) => Number.isFinite(byte)) ?? [];
+const average = (values: number[]) => values.length ? values.reduce((sum, value) => sum + value, 0) / values.length : 0;
+const standardDeviation = (values: number[]) => {
+  const mean = average(values);
+  return values.length ? Math.sqrt(average(values.map((value) => (value - mean) ** 2))) : 0;
+};
 const entropy = (values: number[]) => {
   if (!values.length) return 0;
   const counts = new Map<number, number>();
@@ -121,10 +134,18 @@ const runAnalysis = (csv: string) => {
   const bitTransitions = Array.from({ length: 64 }, () => 0);
   const bitPrevious = Array.from<number | null>({ length: 64 }, () => null);
   const timingById = new Map<string, number[]>();
+  const idProfiles = new Map<string, IdProfile>();
 
   forEachCsvRecord(csv, ({ id, data, timestamp }) => {
     totalMessages += 1;
     idCounts.set(id, (idCounts.get(id) ?? 0) + 1);
+    const profile = idProfiles.get(id) ?? { count: 0, lengths: new Map<number, number>(), timestamps: [], byteCounts: Array.from({ length: 8 }, () => new Map<number, number>()), previousData: null, changes: 0 };
+    profile.count += 1;
+    profile.lengths.set(data.length, (profile.lengths.get(data.length) ?? 0) + 1);
+    if (Number.isFinite(timestamp)) profile.timestamps.push(timestamp);
+    if (profile.previousData !== null && profile.previousData !== cleanHex(data)) profile.changes += 1;
+    profile.previousData = cleanHex(data);
+    idProfiles.set(id, profile);
 
     if (cleanHex(id).length > 3) extendedIds += 1;
 
@@ -138,6 +159,10 @@ const runAnalysis = (csv: string) => {
     if (payloadLength === 1) pedalIds.add(id);
 
     const bytes = byteValues(data);
+
+    bytes.forEach((byte, byteIndex) => {
+      profile.byteCounts[byteIndex].set(byte, (profile.byteCounts[byteIndex].get(byte) ?? 0) + 1);
+    });
 
     for (let byteIndex = 0; byteIndex < bytes.length; byteIndex += 1) {
       const byte = bytes[byteIndex];
@@ -239,6 +264,63 @@ const runAnalysis = (csv: string) => {
     return { id, category, confidence: "heuristic" };
   });
 
+  const idDeepDive = [...idProfiles.entries()].map(([id, profile]) => {
+    const periods = [...profile.timestamps].sort((a, b) => a - b).slice(1).map((timestamp, index, sorted) => timestamp - sorted[index]);
+    const byteEntropy = profile.byteCounts.map((counts, byteIndex) => ({
+      byte_index: byteIndex,
+      unique_values: counts.size,
+      entropy: entropy([...counts.entries()].flatMap(([value, count]) => Array.from({ length: count }, () => value))),
+      dominant_value: [...counts.entries()].sort((a, b) => b[1] - a[1])[0]?.[0] ?? null,
+    }));
+    const volatileBytes = byteEntropy.filter((item) => item.entropy > 0.7).map((item) => item.byte_index);
+
+    return {
+      id,
+      messages: profile.count,
+      message_share_percent: Number(((profile.count / totalMessages) * 100).toFixed(2)),
+      payload_lengths: Object.fromEntries(profile.lengths.entries()),
+      average_period: Number(average(periods).toFixed(6)),
+      period_jitter: Number(standardDeviation(periods).toFixed(6)),
+      payload_change_rate: Number((profile.changes / Math.max(profile.count - 1, 1)).toFixed(4)),
+      volatile_bytes: volatileBytes,
+      byte_entropy: byteEntropy,
+      likely_role: volatileBytes.length >= 2 ? "multi-byte changing signal candidate" : profile.changes === 0 ? "static/status candidate" : "single-byte/status signal candidate",
+    };
+  }).sort((a, b) => Number(b.messages) - Number(a.messages));
+
+  const networkHealth = {
+    estimated_bus_load_score: Math.min(100, Math.round((totalMessages / Math.max(idCounts.size, 1)) * 10)),
+    dominant_ids: idStats.filter((item) => item.percentage > 10).slice(0, 8),
+    noisy_ids: idDeepDive.filter((item) => Number(item.message_share_percent) > 25 || Number(item.period_jitter) > 0.05).slice(0, 8),
+    quiet_ids: idDeepDive.filter((item) => Number(item.messages) <= 2).slice(0, 12),
+    missing_or_sparse_message_risk: idDeepDive.filter((item) => Number(item.messages) <= 2).length,
+    timing_irregularity_score: Number(average(idDeepDive.map((item) => Number(item.period_jitter))).toFixed(6)),
+  };
+
+  const protocolInsights = {
+    likely_protocol: extendedIds > totalMessages / 2 ? "CAN 2.0B / extended identifiers" : "CAN 2.0A / standard identifiers",
+    extended_id_ratio: totalMessages ? Number((extendedIds / totalMessages).toFixed(4)) : 0,
+    has_j1939_shape: totalMessages ? extendedIds / totalMessages > 0.55 && [...idCounts.keys()].some((id) => cleanHex(id).length >= 8) : false,
+    has_uds_or_isotp_shape: [...idCounts.keys()].some((id) => /^7[0-9A-F]{2}$/i.test(cleanHex(id)) || /^18DA/i.test(cleanHex(id))),
+    diagnostic_id_candidates: [...idCounts.keys()].filter((id) => /^7[0-9A-F]{2}$/i.test(cleanHex(id)) || /^18DA/i.test(cleanHex(id))).slice(0, 16),
+  };
+
+  const driverBehavior = {
+    movement_confidence: speedIds.size ? "candidate" : "unknown",
+    engine_activity_confidence: rpmIds.size ? "candidate" : "unknown",
+    pedal_activity_confidence: pedalIds.size ? "candidate" : "unknown",
+    harsh_event_candidates: anomalies.slice(0, 12),
+    interpretation: speedIds.size || pedalIds.size ? "Vehicle activity signals are present, but exact driving behavior requires DBC validation." : "Driving behavior cannot be confirmed from this capture without stronger speed/pedal candidates.",
+  };
+
+  const eventTimeline = anomalies.slice(0, 24).map((item, index) => ({
+    event_index: index + 1,
+    id: item.id,
+    event_type: "payload_anomaly",
+    description: item.reason,
+    before_after_hint: "Compare this ID against nearby frames for timing or payload changes.",
+  }));
+
   const vehicleBehavior = {
     possible_speed_ids: [...speedIds],
     possible_rpm_ids: [...rpmIds],
@@ -258,9 +340,8 @@ const runAnalysis = (csv: string) => {
     vehicle_behavior: vehicleBehavior,
     diagnostics: {
       protocol: {
-        likely_protocol: extendedIds > totalMessages / 2 ? "CAN 2.0B / extended identifiers" : "CAN 2.0A / standard identifiers",
+        ...protocolInsights,
         total_ids_sampled: totalMessages,
-        extended_id_ratio: totalMessages ? Number((extendedIds / totalMessages).toFixed(4)) : 0,
       },
       byte_analysis: byteAnalysis,
       bit_analysis: bitAnalysis,
@@ -270,6 +351,10 @@ const runAnalysis = (csv: string) => {
         active_bit_candidates: bitAnalysis.filter((item) => Number(item.activity ?? 0) > 0.05),
       },
       systems,
+      id_deep_dive: idDeepDive,
+      network_health: networkHealth,
+      driver_behavior: driverBehavior,
+      event_timeline: eventTimeline,
       mechanic_summary: `Capture contains ${totalMessages} CAN messages. ${anomalies.length} anomalous payloads were detected. Candidate speed IDs: ${vehicleBehavior.possible_speed_ids.join(", ") || "none"}. Candidate RPM IDs: ${vehicleBehavior.possible_rpm_ids.join(", ") || "none"}.`,
     },
   };
