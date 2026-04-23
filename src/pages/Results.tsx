@@ -1,6 +1,8 @@
-import { AlertTriangle, BarChart3, Binary, BrainCircuit, Gauge, Hash, MessageSquareText, Radar } from "lucide-react";
+import { AlertTriangle, BarChart3, Binary, BrainCircuit, ChevronDown, Clock, Cpu, Gauge, Hash, Layers3, MessageSquareText, Radar, Wrench } from "lucide-react";
 import { useEffect, useState } from "react";
+import type { ReactNode } from "react";
 import { Link, useParams } from "react-router-dom";
+import { Bar, BarChart, CartesianGrid, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 
 import { AnalysisCard } from "@/components/AnalysisCard";
 import { JsonTable } from "@/components/JsonTable";
@@ -32,25 +34,95 @@ const renderList = (value: unknown) => {
   );
 };
 
-const DiagnosticBlock = ({ field, value, collapsible = false }: { field: string; value: unknown; collapsible?: boolean }) => {
-  if (collapsible) {
-    return (
-      <details className="group rounded-lg border border-glass-border bg-glass p-4 backdrop-blur transition-all duration-300 hover:shadow-glow">
-        <summary className="cursor-pointer list-none font-mono text-sm font-semibold text-primary transition-colors group-open:mb-4">
-          {field}
-        </summary>
-        <JsonTable data={value} />
-      </details>
-    );
-  }
+const toRecordArray = (value: unknown): Array<Record<string, unknown>> => {
+  if (Array.isArray(value)) return value.map((item, index) => (item && typeof item === "object" && !Array.isArray(item) ? item as Record<string, unknown> : { item: index + 1, value: item }));
+  if (value && typeof value === "object") return Object.entries(value as Record<string, unknown>).map(([key, item]) => (item && typeof item === "object" && !Array.isArray(item) ? { key, ...(item as Record<string, unknown>) } : { key, value: item }));
+  return [];
+};
 
+const numericValue = (row: Record<string, unknown>, keys: string[]) => {
+  const value = keys.map((key) => row[key]).find((item) => typeof item === "number" || (typeof item === "string" && !Number.isNaN(Number(item))));
+  return value === undefined ? 0 : Number(value);
+};
+
+const CollapsiblePanel = ({ title, icon, children, defaultOpen = false }: { title: string; icon: ReactNode; children: ReactNode; defaultOpen?: boolean }) => (
+  <details open={defaultOpen} className="group overflow-hidden rounded-lg border border-glass-border bg-glass backdrop-blur-xl transition-all duration-300 hover:border-primary/30 hover:shadow-glow">
+    <summary className="flex cursor-pointer list-none items-center justify-between gap-4 p-5">
+      <span className="flex items-center gap-3 text-lg font-bold text-foreground">
+        <span className="grid size-10 place-items-center rounded-lg border border-glass-border bg-gradient-subtle text-primary shadow-glow">{icon}</span>
+        {title}
+      </span>
+      <ChevronDown className="size-5 text-muted-foreground transition-transform duration-300 group-open:rotate-180" />
+    </summary>
+    <div className="border-t border-glass-border p-5 animate-fade-up">{children}</div>
+  </details>
+);
+
+const FrequencyChart = ({ data }: { data: unknown }) => {
+  const rows = toRecordArray(data).map((row, index) => ({ name: String(row.id ?? row.can_id ?? row.arbitration_id ?? row.identifier ?? row.key ?? index + 1), count: numericValue(row, ["count", "frequency", "messages", "total", "value"]) }));
+  if (!rows.length) return null;
   return (
-    <div className="space-y-3 rounded-lg border border-glass-border bg-glass p-4 backdrop-blur transition-all duration-300 hover:shadow-glow">
-      <h3 className="font-mono text-sm font-semibold text-primary">{field}</h3>
-      <JsonTable data={value} />
+    <div className="mb-4 h-56 rounded-lg border border-glass-border bg-glass p-4 backdrop-blur">
+      <ResponsiveContainer width="100%" height="100%">
+        <BarChart data={rows.slice(0, 16)}>
+          <CartesianGrid stroke="hsl(var(--glass-border))" vertical={false} />
+          <XAxis dataKey="name" stroke="hsl(var(--muted-foreground))" tick={{ fontSize: 11 }} />
+          <YAxis stroke="hsl(var(--muted-foreground))" tick={{ fontSize: 11 }} />
+          <Tooltip cursor={{ fill: "hsl(var(--secondary) / 0.45)" }} contentStyle={{ background: "hsl(var(--card))", border: "1px solid hsl(var(--glass-border))", borderRadius: "12px" }} />
+          <Bar dataKey="count" fill="hsl(var(--primary))" radius={[8, 8, 0, 0]} />
+        </BarChart>
+      </ResponsiveContainer>
     </div>
   );
 };
+
+const ByteEntropyHeatmap = ({ data }: { data: unknown }) => {
+  const rows = toRecordArray(data).slice(0, 64);
+  if (!rows.length) return <JsonTable data={data} />;
+  return (
+    <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 xl:grid-cols-8">
+      {rows.map((row, index) => {
+        const entropy = Math.max(0, Math.min(1, numericValue(row, ["entropy", "score", "value", "variance"]) / 8 || numericValue(row, ["entropy", "score", "value", "variance"])));
+        return (
+          <div key={`${String(row.key ?? index)}-${index}`} className="rounded-lg border border-glass-border bg-glass p-3 shadow-glow backdrop-blur" style={{ opacity: 0.42 + entropy * 0.58 }}>
+            <p className="font-mono text-xs text-muted-foreground">{String(row.byte ?? row.key ?? `byte_${index}`)}</p>
+            <p className="mt-2 text-lg font-bold text-primary">{renderText(row.entropy ?? row.score ?? row.value ?? "—")}</p>
+          </div>
+        );
+      })}
+    </div>
+  );
+};
+
+const TimingLineChart = ({ data }: { data: unknown }) => {
+  const rows = toRecordArray(data).map((row, index) => ({ name: String(row.key ?? row.timestamp ?? index + 1), jitter: numericValue(row, ["jitter", "period_jitter", "period", "delta", "value"]) }));
+  if (!rows.length) return <JsonTable data={data} />;
+  return (
+    <div className="mb-4 h-56 rounded-lg border border-glass-border bg-glass p-4 backdrop-blur">
+      <ResponsiveContainer width="100%" height="100%">
+        <LineChart data={rows.slice(0, 48)}>
+          <CartesianGrid stroke="hsl(var(--glass-border))" vertical={false} />
+          <XAxis dataKey="name" stroke="hsl(var(--muted-foreground))" tick={{ fontSize: 11 }} />
+          <YAxis stroke="hsl(var(--muted-foreground))" tick={{ fontSize: 11 }} />
+          <Tooltip contentStyle={{ background: "hsl(var(--card))", border: "1px solid hsl(var(--glass-border))", borderRadius: "12px" }} />
+          <Line type="monotone" dataKey="jitter" stroke="hsl(var(--chart-cyan))" strokeWidth={3} dot={false} />
+        </LineChart>
+      </ResponsiveContainer>
+    </div>
+  );
+};
+
+const SystemsBadges = ({ data }: { data: unknown }) => {
+  const rows = toRecordArray(data);
+  if (!rows.length) return <JsonTable data={data} />;
+  return <div className="flex flex-wrap gap-2">{rows.map((row, index) => <span key={index} className="rounded-lg border border-glass-border bg-secondary px-3 py-2 text-sm font-semibold text-secondary-foreground shadow-glow">{renderText(row.category ?? row.key ?? row.system ?? row.value)}</span>)}</div>;
+};
+
+const MechanicSummary = ({ data }: { data: unknown }) => (
+  <div className="rounded-lg border border-primary/30 bg-gradient-subtle p-5 shadow-glow backdrop-blur">
+    <p className="whitespace-pre-wrap text-sm leading-7 text-foreground">{renderText(data)}</p>
+  </div>
+);
 
 const MiniChart = () => (
   <div className="flex h-24 items-end gap-2 rounded-lg border border-glass-border bg-glass p-4 backdrop-blur">
@@ -179,40 +251,41 @@ const Results = () => {
             <MetricCard title="Anomalies Detected" value={anomalies.length} icon={AlertTriangle} />
           </div>
 
-          <div className="grid gap-6 xl:grid-cols-2">
-            <AnalysisCard title="Basic View" description="Frequency distribution by CAN identifier." icon={<Binary className="size-5" />}>
+          <div className="grid gap-5">
+            <CollapsiblePanel title="Basic View" icon={<Binary className="size-5" />} defaultOpen>
+              <FrequencyChart data={data.id_stats} />
               <JsonTable data={data.id_stats} />
-            </AnalysisCard>
+            </CollapsiblePanel>
 
-            <AnalysisCard title="Diagnostics" description="Backend-detected anomalies in the capture." icon={<AlertTriangle className="size-5" />}>
+            <CollapsiblePanel title="Diagnostics" icon={<AlertTriangle className="size-5" />} defaultOpen>
               <JsonTable data={data.anomalies} />
-            </AnalysisCard>
-          </div>
+            </CollapsiblePanel>
 
-          <AnalysisCard title="Reverse Engineering" description="Clustered identifiers and inferred signal groups." icon={<Radar className="size-5" />}>
-            <JsonTable data={data.reverse_engineering} />
-          </AnalysisCard>
+            <CollapsiblePanel title="Reverse Engineering" icon={<Radar className="size-5" />}>
+              <JsonTable data={data.reverse_engineering} />
+            </CollapsiblePanel>
 
-          <AnalysisCard title="Vehicle Behavior" icon={<Gauge className="size-5" />}>
-            <div className="grid gap-5">
-              <div className="grid gap-5 lg:grid-cols-3">
-                <div className="space-y-3"><h3 className="font-semibold">Possible Speed IDs</h3>{renderList(vehicleBehavior.possible_speed_ids)}</div>
-                <div className="space-y-3"><h3 className="font-semibold">Possible RPM IDs</h3>{renderList(vehicleBehavior.possible_rpm_ids)}</div>
-                <div className="space-y-3"><h3 className="font-semibold">Possible Pedal IDs</h3>{renderList(vehicleBehavior.possible_pedal_ids)}</div>
+            <CollapsiblePanel title="Vehicle Behavior" icon={<Gauge className="size-5" />}>
+              <div className="grid gap-5">
+                <div className="grid gap-5 lg:grid-cols-3">
+                  <div className="space-y-3"><h3 className="font-semibold">Possible Speed IDs</h3>{renderList(vehicleBehavior.possible_speed_ids)}</div>
+                  <div className="space-y-3"><h3 className="font-semibold">Possible RPM IDs</h3>{renderList(vehicleBehavior.possible_rpm_ids)}</div>
+                  <div className="space-y-3"><h3 className="font-semibold">Possible Pedal IDs</h3>{renderList(vehicleBehavior.possible_pedal_ids)}</div>
+                </div>
+                <JsonTable data={vehicleBehavior} />
               </div>
-              <JsonTable data={vehicleBehavior} />
-            </div>
-          </AnalysisCard>
+            </CollapsiblePanel>
+          </div>
 
           <AnalysisCard title="Advanced Diagnostics" description="Complete diagnostics payload returned by the backend." icon={<BrainCircuit className="size-5" />}>
             <div className="grid gap-4">
-              <DiagnosticBlock field="diagnostics.protocol" value={diagnostics.protocol} />
-              <DiagnosticBlock field="diagnostics.byte_analysis" value={diagnostics.byte_analysis} collapsible />
-              <DiagnosticBlock field="diagnostics.bit_analysis" value={diagnostics.bit_analysis} collapsible />
-              <DiagnosticBlock field="diagnostics.timing" value={diagnostics.timing} />
-              <DiagnosticBlock field="diagnostics.signals" value={diagnostics.signals} />
-              <DiagnosticBlock field="diagnostics.systems" value={diagnostics.systems} />
-              <DiagnosticBlock field="diagnostics.mechanic_summary" value={diagnostics.mechanic_summary} />
+              <CollapsiblePanel title="protocol" icon={<Cpu className="size-5" />} defaultOpen><JsonTable data={diagnostics.protocol} /></CollapsiblePanel>
+              <CollapsiblePanel title="byte_analysis" icon={<Layers3 className="size-5" />}><ByteEntropyHeatmap data={diagnostics.byte_analysis} /><div className="mt-4"><JsonTable data={diagnostics.byte_analysis} /></div></CollapsiblePanel>
+              <CollapsiblePanel title="bit_analysis" icon={<Binary className="size-5" />}><JsonTable data={diagnostics.bit_analysis} /></CollapsiblePanel>
+              <CollapsiblePanel title="timing" icon={<Clock className="size-5" />}><TimingLineChart data={diagnostics.timing} /><JsonTable data={diagnostics.timing} /></CollapsiblePanel>
+              <CollapsiblePanel title="signals" icon={<Radar className="size-5" />}><JsonTable data={diagnostics.signals} /></CollapsiblePanel>
+              <CollapsiblePanel title="systems" icon={<Gauge className="size-5" />}><SystemsBadges data={diagnostics.systems} /><div className="mt-4"><JsonTable data={diagnostics.systems} /></div></CollapsiblePanel>
+              <CollapsiblePanel title="mechanic_summary" icon={<Wrench className="size-5" />} defaultOpen><MechanicSummary data={diagnostics.mechanic_summary} /></CollapsiblePanel>
             </div>
           </AnalysisCard>
         </div>
