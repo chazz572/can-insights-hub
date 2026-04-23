@@ -50,7 +50,10 @@ All colors MUST be HSL.
     --chart-cyan: 185 95% 56%;
     --chart-blue: 217 96% 61%;
     --chart-purple: 267 92% 70%;
-    --gradient-hero: radial-gradient(circle at 20% 10%, hsl(199 96% 55% / 0.28), transparent 32%), radial-gradient(circle at 80% 0%, hsl(266 92% 68% / 0.24), transparent 34%), linear-gradient(135deg, hsl(216 19% 5%) 0%, hsl(223 30% 8%) 50%, hsl(216 19% 5%) 100%);
+    --diagnostic-green: 158 78% 48%;
+    --safety-orange: 28 96% 56%;
+    --steel: 215 18% 34%;
+    --gradient-hero: linear-gradient(135deg, hsl(216 18% 5%) 0%, hsl(220 20% 8%) 48%, hsl(216 18% 5%) 100%);
     --gradient-panel: linear-gradient(145deg, hsl(var(--glass-strong)) 0%, hsl(220 26% 9% / 0.72) 100%);
     --gradient-accent: linear-gradient(135deg, hsl(var(--primary)) 0%, hsl(var(--accent)) 55%, hsl(var(--chart-cyan)) 100%);
     --gradient-subtle: linear-gradient(180deg, hsl(210 40% 98% / 0.08), hsl(210 40% 98% / 0.02));
@@ -152,5 +155,16 @@ All colors MUST be HSL.
 
   ::selection {
     @apply bg-primary text-primary-foreground;
+  }
+}
+
+@layer utilities {
+  .diagnostic-grid {
+    background-image: linear-gradient(hsl(var(--glass-border)) 1px, transparent 1px), linear-gradient(90deg, hsl(var(--glass-border)) 1px, transparent 1px);
+    background-size: 28px 28px;
+  }
+
+  .data-panel {
+    @apply rounded-lg border border-glass-border bg-glass shadow-dashboard backdrop-blur-xl;
   }
 }
