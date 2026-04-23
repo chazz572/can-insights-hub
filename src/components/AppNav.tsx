@@ -117,7 +117,7 @@ export const AppNav = () => {
       </aside>
 
       {/* Top status bar — looks like a shop control panel */}
-      <header className="fixed inset-x-0 top-0 z-30 border-b-2 border-primary/30 bg-card/95 px-4 py-2.5 backdrop-blur md:left-72 md:px-6">
+      <header className="fixed inset-x-0 top-0 z-30 border-b border-glass-border bg-card/95 px-4 py-2.5 backdrop-blur md:left-72 md:px-6">
         <div className="flex items-center justify-between gap-4">
           <div className="flex min-w-0 items-center gap-3">
             <span className="status-led shrink-0" />
