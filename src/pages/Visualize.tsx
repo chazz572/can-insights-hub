@@ -61,7 +61,7 @@ const Visualize = () => {
   <main className="mx-auto min-h-screen max-w-7xl px-4 py-8 sm:px-6 lg:px-10">
     <section className="mb-8 animate-fade-up">
       <p className="inline-flex items-center gap-2 rounded-lg border border-glass-border bg-glass px-3 py-1 text-sm font-semibold uppercase text-primary shadow-glow backdrop-blur"><ChartNoAxesCombined className="size-4" /> Visualization Lab</p>
-      <h1 className="mt-4 text-4xl font-extrabold tracking-tight sm:text-5xl">CAN Replay And Signal Graphing</h1>
+      <h1 className="mt-4 text-4xl font-extrabold tracking-tight sm:text-5xl">CAN Replay and Signal Graphing</h1>
       <p className="mt-3 max-w-2xl text-muted-foreground">Replay traffic, inspect timing jitter, overlay candidate signals, and scrub through diagnostic events.</p>
     </section>
 
