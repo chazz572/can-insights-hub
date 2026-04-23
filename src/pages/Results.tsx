@@ -435,7 +435,13 @@ const Results = () => {
   const summaryText = summary && typeof summary === "object" && !Array.isArray(summary) ? summary.text ?? summary : summary;
   const diagnostics = data?.diagnostics ?? {};
   const idStats = data?.id_stats ?? [];
+  const networkHealth = diagnostics.network_health && typeof diagnostics.network_health === "object" ? diagnostics.network_health as JsonRecord : {};
+  const timingRows = toRecordArray(diagnostics.timing);
+  const timingIrregularity = numericValue(networkHealth, ["timing_irregularity_score"]);
+  const averageTimingJitter = timingIrregularity || averageNumeric(timingRows, ["period_jitter", "jitter"]);
   const busLoad = Math.min(100, Math.round(((data?.total_messages ?? 0) / Math.max(Number(data?.unique_ids ?? 1), 1)) * 10));
+  const timingScore = Math.max(10, Math.min(100, Math.round(100 - Math.min(90, averageTimingJitter * 1000))));
+  const networkScore = Math.max(10, Math.min(100, Math.round(numericValue(networkHealth, ["bus_health_score"]) || (busLoad > 90 ? 68 : busLoad > 60 ? 78 : 92))));
   const componentHealth = Math.max(0, Math.min(100, 100 - anomalies.length * 12));
   const suspectIds = toRecordArray(idStats).filter((row) => numericValue(row, ["count", "frequency", "messages", "total", "value"]) > 1).length;
   const vehicleIdentification = data ? inferVehicleIdentification(data) : null;
@@ -575,7 +581,7 @@ const Results = () => {
           <div className="grid gap-6 xl:grid-cols-[0.9fr_1.1fr]">
             <AnalysisCard title="Sensor Health Indicators" description="Signal health derived from anomaly density, byte entropy, timing stability, and bus load." icon={<Activity className="size-5" />}>
               <div className="grid gap-3 sm:grid-cols-2">
-                {[["Timing", 100 - Math.min(100, suspectIds * 8)], ["Payload", componentHealth], ["Network", 100 - busLoad], ["Activity", Math.min(100, Number(data.unique_ids ?? 0) * 12)]].map(([label, score]) => <div key={String(label)} className="rounded-lg border border-glass-border bg-glass p-4"><div className="mb-2 flex items-center justify-between"><span className="font-semibold">{String(label)}</span><InfoTip text="Heuristic indicator calculated from the existing analysis payload." /></div><div className="h-2 rounded-full bg-secondary"><div className="h-full rounded-full bg-gradient-accent" style={{ width: `${Number(score)}%` }} /></div><p className="mt-2 font-mono text-sm text-primary">{String(score)}/100</p></div>)}
+                {[["Timing", timingScore], ["Payload", componentHealth], ["Network", networkScore], ["Activity", Math.min(100, Number(data.unique_ids ?? 0) * 12)]].map(([label, score]) => <div key={String(label)} className="rounded-lg border border-glass-border bg-glass p-4"><div className="mb-2 flex items-center justify-between"><span className="font-semibold">{String(label)}</span><InfoTip text="Heuristic indicator calculated from normalized diagnostics, jitter, bus health, and activity." /></div><div className="h-2 rounded-full bg-secondary"><div className="h-full rounded-full bg-gradient-accent" style={{ width: `${Number(score)}%` }} /></div><p className="mt-2 font-mono text-sm text-primary">{String(score)}/100</p></div>)}
               </div>
             </AnalysisCard>
             <AnalysisCard title="Module Activity Map" description="High-level ECU/module map from system classification and active identifiers." icon={<Map className="size-5" />}>
