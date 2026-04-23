@@ -596,13 +596,25 @@ const runAnalysis = (csv: string) => {
     `What Cannot Be Determined: vehicle type remains unclassified without explicit EV/hybrid/ICE signals; physical meaning of undecoded dynamic bytes remains unconfirmed without DBC decoding or controlled validation captures.`,
   ];
   const detailedSummary = [
+    "Vehicle State Summary",
+    `- ${whatDataShows[0]}`,
+    "",
+    "Evidence",
+    `- ${whatDataShows[3]}`,
+    `- ${whatDataShows[4]}`,
+    "",
+    "Reverse Engineering Insights",
+    `- ${whatDataShows[5]}`,
+    `- ${whatDataShows[7]}`,
+    "",
+    "Anomalies & Health Indicators",
+    `- ${whatDataShows[6]}`,
+    "",
     "What the Data Actually Shows",
     ...whatDataShows.map((item) => `- ${item}`),
     "",
-    "Interpretation",
-    hasDefensibleMotion ? `The capture is best described as ${behaviorLabel}. The engine/powertrain read is ${driverBehavior.engine_activity_confidence}, movement read is ${driverBehavior.movement_confidence}, and driver-input read is ${driverBehavior.pedal_activity_confidence}.` : "The capture is best described as awake periodic CAN traffic. It is useful for reverse engineering, but it does not prove acceleration, idle, vehicle motion, EV/ICE/hybrid type, or driver input by itself.",
-    `Reverse-engineering priorities are ${analogSignals.slice(0, 8).map((signal) => `${signal.id}:${signal.likely_signal_type}`).join(", ") || "limited because no strong analog signal candidates crossed threshold"}.`,
-    `Health notes: ${subtleAbnormalities.length ? subtleAbnormalities.slice(0, 6).map((item) => `${item.severity} ${item.type} on ${item.id}`).join("; ") : "no threshold-level subtle abnormalities were isolated"}.`,
+    "What Cannot Be Determined",
+    `- ${whatDataShows[8]}`,
   ].join("\n");
 
   return {
