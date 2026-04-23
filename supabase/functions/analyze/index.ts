@@ -395,7 +395,7 @@ const runAnalysis = (csv: string) => {
     idProfiles.set(id, profile);
     if (metadata) metadataById.set(id, `${metadataById.get(id) ?? ""} ${metadata}`.trim().slice(0, 6000));
 
-    if (cleanHex(id).length > 3) extendedIds += 1;
+    if (Number(id) > 0x7ff) extendedIds += 1;
 
     const payloadLength = byteValues(data).length;
     const delta = payloadLength - meanLength;
@@ -640,9 +640,9 @@ const runAnalysis = (csv: string) => {
   const protocolInsights = {
     likely_protocol: extendedIds > totalMessages / 2 ? "CAN 2.0B / extended identifiers" : "CAN 2.0A / standard identifiers",
     extended_id_ratio: totalMessages ? Number((extendedIds / totalMessages).toFixed(4)) : 0,
-    has_j1939_shape: totalMessages ? extendedIds / totalMessages > 0.55 && [...idCounts.keys()].some((id) => cleanHex(id).length >= 8) : false,
-    has_uds_or_isotp_shape: [...idCounts.keys()].some((id) => /^7[0-9A-F]{2}$/i.test(cleanHex(id)) || /^18DA/i.test(cleanHex(id))),
-    diagnostic_id_candidates: [...idCounts.keys()].filter((id) => /^7[0-9A-F]{2}$/i.test(cleanHex(id)) || /^18DA/i.test(cleanHex(id))).slice(0, 16),
+    has_j1939_shape: totalMessages ? extendedIds / totalMessages > 0.55 && [...idCounts.keys()].some((id) => Number(id) > 0x7ff) : false,
+    has_uds_or_isotp_shape: [...idCounts.keys()].some((id) => /^7[0-9A-F]{2}$/i.test(Number(id).toString(16).toUpperCase()) || /^18DA/i.test(Number(id).toString(16).toUpperCase())),
+    diagnostic_id_candidates: [...idCounts.keys()].filter((id) => /^7[0-9A-F]{2}$/i.test(Number(id).toString(16).toUpperCase()) || /^18DA/i.test(Number(id).toString(16).toUpperCase())).slice(0, 16),
   };
 
   const speedSignals = analogSignals.filter((signal) => /speed|wheel/i.test(String(signal.likely_signal_type))).slice(0, 8);
