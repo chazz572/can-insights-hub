@@ -610,10 +610,10 @@ const Results = () => {
               <div className="grid gap-4 lg:grid-cols-3">
                 {[["Category", vehicleIdentification.category], ["Protocol", vehicleIdentification.protocol], ["OEM Style", vehicleIdentification.oemStyle]].map(([label, guess]) => {
                   const item = guess as { label: string; confidence: number };
-                  return <div key={String(label)} className="rounded-lg border border-glass-border bg-glass p-4"><p className="text-xs font-bold uppercase text-muted-foreground">{String(label)}</p><p className="mt-2 font-semibold text-foreground">{item.label}</p><div className="mt-3 h-2 rounded-full bg-secondary"><div className="h-full rounded-full bg-gradient-accent" style={{ width: `${item.confidence}%` }} /></div><p className="mt-2 font-mono text-sm text-primary">{item.confidence}% confidence</p></div>;
+                  return <div key={String(label)} className="min-w-0 overflow-hidden rounded-lg border border-glass-border bg-glass p-4"><p className="text-fit-tile text-xs font-bold uppercase text-muted-foreground">{String(label)}</p><p className="text-fit-tile mt-2 text-sm font-semibold leading-6 text-foreground sm:text-base">{item.label}</p><div className="mt-3 h-2 overflow-hidden rounded-full bg-secondary"><div className="h-full rounded-full bg-gradient-accent" style={{ width: `${item.confidence}%` }} /></div><p className="text-fit-tile mt-2 font-mono text-sm text-primary">{item.confidence}% confidence</p></div>;
                 })}
               </div>
-              <p className="mt-4 rounded-lg border border-glass-border bg-glass p-4 text-sm leading-6 text-muted-foreground">{vehicleIdentification.explanation}</p>
+              <p className="text-fit-tile mt-4 rounded-lg border border-glass-border bg-glass p-4 text-sm leading-6 text-muted-foreground">{vehicleIdentification.explanation}</p>
             </AnalysisCard>
           ) : null}
 
