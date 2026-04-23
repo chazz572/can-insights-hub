@@ -610,6 +610,7 @@ const runAnalysis = (csv: string) => {
   const pedalBrakeSteeringSignals = analogSignals.filter((signal) => /pedal|brake|steering/i.test(String(signal.likely_signal_type))).slice(0, 8);
   const loadSignals = analogSignals.filter((signal) => /(analog_sensor|load_or_motion)/i.test(String(signal.likely_signal_type)) && Number(signal.range ?? 0) > 500).slice(0, 8);
   const unvalidatedBehaviorSignals = analogSignals.filter((signal) => /load_or_motion|compact_input_or_state/i.test(String(signal.likely_signal_type))).slice(0, 8);
+  const baselinePattern = behaviorPatternFromLog({ totalMessages, idStats, timing, idDeepDive, analogSignals });
   const metadataEvConfidence = Number(metadataInsights.ev_confidence_score ?? 0);
   const risingMotion = speedSignals.some((signal) => signal.direction === "rising") || pedalBrakeSteeringSignals.some((signal) => signal.direction === "rising");
   const fallingMotion = speedSignals.some((signal) => signal.direction === "falling") || pedalBrakeSteeringSignals.some((signal) => signal.direction === "falling");
@@ -618,7 +619,7 @@ const runAnalysis = (csv: string) => {
   const hasDefensibleMotion = speedSignals.length > 0 || pedalBrakeSteeringSignals.length > 0;
   const hasBehaviorCandidateEvidence = hasDefensibleMotion || unvalidatedBehaviorSignals.length > 0 || loadSignals.length > 0;
   const behaviorLabel = !hasBehaviorCandidateEvidence
-    ? "awake periodic CAN traffic with no defensible vehicle-motion conclusion"
+    ? baselinePattern.label
     : risingMotion && !fallingMotion
     ? "accelerating or increasing load"
     : fallingMotion && !risingMotion
@@ -627,12 +628,14 @@ const runAnalysis = (csv: string) => {
         ? "transient driving with acceleration and deceleration phases"
         : oscillatingMotion
           ? "turning, pedal modulation, or low-speed maneuvering"
-            : unvalidatedBehaviorSignals.some((signal) => signal.direction === "rising")
+            : baselinePattern.confidence >= 0.7
+              ? baselinePattern.label
+              : unvalidatedBehaviorSignals.some((signal) => signal.direction === "rising")
               ? "acceleration/load increase candidate from undecoded dynamic bytes"
               : unvalidatedBehaviorSignals.some((signal) => signal.direction === "falling")
                 ? "deceleration/load decrease candidate from undecoded dynamic bytes"
                 : "dynamic operating-state candidate from undecoded bytes";
-  const behaviorConfidence = isDbcReference ? 0 : hasDefensibleMotion ? Math.min(0.86, 0.42 + speedSignals.length * 0.12 + pedalBrakeSteeringSignals.length * 0.08) : hasBehaviorCandidateEvidence ? 0.58 : 0.22;
+  const behaviorConfidence = isDbcReference ? 0 : hasDefensibleMotion ? Math.min(0.86, 0.42 + speedSignals.length * 0.12 + pedalBrakeSteeringSignals.length * 0.08) : hasBehaviorCandidateEvidence && baselinePattern.confidence < 0.7 ? 0.58 : baselinePattern.confidence;
   const behavioralEvidence = [...speedSignals, ...rpmSignals, ...pedalBrakeSteeringSignals, ...loadSignals, ...unvalidatedBehaviorSignals].slice(0, 12).map(describeSignalEvidence);
   const subtleAbnormalities = [
     ...timing.filter((item) => Number(item.period_jitter) > Math.max(Number(item.average_period) * 0.2, 0.003)).map((item) => ({ id: item.id, type: "timing_jitter_or_drift", severity: Number(item.period_jitter) > Math.max(Number(item.average_period) * 0.75, 0.02) ? "moderate" : "minor", evidence: `Average period ${item.average_period}s with jitter ${item.period_jitter}s; max gap ${item.max_period}s.` })),
