@@ -237,6 +237,38 @@ const extractDbcSignals = (metadata: string) => [...metadata.matchAll(/signal=([
   maximum: Number(match[10]),
   unit: match[11],
 }));
+
+const decodeDbcRawValue = (bytes: number[], signal: JsonRecord) => {
+  const startBit = Number(signal.start_bit ?? 0);
+  const bitLength = Number(signal.bit_length ?? 0);
+  if (!Number.isFinite(startBit) || !Number.isFinite(bitLength) || bitLength <= 0) return null;
+  if (startBit + bitLength > bytes.length * 8) return null;
+
+  const littleEndian = /little|intel/i.test(String(signal.endianness ?? ""));
+  let raw = 0;
+
+  for (let offset = 0; offset < bitLength; offset += 1) {
+    const sourceBit = littleEndian ? startBit + offset : startBit + bitLength - 1 - offset;
+    const byteIndex = Math.floor(sourceBit / 8);
+    const bitIndex = littleEndian ? sourceBit % 8 : 7 - (sourceBit % 8);
+    raw += ((bytes[byteIndex] >> bitIndex) & 1) * (2 ** offset);
+  }
+
+  if (signal.signed && bitLength < 53 && raw >= 2 ** (bitLength - 1)) raw -= 2 ** bitLength;
+  return raw;
+};
+
+const summarizeDecodedValues = (values: number[]) => {
+  if (!values.length) return { min: null, max: null, latest: null, unique: 0, trend: "not_decoded" };
+  const trend = trendStats(values);
+  return {
+    min: Math.min(...values),
+    max: Math.max(...values),
+    latest: values[values.length - 1],
+    unique: new Set(values).size,
+    trend: trend.direction,
+  };
+};
 const summarizeMetadata = (metadataById: Map<string, string>, idCounts: Map<string, number>) => {
   const rows = [...metadataById.entries()].map(([id, metadata]) => ({ id, metadata, text: metadata.toLowerCase(), tokens: metadataTokens(metadata) }));
   const scoreRows = (terms: string[]) => rows.filter((row) => containsAny(row.text, terms));
