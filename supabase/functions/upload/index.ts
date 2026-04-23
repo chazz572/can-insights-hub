@@ -6,7 +6,7 @@ const corsHeaders = {
 };
 
 type CanFormat = "CSV" | "J1939 CSV" | "candump" | "CRTD" | "TRC" | "ASC" | "BLF" | "MDF/MF4" | "CANedge" | "DBC" | "key/value" | "generic TXT";
-type Frame = { timestamp: string; id: string; dlc: number; data: string[] };
+type Frame = { timestamp: string; id: string; dlc: number; data: string[]; metadata?: string };
 type ConversionResult = { format: CanFormat; csv: string; frameCount: number; warnings: string[] };
 
 const jsonResponse = (body: unknown, status = 200) =>
@@ -45,18 +45,19 @@ const parseCsvLine = (line: string) => {
   return values;
 };
 
-const toCsv = (frames: Frame[]) => ["timestamp,id,dlc,data", ...frames.map((frame) => [
+const toCsv = (frames: Frame[]) => ["timestamp,id,dlc,data,metadata", ...frames.map((frame) => [
   csvEscape(frame.timestamp),
   csvEscape(cleanId(frame.id)),
   frame.dlc,
   csvEscape(frame.data.map(cleanByte).join(" ")),
+  csvEscape(frame.metadata ?? ""),
 ].join(","))].join("\n");
 
-const normalizeFrame = (timestamp: string, id: string, bytes: string[], dlc?: number): Frame | null => {
+const normalizeFrame = (timestamp: string, id: string, bytes: string[], dlc?: number, metadata?: string): Frame | null => {
   const normalizedId = cleanId(id);
   const normalizedBytes = bytes.map(cleanByte).filter((byte) => /^[0-9A-F]{2}$/.test(byte)).slice(0, 8);
   if (!normalizedId || !normalizedBytes.length) return null;
-  return { timestamp: timestamp || "0", id: normalizedId, dlc: Math.min(Number.isFinite(Number(dlc)) ? Number(dlc) : normalizedBytes.length, 8), data: normalizedBytes };
+  return { timestamp: timestamp || "0", id: normalizedId, dlc: Math.min(Number.isFinite(Number(dlc)) ? Number(dlc) : normalizedBytes.length, 8), data: normalizedBytes, metadata };
 };
 
 const detectFormat = (name: string, bytes: Uint8Array, text: string): CanFormat => {
