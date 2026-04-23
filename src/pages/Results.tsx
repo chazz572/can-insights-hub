@@ -330,15 +330,15 @@ const Results = () => {
         <div className="animate-fade-up">
           <p className="inline-flex items-center gap-2 rounded-lg border border-glass-border bg-glass px-3 py-1 text-sm font-semibold uppercase text-primary shadow-glow backdrop-blur">
             <BrainCircuit className="size-4" />
-            Results dashboard
+            Results Dashboard
           </p>
-          <h1 className="mt-4 text-4xl font-extrabold tracking-tight sm:text-5xl">CAN analysis</h1>
+          <h1 className="mt-4 text-4xl font-extrabold tracking-tight sm:text-5xl">CAN Analysis</h1>
           <p className="mt-3 max-w-2xl text-muted-foreground">File ID: <span className="font-mono text-foreground">{fileId ?? "—"}</span></p>
         </div>
         <div className="flex flex-wrap gap-3">
-          <Button type="button" variant="outline" onClick={saveSnapshot}><Save className="size-4" /> Save analysis</Button>
-          <Button type="button" variant="outline" onClick={downloadReport}><Download className="size-4" /> Health report</Button>
-          <Button asChild variant="outline"><Link to="/upload">Analyze another CSV</Link></Button>
+          <Button type="button" variant="outline" onClick={saveSnapshot}><Save className="size-4" /> Save Analysis</Button>
+          <Button type="button" variant="outline" onClick={downloadReport}><Download className="size-4" /> Health Report</Button>
+          <Button asChild variant="outline"><Link to="/upload">Analyze Another Log</Link></Button>
         </div>
       </div>
       {actionMessage ? <div className="mb-6 rounded-lg border border-glass-border bg-glass p-3 text-sm text-muted-foreground shadow-glow backdrop-blur">{actionMessage}</div> : null}
@@ -358,7 +358,7 @@ const Results = () => {
       ) : error ? (
         <Card className="border-destructive/40 bg-destructive/10 shadow-dashboard">
           <CardContent className="p-6">
-            <h2 className="text-xl font-semibold text-destructive">Unable to load results</h2>
+            <h2 className="text-xl font-semibold text-destructive">Unable To Load Results</h2>
             <p className="mt-2 text-sm text-destructive">{error}</p>
           </CardContent>
         </Card>
@@ -409,7 +409,7 @@ const Results = () => {
           <AnalysisCard title="Replay & Multi-Signal Overlay" description="Professional replay-style visualization using current ID frequency and timing diagnostics." icon={<GitBranch className="size-5" />}>
             <div className="grid gap-5 lg:grid-cols-[1fr_0.75fr]">
               <div className="diagnostic-grid relative h-48 overflow-hidden rounded-lg border border-glass-border bg-glass p-4"><div className="absolute inset-y-0 left-1/3 w-px bg-primary/70 shadow-glow motion-safe:animate-signal-sweep" />{toRecordArray(idStats).slice(0, 8).map((row, index) => <div key={index} className="mb-3 grid grid-cols-[6rem_1fr] items-center gap-3 text-sm"><span className="font-mono text-muted-foreground">{renderText(row.id ?? row.key)}</span><span className="h-2 rounded-full bg-secondary"><span className="block h-full rounded-full bg-gradient-accent" style={{ width: `${Math.min(100, 20 + numericValue(row, ["count", "frequency", "messages", "total", "value"]) * 6)}%` }} /></span></div>)}</div>
-              <div className="rounded-lg border border-glass-border bg-glass p-4"><p className="mb-3 text-sm font-semibold uppercase text-muted-foreground">Timeline scrubber</p><div className="h-2 rounded-full bg-secondary"><div className="h-full w-3/5 rounded-full bg-gradient-accent" /></div><div className="mt-4 grid grid-cols-3 gap-2 text-center text-xs text-muted-foreground"><span>start</span><span className="text-primary">event</span><span>end</span></div></div>
+              <div className="rounded-lg border border-glass-border bg-glass p-4"><p className="mb-3 text-sm font-semibold uppercase text-muted-foreground">Timeline Scrubber</p><div className="h-2 rounded-full bg-secondary"><div className="h-full w-3/5 rounded-full bg-gradient-accent" /></div><div className="mt-4 grid grid-cols-3 gap-2 text-center text-xs text-muted-foreground"><span>Start</span><span className="text-primary">Event</span><span>End</span></div></div>
             </div>
           </AnalysisCard>
 
@@ -433,7 +433,7 @@ const Results = () => {
               ))}
             </div>
             <div className="mt-4 rounded-lg border border-glass-border bg-glass p-5 text-sm leading-7 text-foreground backdrop-blur">
-              <pre className="whitespace-pre-wrap font-sans">{aiInsight ?? "Choose an AI mode to generate professional diagnostic guidance from this analysis."}</pre>
+              <pre className="whitespace-pre-wrap font-sans">{aiInsight ?? "Choose An AI Mode To Generate Professional Diagnostic Guidance From This Analysis."}</pre>
             </div>
           </AnalysisCard>
 
@@ -466,13 +466,13 @@ const Results = () => {
 
           <AnalysisCard title="Advanced Diagnostics" description="Complete diagnostics payload returned by the backend." icon={<BrainCircuit className="size-5" />}>
             <div className="grid gap-4">
-              <CollapsiblePanel title="protocol" icon={<Cpu className="size-5" />} defaultOpen><JsonTable data={diagnostics.protocol} /></CollapsiblePanel>
-              <CollapsiblePanel title="byte_analysis" icon={<Layers3 className="size-5" />}><ByteEntropyHeatmap data={diagnostics.byte_analysis} /><div className="mt-4"><ByteCorrelationHeatmap data={diagnostics.byte_analysis} /></div><div className="mt-4"><JsonTable data={diagnostics.byte_analysis} /></div></CollapsiblePanel>
-              <CollapsiblePanel title="bit_analysis" icon={<Binary className="size-5" />}><BitToggleVisualization data={diagnostics.bit_analysis} /><JsonTable data={diagnostics.bit_analysis} /></CollapsiblePanel>
-              <CollapsiblePanel title="timing" icon={<Clock className="size-5" />}><TimingLineChart data={diagnostics.timing} /><JsonTable data={diagnostics.timing} /></CollapsiblePanel>
-              <CollapsiblePanel title="signals" icon={<Radar className="size-5" />}><JsonTable data={diagnostics.signals} /></CollapsiblePanel>
-              <CollapsiblePanel title="systems" icon={<Gauge className="size-5" />}><SystemsBadges data={diagnostics.systems} /><div className="mt-4"><JsonTable data={diagnostics.systems} /></div></CollapsiblePanel>
-              <CollapsiblePanel title="mechanic_summary" icon={<Wrench className="size-5" />} defaultOpen><MechanicSummary data={diagnostics.mechanic_summary} /></CollapsiblePanel>
+              <CollapsiblePanel title="Protocol" icon={<Cpu className="size-5" />} defaultOpen><JsonTable data={diagnostics.protocol} /></CollapsiblePanel>
+              <CollapsiblePanel title="Byte Analysis" icon={<Layers3 className="size-5" />}><ByteEntropyHeatmap data={diagnostics.byte_analysis} /><div className="mt-4"><ByteCorrelationHeatmap data={diagnostics.byte_analysis} /></div><div className="mt-4"><JsonTable data={diagnostics.byte_analysis} /></div></CollapsiblePanel>
+              <CollapsiblePanel title="Bit Analysis" icon={<Binary className="size-5" />}><BitToggleVisualization data={diagnostics.bit_analysis} /><JsonTable data={diagnostics.bit_analysis} /></CollapsiblePanel>
+              <CollapsiblePanel title="Timing" icon={<Clock className="size-5" />}><TimingLineChart data={diagnostics.timing} /><JsonTable data={diagnostics.timing} /></CollapsiblePanel>
+              <CollapsiblePanel title="Signals" icon={<Radar className="size-5" />}><JsonTable data={diagnostics.signals} /></CollapsiblePanel>
+              <CollapsiblePanel title="Systems" icon={<Gauge className="size-5" />}><SystemsBadges data={diagnostics.systems} /><div className="mt-4"><JsonTable data={diagnostics.systems} /></div></CollapsiblePanel>
+              <CollapsiblePanel title="Mechanic Summary" icon={<Wrench className="size-5" />} defaultOpen><MechanicSummary data={diagnostics.mechanic_summary} /></CollapsiblePanel>
             </div>
           </AnalysisCard>
         </div>
