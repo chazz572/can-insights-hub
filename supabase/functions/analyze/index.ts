@@ -111,6 +111,18 @@ const normalizeCanId = (value: string) => {
   const parsed = Number.parseInt(cleaned, /[A-F]/i.test(cleaned) ? 16 : 10);
   return Number.isFinite(parsed) ? String(parsed) : "0";
 };
+const metadataValue = (metadata: string, key: string) => metadata.match(new RegExp(`${key}=([^;]+)`, "i"))?.[1] ?? "";
+const canIdAliases = (id: string, metadata = "") => {
+  const raw = metadataValue(metadata, "raw_can_id") || id;
+  const aliases = new Set<string>([normalizeCanId(id), normalizeCanId(raw)]);
+  if (/^0x|[a-f]|[xh]$/i.test(raw)) aliases.add(String(Number.parseInt(raw.replace(/[xh]$/i, "").replace(/^0x/i, ""), 16)));
+  if (/^\d+$/.test(raw)) aliases.add(String(Number.parseInt(raw, 16)));
+  [...aliases].forEach((alias) => {
+    const numeric = Number(alias);
+    if (Number.isFinite(numeric) && numeric > 0x1fffffff) aliases.add(String(numeric & 0x1fffffff));
+  });
+  return [...aliases].filter((alias) => alias && alias !== "NaN");
+};
 const cleanHex = (value: string) => value.replace(/[^a-fA-F0-9]/g, "").toUpperCase();
 const byteValues = (value: string) => cleanHex(value).match(/.{1,2}/g)?.slice(0, 8).map((byte) => Number.parseInt(byte, 16)).filter((byte) => Number.isFinite(byte)) ?? [];
 const average = (values: number[]) => values.length ? values.reduce((sum, value) => sum + value, 0) / values.length : 0;
