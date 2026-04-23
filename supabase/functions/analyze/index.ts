@@ -700,6 +700,17 @@ const runAnalysis = (csv: string) => {
         ...protocolInsights,
         total_ids_sampled: totalMessages,
       },
+      file_routing: {
+        file_type: pipeline,
+        analysis_pipeline: pipelineLabel,
+        enforced_rules: pipeline === "dbc" ? ["DBC viewer only", "no behavior inference", "no vehicle-type classification"] : pipeline === "log_dbc" ? ["decode with DBC metadata", "signal charts enabled", "raw and decoded evidence shown"] : ["raw frame timing", "entropy", "ECU activity", "reverse-engineering only", "no signal decoding without DBC"],
+      },
+      dbc: {
+        messages: dbcMessages,
+        signals: dbcSignals,
+        bit_layout: dbcSignals.map((signal) => ({ message_id: signal.message_id, signal_name: signal.signal_name, start_bit: signal.start_bit, bit_length: signal.bit_length, byte_start: Math.floor(Number(signal.start_bit) / 8), byte_end: Math.floor((Number(signal.start_bit) + Number(signal.bit_length) - 1) / 8), multiplex: signal.multiplex })),
+      },
+      decoded_signals: decodedSignals,
       byte_analysis: byteAnalysis,
       bit_analysis: bitAnalysis,
       timing,
