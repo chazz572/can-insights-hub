@@ -96,27 +96,37 @@ const forEachCsvRecord = (csv: string, callback: (record: ParsedRecord) => void)
     }
 
     const values = parseCsvLine(line);
+    const metadata = indexes.metadataIndex >= 0 ? values[indexes.metadataIndex] ?? "" : "";
     callback({
       id: normalizeCanId(values[indexes.idIndex] ?? ""),
       data: values[indexes.dataIndex] ?? "",
       timestamp: Number(values[indexes.timestampIndex] ?? Number.NaN),
-      metadata: indexes.metadataIndex >= 0 ? values[indexes.metadataIndex] ?? "" : "",
+      metadata,
     });
   }
 };
 
-const normalizeCanId = (value: string) => {
+const normalizeCanId = (value: string, base: 10 | 16 | "auto" = "auto") => {
   const raw = value.trim().replace(/[xh]$/i, "").replace(/^0x/i, "");
   const cleaned = raw.replace(/[^a-fA-F0-9]/g, "").toUpperCase().replace(/^0+(?=[0-9A-F])/, "") || "0";
-  const parsed = Number.parseInt(cleaned, /[A-F]/i.test(cleaned) ? 16 : 10);
+  const radix = base === "auto" ? (/[A-F]/i.test(cleaned) ? 16 : 10) : base;
+  const parsed = Number.parseInt(cleaned, radix);
   return Number.isFinite(parsed) ? String(parsed) : "0";
 };
 const metadataValue = (metadata: string, key: string) => metadata.match(new RegExp(`${key}=([^;]+)`, "i"))?.[1] ?? "";
+const hintedIdBase = (value: string, metadata = ""): 10 | 16 | "auto" => {
+  const baseHint = metadataValue(metadata, "id_base");
+  if (baseHint === "10") return 10;
+  if (baseHint === "16") return 16;
+  return /^0x/i.test(value) || /[a-f]/i.test(value) || /[xh]$/i.test(value) ? 16 : "auto";
+};
 const canIdAliases = (id: string, metadata = "") => {
   const raw = metadataValue(metadata, "raw_can_id") || id;
-  const aliases = new Set<string>([normalizeCanId(id), normalizeCanId(raw)]);
-  if (/^0x|[a-f]|[xh]$/i.test(raw)) aliases.add(String(Number.parseInt(raw.replace(/[xh]$/i, "").replace(/^0x/i, ""), 16)));
-  if (/^\d+$/.test(raw)) aliases.add(String(Number.parseInt(raw, 16)));
+  const aliases = new Set<string>([normalizeCanId(id, hintedIdBase(id, metadata)), normalizeCanId(raw, hintedIdBase(raw, metadata))]);
+  if (hintedIdBase(raw, metadata) === 16) aliases.add(normalizeCanId(raw, 16));
+  if (metadataValue(metadata, "id_base") === "16" && /^\d+$/.test(raw)) {
+    aliases.add(normalizeCanId(raw, 10));
+  }
   [...aliases].forEach((alias) => {
     const numeric = Number(alias);
     if (Number.isFinite(numeric) && numeric > 0x1fffffff) aliases.add(String(numeric & 0x1fffffff));
@@ -242,19 +252,27 @@ const behaviorPatternFromLog = ({ totalMessages, idStats, timing, idDeepDive, an
 
 const metadataTokens = (value: string) => value.toLowerCase().split(/[^a-z0-9]+/).filter(Boolean);
 const containsAny = (text: string, terms: string[]) => terms.some((term) => text.includes(term));
-const extractDbcSignals = (metadata: string) => [...metadata.matchAll(/signal=([^;|]+)(?:\|multiplex=([^;|]+))?\|start=([^;|]+)\|length=([^;|]+)\|endian=([^;|]+)\|signed=([^;|]+)\|factor=([^;|]+)\|offset=([^;|]+)\|min=([^;|]+)\|max=([^;|]+)\|unit=([^;]+)/g)].map((match) => ({
-  signal_name: match[1],
-  multiplex: match[2] === "none" ? null : match[2] ?? null,
-  start_bit: Number(match[3]),
-  bit_length: Number(match[4]),
-  endianness: match[5],
-  signed: match[6] === "true",
-  factor: Number(match[7]),
-  offset: Number(match[8]),
-  minimum: Number(match[9]),
-  maximum: Number(match[10]),
-  unit: match[11],
-}));
+const extractDbcSignals = (metadata: string) => {
+  const seen = new Set<string>();
+  return [...metadata.matchAll(/signal=([^;|]+)(?:\|multiplex=([^;|]+))?\|start=([^;|]+)\|length=([^;|]+)\|endian=([^;|]+)\|signed=([^;|]+)\|factor=([^;|]+)\|offset=([^;|]+)\|min=([^;|]+)\|max=([^;|]+)\|unit=([^;]+)/g)].flatMap((match) => {
+    const key = [match[1], match[2] ?? "none", match[3], match[4], match[5], match[6], match[7], match[8], match[9], match[10], match[11]].join("|");
+    if (seen.has(key)) return [];
+    seen.add(key);
+    return [{
+      signal_name: match[1],
+      multiplex: match[2] === "none" ? null : match[2] ?? null,
+      start_bit: Number(match[3]),
+      bit_length: Number(match[4]),
+      endianness: match[5],
+      signed: match[6] === "true",
+      factor: Number(match[7]),
+      offset: Number(match[8]),
+      minimum: Number(match[9]),
+      maximum: Number(match[10]),
+      unit: match[11],
+    }];
+  });
+};
 
 const decodeDbcRawValue = (bytes: number[], signal: JsonRecord) => {
   const startBit = Number(signal.start_bit ?? 0);
@@ -479,12 +497,14 @@ const runAnalysis = (csv: string) => {
     candidate_signal: Number(item.count ?? 0) > 1,
   }));
 
-  const dbcMessages = [...metadataById.entries()].map(([id, metadata]) => {
+  const dbcMessageRows = [...metadataById.entries()].flatMap(([id, metadata]) => {
     const signals = extractDbcSignals(metadata);
+    if (!signals.length) return [];
     const messageName = metadata.match(/dbc_message=([^;]+)/)?.[1] ?? `Message_${id}`;
     const transmitter = metadata.match(/transmitter=([^;]+)/)?.[1] ?? "unknown";
-    return { id, message_name: messageName, transmitter, signal_count: signals.length, signals };
+    return [{ id, message_name: messageName, transmitter, signal_count: signals.length, signals }];
   });
+  const dbcMessages = [...new Map(dbcMessageRows.map((message) => [`${message.id}:${message.message_name}`, message])).values()];
   const dbcSignals = dbcMessages.flatMap((message) => message.signals.map((signal) => ({ message_id: message.id, message_name: message.message_name, ...signal })));
 
   if (pipeline === "dbc") {
