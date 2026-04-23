@@ -117,6 +117,18 @@ const parseCrtd = (text: string) => text.split(/\r?\n/).map((line, index) => {
   return normalizeFrame(timestamp, parts[idIndex].replace(/x$/i, ""), parts.slice(byteStart).filter(isByte), dlc);
 }).filter((frame): frame is Frame => Boolean(frame));
 
+const parseTrc = (text: string) => text.split(/\r?\n/).map((line, index) => {
+  const trimmed = line.trim();
+  if (!trimmed || trimmed.startsWith(";") || trimmed.startsWith("$")) return null;
+  const parts = trimmed.split(/[\s,;]+/).filter(Boolean);
+  const idIndex = parts.findIndex((part, partIndex) => partIndex > 0 && isId(part) && cleanId(part).length >= 2);
+  if (idIndex < 0) return null;
+  const timestamp = parts.slice(0, idIndex).reverse().find((part) => /^\d+(?:\.\d+)?$/.test(part)) ?? String(index);
+  const dlcIndex = parts.findIndex((part, partIndex) => partIndex > idIndex && /^\d+$/.test(part) && Number(part) <= 64);
+  const byteStart = dlcIndex >= 0 ? dlcIndex + 1 : idIndex + 1;
+  return normalizeFrame(timestamp, parts[idIndex].replace(/[xh]$/i, ""), parts.slice(byteStart).filter(isByte), dlcIndex >= 0 ? Number(parts[dlcIndex]) : undefined);
+}).filter((frame): frame is Frame => Boolean(frame));
+
 const parseAsc = (text: string) => text.split(/\r?\n/).map((line) => {
   const parts = line.trim().split(/\s+/).filter(Boolean);
   if (parts.length < 6 || !/^\d+(\.\d+)?$/.test(parts[0])) return null;
