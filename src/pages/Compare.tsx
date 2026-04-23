@@ -1,5 +1,5 @@
 import { ChangeEvent, DragEvent, FormEvent, useState } from "react";
-import { CheckCircle2, FileText, GitCompareArrows, Loader2, ShieldCheck, TrendingDown, TrendingUp, UploadCloud } from "lucide-react";
+import { CheckCircle2, FileText, GitCompareArrows, Loader2, Radar, ShieldCheck, TrendingDown, TrendingUp, UploadCloud } from "lucide-react";
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -100,10 +100,19 @@ const Compare = () => {
 
   return (
   <main className="mx-auto min-h-screen max-w-7xl px-4 py-8 sm:px-6 lg:px-10">
-    <section className="mb-8 animate-fade-up">
+    <section className="mb-8 animate-fade-up rounded-lg border border-glass-border bg-glass-strong p-5 shadow-dashboard backdrop-blur sm:p-7">
       <p className="inline-flex items-center gap-2 rounded-lg border border-glass-border bg-glass px-3 py-1 text-sm font-semibold uppercase text-primary shadow-glow backdrop-blur"><GitCompareArrows className="size-4" /> Comparison Suite</p>
-      <h1 className="mt-4 text-4xl font-extrabold tracking-tight sm:text-5xl">Before, After, Golden File</h1>
-      <p className="mt-3 max-w-2xl text-muted-foreground">Commercial comparison workflows for tuning validation, regression checks, and known-good fleet baselines.</p>
+      <div className="mt-5 grid gap-6 lg:grid-cols-[1fr_0.75fr] lg:items-end">
+        <div>
+          <h1 className="text-4xl font-extrabold tracking-tight sm:text-5xl">Before, After, Golden File</h1>
+          <p className="mt-3 max-w-2xl text-muted-foreground">Commercial comparison workflows for tuning validation, regression checks, and known-good fleet baselines.</p>
+        </div>
+        <div className="rounded-lg border border-primary/30 bg-gradient-subtle p-4">
+          <Radar className="mb-3 size-6 text-primary" />
+          <p className="font-semibold text-foreground">Delta engine ready</p>
+          <p className="mt-1 text-sm leading-6 text-muted-foreground">Messages, IDs, anomalies, and timing drift are prepared for evidence review.</p>
+        </div>
+      </div>
     </section>
     <div className="grid gap-6 lg:grid-cols-3">
       {comparisonModes.map(([title, text], index) => (
