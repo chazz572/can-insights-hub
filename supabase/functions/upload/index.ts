@@ -121,11 +121,13 @@ const parseCsv = (text: string, warnings: string[], format: CanFormat): Frame[] 
   const dlcIndex = find(["dlc", "length", "len"]);
   const dataIndex = find(["data", "payload", "bytes", "data bytes", "databytes", "data_hex", "payload_hex"]);
   const byteIndexes = normalizedHeaders.map((header, index) => (/^(byte|data)[_ -]?[0-7]$|^b[0-7]$/.test(header) ? index : -1)).filter((index) => index >= 0);
+  const idHeader = idIndex >= 0 ? normalizedHeaders[idIndex] : "";
+  const idBase: 10 | 16 | "auto" = /hex/.test(idHeader) ? 16 : /pgn/.test(idHeader) || /decimal|dec/.test(idHeader) ? 10 : "auto";
   if (idIndex < 0) warnings.push("CSV header is missing a recognized CAN ID column; trying generic frame extraction.");
   return lines.slice(1).map((line, index) => {
     const values = parseCsvLine(line);
     const bytes = dataIndex >= 0 ? splitBytes(values[dataIndex] ?? "") : byteIndexes.map((byteIndex) => values[byteIndex]).filter(Boolean);
-    return normalizeFrame(timestampIndex >= 0 ? values[timestampIndex] : String(index), idIndex >= 0 ? values[idIndex] : "", bytes, dlcIndex >= 0 ? Number(values[dlcIndex]) : undefined, undefined, "auto");
+    return normalizeFrame(timestampIndex >= 0 ? values[timestampIndex] : String(index), idIndex >= 0 ? values[idIndex] : "", bytes, dlcIndex >= 0 ? Number(values[dlcIndex]) : undefined, `id_header=${idHeader || "unknown"}`, idBase);
   }).filter((frame): frame is Frame => Boolean(frame)).map((frame) => format === "J1939 CSV" ? { ...frame, id: cleanId(frame.id) } : frame);
 };
 
