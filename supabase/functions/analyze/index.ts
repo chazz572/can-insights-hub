@@ -224,8 +224,9 @@ const runAnalysis = (csv: string) => {
   const bitPrevious = Array.from<number | null>({ length: 64 }, () => null);
   const timingById = new Map<string, number[]>();
   const idProfiles = new Map<string, IdProfile>();
+  const metadataById = new Map<string, string>();
 
-  forEachCsvRecord(csv, ({ id, data, timestamp }) => {
+  forEachCsvRecord(csv, ({ id, data, timestamp, metadata }) => {
     totalMessages += 1;
     idCounts.set(id, (idCounts.get(id) ?? 0) + 1);
     const profile = idProfiles.get(id) ?? { count: 0, lengths: new Map<number, number>(), timestamps: [], byteCounts: Array.from({ length: 8 }, () => new Map<number, number>()), previousData: null, changes: 0, cleanSamples: [] };
@@ -236,6 +237,7 @@ const runAnalysis = (csv: string) => {
     profile.previousData = cleanHex(data);
     if (profile.cleanSamples.length < 800) profile.cleanSamples.push(cleanHex(data));
     idProfiles.set(id, profile);
+    if (metadata) metadataById.set(id, `${metadataById.get(id) ?? ""} ${metadata}`.trim().slice(0, 6000));
 
     if (cleanHex(id).length > 3) extendedIds += 1;
 
@@ -293,6 +295,8 @@ const runAnalysis = (csv: string) => {
     }
   });
 
+  const metadataInsights = summarizeMetadata(metadataById, idCounts);
+  const isDbcReference = metadataInsights.has_dbc_metadata && totalMessages === idCounts.size;
   const idStats = [...idCounts.entries()]
     .sort((a, b) => b[1] - a[1])
     .map(([id, count]) => ({ id, count, percentage: totalMessages ? Number(((count / totalMessages) * 100).toFixed(2)) : 0 }));
@@ -361,7 +365,15 @@ const runAnalysis = (csv: string) => {
             ? "chassis_or_powertrain"
             : "body_control";
 
-    return { id, category, module_type, confidence_score: category === "diagnostic" ? 0.82 : 0.58, confidence: "heuristic", reasoning: `ID range ${cleanHex(id)} maps heuristically to ${module_type}.` };
+    const metadata = (metadataById.get(id) ?? "").toLowerCase();
+    const metadataModule = containsAny(metadata, ["bms", "battery", "charge", "charger", "hv", "inverter", "motor", "drive", "torque"])
+      ? "ev_powertrain_or_battery"
+      : containsAny(metadata, ["autopilot", "camera", "radar", "gps", "ui_", "display"])
+        ? "adas_or_infotainment"
+        : containsAny(metadata, ["brake", "steering", "wheel", "epas", "esp"])
+          ? "chassis_brake_steering"
+          : module_type;
+    return { id, category: metadataModule.includes("ev_") ? "ev_powertrain_energy" : category, module_type: metadataModule, confidence_score: metadata ? 0.9 : category === "diagnostic" ? 0.82 : 0.58, confidence: metadata ? "dbc_metadata_supported" : "heuristic", reasoning: metadata ? `DBC/message names for ${cleanHex(id)} indicate ${metadataModule}.` : `ID range ${cleanHex(id)} maps heuristically to ${module_type}.` };
   });
 
   const idDeepDive = [...idProfiles.entries()].map(([id, profile]) => {
