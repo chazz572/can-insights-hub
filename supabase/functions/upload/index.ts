@@ -122,7 +122,7 @@ const parseCrtd = (text: string) => text.split(/\r?\n/).map((line, index) => {
   const timestamp = idIndex > 0 && /^\d+(\.\d+)?$/.test(parts[idIndex - 1]) ? parts[idIndex - 1] : String(index);
   const dlc = /^\d+$/.test(parts[idIndex + 1] ?? "") ? Number(parts[idIndex + 1]) : undefined;
   const byteStart = dlc === undefined ? idIndex + 1 : idIndex + 2;
-  return normalizeFrame(timestamp, parts[idIndex].replace(/x$/i, ""), parts.slice(byteStart).filter(isByte), dlc);
+  return normalizeFrame(timestamp, parts[idIndex].replace(/x$/i, ""), parts.slice(byteStart).filter(isByte), dlc, undefined, "auto");
 }).filter((frame): frame is Frame => Boolean(frame));
 
 const parseTrc = (text: string) => text.split(/\r?\n/).map((line, index) => {
@@ -135,7 +135,7 @@ const parseTrc = (text: string) => text.split(/\r?\n/).map((line, index) => {
   const timestamp = rawTimestamp ? String(Number(rawTimestamp) / 1000) : String(index);
   const dlcIndex = parts.findIndex((part, partIndex) => partIndex > idIndex && /^\d+$/.test(part) && Number(part) <= 64);
   const byteStart = dlcIndex >= 0 ? dlcIndex + 1 : idIndex + 1;
-  return normalizeFrame(timestamp, parts[idIndex].replace(/[xh]$/i, ""), parts.slice(byteStart).filter(isByte), dlcIndex >= 0 ? Number(parts[dlcIndex]) : undefined);
+  return normalizeFrame(timestamp, parts[idIndex].replace(/[xh]$/i, ""), parts.slice(byteStart).filter(isByte), dlcIndex >= 0 ? Number(parts[dlcIndex]) : undefined, undefined, "auto");
 }).filter((frame): frame is Frame => Boolean(frame));
 
 const parseAsc = (text: string) => text.split(/\r?\n/).map((line) => {
@@ -145,7 +145,7 @@ const parseAsc = (text: string) => text.split(/\r?\n/).map((line) => {
   if (idIndex < 0) return null;
   const dlcIndex = parts.findIndex((part, index) => index > idIndex && /^\d+$/.test(part) && Number(part) <= 64);
   if (dlcIndex < 0) return null;
-  return normalizeFrame(parts[0], parts[idIndex].replace(/x$/i, ""), parts.slice(dlcIndex + 1).filter(isByte), Number(parts[dlcIndex]));
+  return normalizeFrame(parts[0], parts[idIndex].replace(/x$/i, ""), parts.slice(dlcIndex + 1).filter(isByte), Number(parts[dlcIndex]), undefined, "auto");
 }).filter((frame): frame is Frame => Boolean(frame));
 
 const parseDbc = (text: string, warnings: string[]) => {
