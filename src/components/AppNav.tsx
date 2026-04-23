@@ -1,4 +1,4 @@
-import { BarChart3, Bell, Car, GitCompareArrows, Home, LayoutDashboard, LogIn, Moon, Settings, Sun, UploadCloud, UserCircle } from "lucide-react";
+import { BarChart3, Bell, Car, GitCompareArrows, Home, LayoutDashboard, Moon, Settings, Sun, UploadCloud, UserCircle } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Link, NavLink as RouterNavLink, useLocation } from "react-router-dom";
 

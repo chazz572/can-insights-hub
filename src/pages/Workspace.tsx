@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Activity, BarChart3, Car, Code2, CreditCard, Database, FileText, Gauge, KeyRound, Users } from "lucide-react";
+import { Activity, BarChart3, Car, Code2, CreditCard, Database, FileText, Gauge, KeyRound, Users, type LucideIcon } from "lucide-react";
 import { Link } from "react-router-dom";
 
 import { Button } from "@/components/ui/button";
@@ -16,6 +16,17 @@ const Workspace = () => {
   }, []);
 
   const averageHealth = vehicles.length ? Math.round(vehicles.reduce((sum, vehicle) => sum + Number(vehicle.health_score ?? 0), 0) / vehicles.length) : 96;
+  const statCards: Array<[string, string | number, LucideIcon]> = [
+    ["Saved analyses", analyses.length, FileText],
+    ["Fleet vehicles", vehicles.length, Car],
+    ["Avg. health", `${averageHealth}/100`, Gauge],
+    ["API status", "Ready", KeyRound],
+  ];
+  const featureCards: Array<[string, string, LucideIcon]> = [
+    ["Team accounts", "Invite engineers, mechanics, and fleet managers with role-based access.", Users],
+    ["Developer API", "Use API keys for automated log ingestion and external tools.", Code2],
+    ["Maintenance prediction", "Track fleet health trends and prioritize service workflows.", Activity],
+  ];
 
   return (
     <main className="mx-auto min-h-screen max-w-7xl px-4 py-8 sm:px-6 lg:px-10">
@@ -28,12 +39,7 @@ const Workspace = () => {
       </section>
 
       <div className="grid gap-6 lg:grid-cols-4">
-        {[
-          ["Saved analyses", analyses.length, FileText],
-          ["Fleet vehicles", vehicles.length, Car],
-          ["Avg. health", `${averageHealth}/100`, Gauge],
-          ["API status", "Ready", KeyRound],
-        ].map(([label, value, Icon]) => (
+        {statCards.map(([label, value, Icon]) => (
           <Card key={String(label)} className="animate-fade-up overflow-hidden">
             <CardContent className="flex items-start justify-between gap-4 p-6">
               <div>
@@ -78,11 +84,7 @@ const Workspace = () => {
       </div>
 
       <div className="mt-6 grid gap-6 lg:grid-cols-3">
-        {[
-          ["Team accounts", "Invite engineers, mechanics, and fleet managers with role-based access.", Users],
-          ["Developer API", "Use API keys for automated log ingestion and external tools.", Code2],
-          ["Maintenance prediction", "Track fleet health trends and prioritize service workflows.", Activity],
-        ].map(([title, text, Icon]) => (
+        {featureCards.map(([title, text, Icon]) => (
           <Card key={String(title)} className="animate-fade-up"><CardContent className="p-6"><Icon className="mb-4 size-7 text-primary" /><h2 className="text-xl font-bold">{String(title)}</h2><p className="mt-2 text-sm leading-6 text-muted-foreground">{String(text)}</p></CardContent></Card>
         ))}
       </div>
