@@ -1,139 +1,167 @@
-@import url("https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap");
+@import url("https://fonts.googleapis.com/css2?family=Oswald:wght@500;600;700&family=Roboto+Condensed:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&display=swap");
 
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
-/* Definition of the design system. All colors, gradients, fonts, etc should be defined here. 
-All colors MUST be HSL.
-*/
+/* ==========================================================================
+   CJL Garage UI — industrial mechanic-shop design system.
+   Steel panels, hazard stripes, amber warning lights, monospace readouts.
+   All colors MUST be HSL.
+   ========================================================================== */
 
 @layer base {
   :root {
-    --background: 216 19% 5%;
-    --foreground: 210 40% 98%;
+    /* Steel & shop-floor palette */
+    --background: 220 8% 8%;
+    --foreground: 40 18% 92%;
 
-    --card: 218 28% 9%;
-    --card-foreground: 210 40% 98%;
+    --card: 220 8% 12%;
+    --card-foreground: 40 18% 94%;
 
-    --popover: 218 28% 9%;
-    --popover-foreground: 210 40% 98%;
+    --popover: 220 9% 11%;
+    --popover-foreground: 40 18% 94%;
 
-    --primary: 199 96% 55%;
-    --primary-foreground: 216 45% 7%;
+    /* Safety amber — primary "tool" color */
+    --primary: 38 95% 52%;
+    --primary-foreground: 220 15% 8%;
 
-    --secondary: 224 22% 14%;
-    --secondary-foreground: 210 40% 96%;
+    --secondary: 220 6% 18%;
+    --secondary-foreground: 40 18% 94%;
 
-    --muted: 222 20% 16%;
-    --muted-foreground: 218 16% 70%;
+    --muted: 220 6% 16%;
+    --muted-foreground: 40 6% 64%;
 
-    --accent: 28 96% 56%;
-    --accent-foreground: 210 40% 98%;
+    /* Hazard orange accent */
+    --accent: 18 92% 54%;
+    --accent-foreground: 220 15% 8%;
 
-    --destructive: 0 84% 62%;
-    --destructive-foreground: 210 40% 98%;
+    --destructive: 0 78% 52%;
+    --destructive-foreground: 40 18% 96%;
 
-    --border: 220 22% 20%;
-    --input: 220 22% 18%;
-    --ring: 199 96% 55%;
+    --border: 220 6% 22%;
+    --input: 220 6% 16%;
+    --ring: 38 95% 52%;
 
-    --success: 158 78% 48%;
-    --success-foreground: 216 45% 7%;
-    --warning: 39 96% 56%;
-    --warning-foreground: 35 55% 11%;
-    --surface: 216 19% 5%;
-    --surface-elevated: 220 28% 10%;
-    --glass: 220 28% 11% / 0.68;
-    --glass-strong: 220 30% 13% / 0.86;
-    --glass-border: 210 40% 98% / 0.1;
-    --chart-cyan: 185 95% 56%;
-    --chart-blue: 217 96% 61%;
-    --chart-purple: 39 96% 56%;
-    --diagnostic-green: 185 95% 56%;
-    --safety-orange: 28 96% 56%;
-    --steel: 215 18% 34%;
-    --gradient-hero: linear-gradient(135deg, hsl(216 18% 5%) 0%, hsl(220 20% 8%) 48%, hsl(216 18% 5%) 100%);
-    --gradient-panel: linear-gradient(145deg, hsl(var(--glass-strong)) 0%, hsl(220 26% 9% / 0.72) 100%);
-    --gradient-accent: linear-gradient(135deg, hsl(var(--primary)) 0%, hsl(var(--chart-cyan)) 58%, hsl(var(--chart-blue)) 100%);
-    --gradient-subtle: linear-gradient(180deg, hsl(210 40% 98% / 0.08), hsl(210 40% 98% / 0.02));
-    --shadow-dashboard: 0 24px 80px -36px hsl(199 96% 55% / 0.42), 0 18px 48px -38px hsl(217 96% 61% / 0.32);
-    --shadow-glow: 0 0 28px hsl(199 96% 55% / 0.26), 0 0 44px hsl(217 96% 61% / 0.14);
+    /* Status lights */
+    --success: 130 58% 44%;
+    --success-foreground: 220 15% 8%;
+    --warning: 42 96% 54%;
+    --warning-foreground: 220 15% 8%;
 
-    --radius: 1rem;
+    /* Surfaces */
+    --surface: 220 8% 8%;
+    --surface-elevated: 220 8% 13%;
+    --glass: 220 8% 13% / 0.92;
+    --glass-strong: 220 8% 15% / 0.97;
+    --glass-border: 40 18% 92% / 0.08;
 
-    --sidebar-background: 220 28% 8%;
-    --sidebar-foreground: 218 16% 76%;
-    --sidebar-primary: 199 96% 55%;
-    --sidebar-primary-foreground: 216 45% 7%;
-    --sidebar-accent: 224 22% 14%;
-    --sidebar-accent-foreground: 210 40% 98%;
-    --sidebar-border: 210 40% 98% / 0.1;
-    --sidebar-ring: 199 96% 55%;
+    /* Chart / readout colors */
+    --chart-cyan: 188 78% 52%;
+    --chart-blue: 210 70% 56%;
+    --chart-purple: 38 95% 52%;
+    --diagnostic-green: 130 58% 44%;
+    --safety-orange: 18 92% 54%;
+    --steel: 220 6% 28%;
+
+    /* Industrial gradients */
+    --gradient-hero:
+      repeating-linear-gradient(135deg, hsl(220 8% 9%) 0 14px, hsl(220 8% 7%) 14px 28px),
+      linear-gradient(180deg, hsl(220 8% 8%), hsl(220 10% 6%));
+    --gradient-panel: linear-gradient(180deg, hsl(220 8% 16%) 0%, hsl(220 8% 11%) 100%);
+    --gradient-accent: linear-gradient(135deg, hsl(38 95% 52%) 0%, hsl(28 96% 50%) 60%, hsl(18 92% 50%) 100%);
+    --gradient-subtle: linear-gradient(180deg, hsl(40 18% 92% / 0.05), hsl(40 18% 92% / 0.01));
+    --gradient-hazard: repeating-linear-gradient(135deg, hsl(38 95% 52%) 0 12px, hsl(220 15% 8%) 12px 24px);
+    --gradient-steel: linear-gradient(180deg, hsl(220 6% 22%) 0%, hsl(220 6% 14%) 50%, hsl(220 6% 18%) 100%);
+
+    /* Hard-edged shadows — riveted panels, no soft glow */
+    --shadow-dashboard:
+      inset 0 1px 0 hsl(40 18% 92% / 0.06),
+      inset 0 -1px 0 hsl(0 0% 0% / 0.6),
+      0 2px 0 hsl(0 0% 0% / 0.4),
+      0 8px 24px -12px hsl(0 0% 0% / 0.8);
+    --shadow-glow:
+      0 0 0 1px hsl(38 95% 52% / 0.4),
+      0 0 16px hsl(38 95% 52% / 0.18);
+
+    /* Tighter, mechanical radius */
+    --radius: 0.25rem;
+
+    /* Sidebar — dark toolbox */
+    --sidebar-background: 220 10% 6%;
+    --sidebar-foreground: 40 12% 78%;
+    --sidebar-primary: 38 95% 52%;
+    --sidebar-primary-foreground: 220 15% 8%;
+    --sidebar-accent: 220 8% 14%;
+    --sidebar-accent-foreground: 40 18% 94%;
+    --sidebar-border: 40 18% 92% / 0.06;
+    --sidebar-ring: 38 95% 52%;
   }
 
   .light {
-    --background: 210 40% 98%;
-    --foreground: 222 47% 11%;
-    --card: 0 0% 100%;
-    --card-foreground: 222 47% 11%;
-    --popover: 0 0% 100%;
-    --popover-foreground: 222 47% 11%;
-    --primary: 199 96% 42%;
-    --primary-foreground: 210 40% 98%;
-    --secondary: 214 32% 91%;
-    --secondary-foreground: 222 47% 11%;
-    --muted: 214 32% 91%;
-    --muted-foreground: 215 16% 42%;
-    --accent: 28 96% 48%;
-    --accent-foreground: 210 40% 98%;
-    --destructive: 0 84% 55%;
-    --destructive-foreground: 210 40% 98%;
-    --border: 214 32% 84%;
-    --input: 214 32% 88%;
-    --ring: 199 96% 42%;
-    --surface: 210 40% 98%;
-    --surface-elevated: 0 0% 100%;
-    --glass: 0 0% 100% / 0.72;
-    --glass-strong: 0 0% 100% / 0.9;
-    --glass-border: 222 47% 11% / 0.1;
-    --gradient-hero: radial-gradient(circle at 18% 8%, hsl(199 96% 42% / 0.16), transparent 30%), radial-gradient(circle at 85% 0%, hsl(217 96% 52% / 0.12), transparent 34%), linear-gradient(135deg, hsl(210 40% 98%) 0%, hsl(214 32% 94%) 55%, hsl(210 40% 98%) 100%);
-    --gradient-panel: linear-gradient(145deg, hsl(var(--glass-strong)) 0%, hsl(214 32% 96% / 0.82) 100%);
-    --sidebar-background: 222 47% 10%;
-    --sidebar-foreground: 214 32% 86%;
-    --sidebar-accent: 222 36% 16%;
-    --sidebar-accent-foreground: 210 40% 98%;
+    --background: 40 14% 92%;
+    --foreground: 220 15% 12%;
+    --card: 40 14% 96%;
+    --card-foreground: 220 15% 12%;
+    --popover: 40 14% 96%;
+    --popover-foreground: 220 15% 12%;
+    --primary: 28 92% 44%;
+    --primary-foreground: 40 18% 98%;
+    --secondary: 40 10% 84%;
+    --secondary-foreground: 220 15% 12%;
+    --muted: 40 10% 86%;
+    --muted-foreground: 220 8% 36%;
+    --accent: 18 88% 46%;
+    --accent-foreground: 40 18% 98%;
+    --destructive: 0 78% 46%;
+    --destructive-foreground: 40 18% 98%;
+    --border: 220 8% 70%;
+    --input: 40 10% 88%;
+    --ring: 28 92% 44%;
+    --surface: 40 14% 92%;
+    --surface-elevated: 40 14% 96%;
+    --glass: 40 14% 94% / 0.92;
+    --glass-strong: 40 14% 96% / 0.97;
+    --glass-border: 220 15% 12% / 0.12;
+    --gradient-hero:
+      repeating-linear-gradient(135deg, hsl(40 14% 92%) 0 14px, hsl(40 14% 88%) 14px 28px);
+    --gradient-panel: linear-gradient(180deg, hsl(40 14% 98%) 0%, hsl(40 12% 90%) 100%);
+    --gradient-steel: linear-gradient(180deg, hsl(40 8% 76%) 0%, hsl(40 6% 64%) 50%, hsl(40 8% 70%) 100%);
+    --sidebar-background: 220 12% 10%;
+    --sidebar-foreground: 40 12% 86%;
+    --sidebar-accent: 220 8% 18%;
+    --sidebar-accent-foreground: 40 18% 96%;
     color-scheme: light;
   }
 
   .dark {
-    --background: 216 19% 5%;
-    --foreground: 210 40% 98%;
-    --card: 218 28% 9%;
-    --card-foreground: 210 40% 98%;
-    --popover: 218 28% 9%;
-    --popover-foreground: 210 40% 98%;
-    --primary: 199 96% 55%;
-    --primary-foreground: 216 45% 7%;
-    --secondary: 224 22% 14%;
-    --secondary-foreground: 210 40% 96%;
-    --muted: 222 20% 16%;
-    --muted-foreground: 218 16% 70%;
-    --accent: 266 92% 68%;
-    --accent-foreground: 210 40% 98%;
-    --destructive: 0 84% 62%;
-    --destructive-foreground: 210 40% 98%;
-    --border: 220 22% 20%;
-    --input: 220 22% 18%;
-    --ring: 199 96% 55%;
-    --sidebar-background: 220 28% 8%;
-    --sidebar-foreground: 218 16% 76%;
-    --sidebar-primary: 199 96% 55%;
-    --sidebar-primary-foreground: 216 45% 7%;
-    --sidebar-accent: 224 22% 14%;
-    --sidebar-accent-foreground: 210 40% 98%;
-    --sidebar-border: 210 40% 98% / 0.1;
-    --sidebar-ring: 199 96% 55%;
+    --background: 220 8% 8%;
+    --foreground: 40 18% 92%;
+    --card: 220 8% 12%;
+    --card-foreground: 40 18% 94%;
+    --popover: 220 9% 11%;
+    --popover-foreground: 40 18% 94%;
+    --primary: 38 95% 52%;
+    --primary-foreground: 220 15% 8%;
+    --secondary: 220 6% 18%;
+    --secondary-foreground: 40 18% 94%;
+    --muted: 220 6% 16%;
+    --muted-foreground: 40 6% 64%;
+    --accent: 18 92% 54%;
+    --accent-foreground: 220 15% 8%;
+    --destructive: 0 78% 52%;
+    --destructive-foreground: 40 18% 96%;
+    --border: 220 6% 22%;
+    --input: 220 6% 16%;
+    --ring: 38 95% 52%;
+    --sidebar-background: 220 10% 6%;
+    --sidebar-foreground: 40 12% 78%;
+    --sidebar-primary: 38 95% 52%;
+    --sidebar-primary-foreground: 220 15% 8%;
+    --sidebar-accent: 220 8% 14%;
+    --sidebar-accent-foreground: 40 18% 94%;
+    --sidebar-border: 40 18% 92% / 0.06;
+    --sidebar-ring: 38 95% 52%;
   }
 }
 
@@ -147,10 +175,24 @@ All colors MUST be HSL.
   }
 
   body {
-    @apply min-h-screen bg-background text-foreground antialiased transition-colors duration-500;
-    font-family: Inter, ui-sans-serif, system-ui, sans-serif;
+    @apply min-h-screen bg-background text-foreground antialiased;
+    font-family: "Roboto Condensed", ui-sans-serif, system-ui, sans-serif;
     background-image: var(--gradient-hero);
     background-attachment: fixed;
+    letter-spacing: 0.01em;
+  }
+
+  /* Industrial display headings */
+  h1, h2, h3, h4 {
+    font-family: "Oswald", "Roboto Condensed", sans-serif;
+    letter-spacing: 0.02em;
+    text-transform: uppercase;
+  }
+
+  /* All numeric / code-like content uses monospace by default */
+  code, pre, kbd, samp,
+  .font-mono {
+    font-family: "JetBrains Mono", ui-monospace, "SFMono-Regular", Menonaco, Consolas, monospace !important;
   }
 
   main * {
@@ -165,6 +207,23 @@ All colors MUST be HSL.
   ::selection {
     @apply bg-primary text-primary-foreground;
   }
+
+  /* Industrial scrollbars */
+  ::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+  }
+  ::-webkit-scrollbar-track {
+    background: hsl(var(--background));
+  }
+  ::-webkit-scrollbar-thumb {
+    background: hsl(var(--steel));
+    border: 2px solid hsl(var(--background));
+    border-radius: 2px;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background: hsl(var(--primary));
+  }
 }
 
 @layer utilities {
@@ -175,15 +234,34 @@ All colors MUST be HSL.
     word-break: break-word;
   }
 
+  /* Diamond-plate / tread-plate background */
   .diagnostic-grid {
-    background-image: linear-gradient(hsl(var(--glass-border)) 1px, transparent 1px), linear-gradient(90deg, hsl(var(--glass-border)) 1px, transparent 1px);
-    background-size: 28px 28px;
+    background-image:
+      linear-gradient(45deg, hsl(40 18% 92% / 0.04) 25%, transparent 25%),
+      linear-gradient(-45deg, hsl(40 18% 92% / 0.04) 25%, transparent 25%),
+      linear-gradient(45deg, transparent 75%, hsl(40 18% 92% / 0.04) 75%),
+      linear-gradient(-45deg, transparent 75%, hsl(40 18% 92% / 0.04) 75%);
+    background-size: 16px 16px;
+    background-position: 0 0, 0 8px, 8px -8px, -8px 0px;
   }
 
+  /* Riveted steel panel */
   .data-panel {
-    @apply rounded-lg border border-glass-border bg-glass shadow-dashboard backdrop-blur-xl;
+    @apply rounded-sm border border-glass-border bg-glass shadow-dashboard;
+    background-image: var(--gradient-panel);
+    position: relative;
   }
 
+  .data-panel::before {
+    content: "";
+    position: absolute;
+    inset: 6px;
+    border: 1px solid hsl(40 18% 92% / 0.04);
+    border-radius: 2px;
+    pointer-events: none;
+  }
+
+  /* CRT scanline overlay for instrument readouts */
   .scanline-panel {
     position: relative;
     overflow: hidden;
@@ -194,7 +272,67 @@ All colors MUST be HSL.
     position: absolute;
     inset: 0;
     pointer-events: none;
-    background: repeating-linear-gradient(180deg, transparent 0 9px, hsl(var(--primary) / 0.04) 10px 11px);
-    mix-blend-mode: screen;
+    background: repeating-linear-gradient(
+      0deg,
+      transparent 0 2px,
+      hsl(0 0% 0% / 0.18) 2px 3px
+    );
+    mix-blend-mode: multiply;
   }
+
+  /* Hazard tape stripe — for warnings and accents */
+  .hazard-stripe {
+    background-image: var(--gradient-hazard);
+    background-size: 100% 100%;
+  }
+
+  /* Brushed steel surface */
+  .brushed-steel {
+    background-image: var(--gradient-steel),
+      repeating-linear-gradient(90deg, transparent 0 2px, hsl(0 0% 0% / 0.04) 2px 3px);
+  }
+
+  /* Stenciled label — for section markers */
+  .stencil {
+    font-family: "Oswald", sans-serif;
+    text-transform: uppercase;
+    letter-spacing: 0.18em;
+    font-weight: 700;
+  }
+
+  /* LED-style numeric readout */
+  .led-readout {
+    font-family: "JetBrains Mono", ui-monospace, monospace;
+    font-weight: 700;
+    color: hsl(var(--primary));
+    text-shadow: 0 0 6px hsl(var(--primary) / 0.6);
+    letter-spacing: 0.05em;
+  }
+
+  /* Rivet dot — used as ::before/::after on panels */
+  .riveted::before,
+  .riveted::after {
+    content: "";
+    position: absolute;
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: radial-gradient(circle at 30% 30%, hsl(40 6% 70%), hsl(220 6% 18%));
+    box-shadow: inset 0 -1px 1px hsl(0 0% 0% / 0.6), 0 1px 1px hsl(0 0% 0% / 0.4);
+  }
+  .riveted::before { top: 6px; left: 6px; }
+  .riveted::after { top: 6px; right: 6px; }
+
+  /* Status indicator LED */
+  .status-led {
+    display: inline-block;
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    background: hsl(var(--success));
+    box-shadow: 0 0 8px hsl(var(--success) / 0.8), inset 0 0 2px hsl(0 0% 0% / 0.4);
+  }
+  .status-led.warn { background: hsl(var(--warning)); box-shadow: 0 0 8px hsl(var(--warning) / 0.8), inset 0 0 2px hsl(0 0% 0% / 0.4); }
+  .status-led.error { background: hsl(var(--destructive)); box-shadow: 0 0 8px hsl(var(--destructive) / 0.8), inset 0 0 2px hsl(0 0% 0% / 0.4); }
+  .status-led.off { background: hsl(220 6% 22%); box-shadow: inset 0 0 2px hsl(0 0% 0% / 0.6); }
 }
