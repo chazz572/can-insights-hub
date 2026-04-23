@@ -106,14 +106,14 @@ export const AppNav = () => {
           ))}
         </nav>
 
-        <div className="m-3 rounded-sm border-2 border-warning/40 bg-warning/5 p-3">
+        <div className="m-3 rounded-sm border-2 border-warning/50 bg-warning/10 p-3">
           <div className="flex items-center gap-2">
             <span className="grid size-9 place-items-center rounded-sm bg-warning text-warning-foreground">
               <Wrench className="size-4" />
             </span>
             <div className="min-w-0">
-              <p className="font-display text-sm font-bold uppercase text-foreground">Pro Bay Active</p>
-              <p className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">All tools certified</p>
+              <p className="font-display text-sm font-bold uppercase text-sidebar-accent-foreground">Pro Bay Active</p>
+              <p className="font-mono text-[10px] uppercase tracking-wider text-sidebar-foreground/70">All tools certified</p>
             </div>
           </div>
         </div>
