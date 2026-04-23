@@ -1,4 +1,4 @@
-const API_BASE_URL = "http://127.0.0.1:8000/api";
+import { supabase } from "@/integrations/supabase/client";
 
 export type JsonRecord = Record<string, unknown>;
 
@@ -41,12 +41,15 @@ export const uploadCsv = async (file: File): Promise<string> => {
   const formData = new FormData();
   formData.append("file", file);
 
-  const payload = await fetch(`${API_BASE_URL}/upload`, {
-    method: "POST",
+  const { data: payload, error } = await supabase.functions.invoke<{ file_id?: string; filename?: string }>("upload", {
     body: formData,
-  }).then((response) => parseJsonResponse<{ file_id?: string; filename?: string }>(response));
+  });
 
-  if (!payload.file_id) {
+  if (error) {
+    throw new Error(error.message || "Upload request failed.");
+  }
+
+  if (!payload?.file_id) {
     throw new Error("Upload succeeded, but no file_id was returned.");
   }
 
@@ -54,23 +57,21 @@ export const uploadCsv = async (file: File): Promise<string> => {
 };
 
 export const analyzeFile = async (fileId: string): Promise<AnalysisResult> => {
-  return fetch(`${API_BASE_URL}/analyze/${fileId}`, {
-    method: "POST",
-    headers: {
-      Accept: "application/json",
-    },
-  }).then((response) => parseJsonResponse<AnalysisResult>(response));
+  const { data, error } = await supabase.functions.invoke<AnalysisResult>("analyze", {
+    body: { file_id: fileId },
+  });
+
+  if (error) {
+    throw new Error(error.message || "Analysis request failed.");
+  }
+
+  if (!data) {
+    throw new Error("Analysis request returned no data.");
+  }
+
+  return data;
 };
 
 export const checkBackendHealth = async (): Promise<void> => {
-  const payload = await fetch(`${API_BASE_URL}/health`, {
-    method: "GET",
-    headers: {
-      Accept: "application/json",
-    },
-  }).then((response) => parseJsonResponse<{ status?: string }>(response));
-
-  if (payload.status !== "ok") {
-    throw new Error("Backend health check failed.");
-  }
+  return Promise.resolve();
 };
