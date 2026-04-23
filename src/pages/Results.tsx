@@ -32,6 +32,26 @@ const renderList = (value: unknown) => {
   );
 };
 
+const DiagnosticBlock = ({ field, value, collapsible = false }: { field: string; value: unknown; collapsible?: boolean }) => {
+  if (collapsible) {
+    return (
+      <details className="group rounded-lg border border-glass-border bg-glass p-4 backdrop-blur transition-all duration-300 hover:shadow-glow">
+        <summary className="cursor-pointer list-none font-mono text-sm font-semibold text-primary transition-colors group-open:mb-4">
+          {field}
+        </summary>
+        <JsonTable data={value} />
+      </details>
+    );
+  }
+
+  return (
+    <div className="space-y-3 rounded-lg border border-glass-border bg-glass p-4 backdrop-blur transition-all duration-300 hover:shadow-glow">
+      <h3 className="font-mono text-sm font-semibold text-primary">{field}</h3>
+      <JsonTable data={value} />
+    </div>
+  );
+};
+
 const MiniChart = () => (
   <div className="flex h-24 items-end gap-2 rounded-lg border border-glass-border bg-glass p-4 backdrop-blur">
     {[42, 64, 38, 78, 52, 88, 68, 96, 58, 74].map((height, index) => (
