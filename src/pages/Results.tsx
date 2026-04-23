@@ -1,4 +1,4 @@
-import { AlertTriangle, Activity, BarChart3, Binary, BrainCircuit, ChevronDown, Clock, Cpu, Download, Gauge, Hash, Layers3, Loader2, MessageSquareText, Radar, Save, ShieldCheck, Sparkles, Wrench, Zap } from "lucide-react";
+import { AlertTriangle, Activity, BarChart3, Binary, BrainCircuit, Car, ChevronDown, Clock, Cpu, Download, Gauge, GitBranch, Hash, Layers3, Loader2, Map, MessageSquareText, Radar, Save, ScanLine, ShieldCheck, Sparkles, TimerReset, Wrench, Zap } from "lucide-react";
 import { useEffect, useState } from "react";
 import type { ReactNode } from "react";
 import { Link, useParams } from "react-router-dom";
@@ -8,6 +8,7 @@ import { AnalysisCard } from "@/components/AnalysisCard";
 import { JsonTable } from "@/components/JsonTable";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import { Tooltip as UiTooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { analyzeFile, AnalysisResult } from "@/lib/canApi";
 import { requestAiInsight, saveAnalysisSnapshot, type AiInsightKind } from "@/lib/saasApi";
 import { cn } from "@/lib/utils";
@@ -217,6 +218,23 @@ const MetricCard = ({ title, value, icon: Icon }: { title: string; value: unknow
     </CardContent>
   </Card>
 );
+
+const InfoTip = ({ text }: { text: string }) => <UiTooltip><TooltipTrigger asChild><span className="inline-grid size-5 cursor-help place-items-center rounded-full border border-glass-border text-xs text-muted-foreground">?</span></TooltipTrigger><TooltipContent className="max-w-xs">{text}</TooltipContent></UiTooltip>;
+
+const FreezeFrameSnapshots = ({ anomalies, idStats }: { anomalies: unknown[]; idStats: unknown }) => {
+  const rows = (anomalies.length ? toRecordArray(anomalies) : toRecordArray(idStats).slice(0, 4)).slice(0, 4);
+  return <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">{rows.map((row, index) => <div key={index} className="rounded-lg border border-glass-border bg-glass p-4"><p className="font-mono text-sm text-primary">Frame {index + 1}</p><p className="mt-2 text-sm text-muted-foreground">ID {renderText(row.id ?? row.key ?? "unknown")}</p><p className="mt-2 truncate font-mono text-xs text-foreground">{renderText(row.reason ?? row.data ?? row.value ?? "stable sample")}</p></div>)}</div>;
+};
+
+const TroubleTimeline = ({ anomalies, timing }: { anomalies: unknown[]; timing: unknown }) => {
+  const rows = (anomalies.length ? toRecordArray(anomalies) : toRecordArray(timing).slice(0, 6)).slice(0, 6);
+  return <div className="grid gap-3">{rows.map((row, index) => <div key={index} className="grid grid-cols-[4rem_1fr] gap-3 text-sm"><span className="font-mono text-muted-foreground">T+{index}s</span><div className="rounded-lg border border-glass-border bg-glass p-3"><p className="font-semibold text-foreground">{renderText(row.reason ?? row.id ?? row.key ?? "Timing checkpoint")}</p><p className="text-muted-foreground">{renderText(row.data ?? row.period_jitter ?? row.value ?? "No critical event")}</p></div></div>)}</div>;
+};
+
+const ModuleActivityMap = ({ systems }: { systems: unknown }) => {
+  const rows = toRecordArray(systems).slice(0, 12);
+  return <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-6">{(rows.length ? rows : Array.from({ length: 6 }, (_, index) => ({ id: `M${index + 1}`, category: "module" }))).map((row, index) => <div key={index} className="rounded-lg border border-glass-border bg-glass p-3 text-center"><Car className="mx-auto mb-2 size-5 text-primary" /><p className="truncate font-mono text-xs text-foreground">{renderText(row.id ?? row.key)}</p><p className="mt-1 truncate text-xs text-muted-foreground">{renderText(row.category ?? "active")}</p></div>)}</div>;
+};
 
 const Results = () => {
   const { id, file_id } = useParams();
