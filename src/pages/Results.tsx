@@ -10,7 +10,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Tooltip as UiTooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { analyzeFile, AnalysisResult, type JsonRecord } from "@/lib/canApi";
-import { buildPartialDbcDraft, inferVehicleIdentification } from "@/lib/intelligence";
+import { buildPartialDbcDraft, generatePartialDbcCandidates, inferVehicleIdentification } from "@/lib/intelligence";
 import { requestAiInsight, saveAnalysisSnapshot, type AiInsightKind } from "@/lib/saasApi";
 import { cn } from "@/lib/utils";
 
@@ -416,7 +416,7 @@ const Results = () => {
   const componentHealth = Math.max(0, Math.min(100, 100 - anomalies.length * 12));
   const suspectIds = toRecordArray(idStats).filter((row) => numericValue(row, ["count", "frequency", "messages", "total", "value"]) > 1).length;
   const vehicleIdentification = data ? inferVehicleIdentification(data) : null;
-  const partialDbcDraft = data ? buildPartialDbcDraft([]) : "";
+  const partialDbcDraft = data ? buildPartialDbcDraft(generatePartialDbcCandidates(data)) : "";
 
   const saveSnapshot = async () => {
     if (!fileId || !data) return;

@@ -1,9 +1,11 @@
 import { useState } from "react";
-import { Binary, BrainCircuit, Cpu, DatabaseZap, GitBranch, Layers3, Radar, SlidersHorizontal, TerminalSquare } from "lucide-react";
+import { Binary, BrainCircuit, Cpu, DatabaseZap, Download, GitBranch, Layers3, Loader2, Radar, SlidersHorizontal, TerminalSquare } from "lucide-react";
 import { Link } from "react-router-dom";
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { analyzeFile } from "@/lib/canApi";
+import { buildPartialDbcDraft, generatePartialDbcCandidates, type DbcCandidateSignal } from "@/lib/intelligence";
 
 const tools = [
   ["Signal Extraction Wizard", "Guided candidate selection for byte/bit signals, scaling hypotheses, and validation notes.", Radar],
