@@ -834,14 +834,14 @@ const runAnalysis = (csv: string) => {
     "This is a definition file only, so no driving behavior, vehicle health, timing, or vehicle type is inferred.",
   ];
   const logDbcSummaryLines = [
-    `Full Power mode matched this log with DBC metadata and produced ${decodedSignals.length} decoded signal range(s).`,
+    `Full Power mode matched the merged raw log with DBC metadata and displayed ${decodedSignals.length} decoded signal${decodedSignals.length === 1 ? "" : "s"}.`,
     decodedEvents.length ? `Decoded behavior clues: ${decodedEvents.join("; ")}.` : "DBC-defined signals are displayed even when static; no decoded speed, RPM, torque, pedal, brake, steering, SOC, or temperature signal showed a changing behavior clue in this capture.",
     subtleAbnormalities.length ? `Network issues to review: ${subtleAbnormalities.slice(0, 4).map((item) => `${item.type.replace(/_/g, " ")} on ${item.id}`).join("; ")}.` : "Network timing and payload health did not show major threshold-level issues.",
     "Decoded physical signals take priority and are never filtered by activity, variance, or change detection when their DBC message appears in the log.",
   ];
   const whatDataShows = pipeline === "log_dbc" ? logDbcSummaryLines : pipeline === "dbc" ? dbcSummaryLines : logSummaryLines;
   const detailedSummary = pipeline === "log_dbc"
-    ? ["Decoded LOG + DBC Summary", ...logDbcSummaryLines.map((item) => `- ${item}`), "", "Decoded Signals", ...(decodedSignals.slice(0, 12).map((signal) => `- ${signal.signal_name} on ID ${signal.id}: ${signal.decoded_min}–${signal.decoded_max}${signal.unit ? ` ${signal.unit}` : ""}, bit ${signal.start_bit}/${signal.bit_length}`) || ["- No active decoded signal ranges found."])].join("\n")
+    ? ["Decoded LOG + DBC Summary", ...logDbcSummaryLines.map((item) => `- ${item}`), "", "Decoded Signals", ...(decodedSignals.length ? decodedSignals.slice(0, 12).map((signal) => `- ${signal.signal_name} on ID ${signal.id}: ${signal.decoded_min}–${signal.decoded_max}${signal.unit ? ` ${signal.unit}` : ""}, bit ${signal.start_bit}/${signal.bit_length}`) : ["- No DBC message IDs matched the merged log after decimal ID normalization."])].join("\n")
     : pipeline === "dbc"
       ? ["DBC Viewer Summary", ...dbcSummaryLines.map((item) => `- ${item}`)].join("\n")
       : ["Raw CAN Log Summary", ...logSummaryLines.map((item) => `- ${item}`), "", "Active ECU / Timing View", `- Active IDs: ${activeEcus || "not isolated"}.`, `- Protocol: ${protocolInsights.likely_protocol}; extended-ID ratio ${(protocolInsights.extended_id_ratio * 100).toFixed(1)}%.`].join("\n");
