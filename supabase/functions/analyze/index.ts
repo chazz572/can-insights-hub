@@ -252,19 +252,27 @@ const behaviorPatternFromLog = ({ totalMessages, idStats, timing, idDeepDive, an
 
 const metadataTokens = (value: string) => value.toLowerCase().split(/[^a-z0-9]+/).filter(Boolean);
 const containsAny = (text: string, terms: string[]) => terms.some((term) => text.includes(term));
-const extractDbcSignals = (metadata: string) => [...metadata.matchAll(/signal=([^;|]+)(?:\|multiplex=([^;|]+))?\|start=([^;|]+)\|length=([^;|]+)\|endian=([^;|]+)\|signed=([^;|]+)\|factor=([^;|]+)\|offset=([^;|]+)\|min=([^;|]+)\|max=([^;|]+)\|unit=([^;]+)/g)].map((match) => ({
-  signal_name: match[1],
-  multiplex: match[2] === "none" ? null : match[2] ?? null,
-  start_bit: Number(match[3]),
-  bit_length: Number(match[4]),
-  endianness: match[5],
-  signed: match[6] === "true",
-  factor: Number(match[7]),
-  offset: Number(match[8]),
-  minimum: Number(match[9]),
-  maximum: Number(match[10]),
-  unit: match[11],
-}));
+const extractDbcSignals = (metadata: string) => {
+  const seen = new Set<string>();
+  return [...metadata.matchAll(/signal=([^;|]+)(?:\|multiplex=([^;|]+))?\|start=([^;|]+)\|length=([^;|]+)\|endian=([^;|]+)\|signed=([^;|]+)\|factor=([^;|]+)\|offset=([^;|]+)\|min=([^;|]+)\|max=([^;|]+)\|unit=([^;]+)/g)].flatMap((match) => {
+    const key = [match[1], match[2] ?? "none", match[3], match[4], match[5], match[6], match[7], match[8], match[9], match[10], match[11]].join("|");
+    if (seen.has(key)) return [];
+    seen.add(key);
+    return [{
+      signal_name: match[1],
+      multiplex: match[2] === "none" ? null : match[2] ?? null,
+      start_bit: Number(match[3]),
+      bit_length: Number(match[4]),
+      endianness: match[5],
+      signed: match[6] === "true",
+      factor: Number(match[7]),
+      offset: Number(match[8]),
+      minimum: Number(match[9]),
+      maximum: Number(match[10]),
+      unit: match[11],
+    }];
+  });
+};
 
 const decodeDbcRawValue = (bytes: number[], signal: JsonRecord) => {
   const startBit = Number(signal.start_bit ?? 0);
