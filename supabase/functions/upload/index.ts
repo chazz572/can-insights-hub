@@ -31,14 +31,12 @@ const hintedIdBase = (value: string, metadata = ""): 10 | 16 | "auto" => {
   return /^0x/i.test(value) || /[a-f]/i.test(value) || /[xh]$/i.test(value) ? 16 : "auto";
 };
 const canIdAliases = (storedId: string, metadata = "") => {
-  const aliases = new Set<string>([cleanId(storedId, hintedIdBase(storedId, metadata))]);
+  const aliases = new Set<string>([cleanId(storedId, 10)]);
   const raw = metadataValue(metadata, "raw_can_id") || storedId;
-  aliases.add(cleanId(raw, hintedIdBase(raw, metadata)));
-  if (hintedIdBase(raw, metadata) === 16) aliases.add(cleanId(raw, 16));
-  if (/^\d+$/.test(raw)) {
-    aliases.add(cleanId(raw, 10));
-    aliases.add(cleanId(raw, 16));
-  }
+  const rawBase = hintedIdBase(raw, metadata);
+  aliases.add(cleanId(raw, rawBase));
+  if (rawBase === 16) aliases.add(cleanId(raw, 16));
+  if (rawBase === "auto" && /^\d+$/.test(raw)) aliases.add(cleanId(raw, 10));
   [...aliases].forEach((id) => {
     const numeric = Number(id);
     if (Number.isFinite(numeric) && numeric > 0x1fffffff) aliases.add(String(numeric & 0x1fffffff));
