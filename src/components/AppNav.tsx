@@ -56,7 +56,7 @@ export const AppNav = () => {
     { to: "/workspace", label: "Bay", icon: LayoutDashboard },
     { to: "/upload", label: "Intake", icon: UploadCloud },
     { to: resultsPath, label: "Diagnose", icon: BarChart3 },
-    { to: "/compare", label: "Compare", icon: GitCompareArrows, highlight: true },
+    { to: "/compare", label: "Compare", icon: GitCompareArrows },
     { to: "/engineering", label: "Bench", icon: TerminalSquare },
     { to: "/visualize", label: "Scope", icon: ChartNoAxesCombined },
     { to: "/fleet", label: "Fleet", icon: Car },
@@ -93,12 +93,9 @@ export const AppNav = () => {
 
         <nav className="flex-1 space-y-0.5 overflow-y-auto px-3 pr-2">
           {links.map((item) => (
-            <RouterNavLink key={item.label} to={item.to} className={({ isActive }) => navClass({ isActive, highlight: item.highlight })} end={item.end}>
+            <RouterNavLink key={item.label} to={item.to} className={({ isActive }) => navClass({ isActive })} end={item.end}>
               <item.icon className="size-4 shrink-0" />
               {item.label}
-              {item.highlight && (
-                <span className="ml-auto rounded-sm bg-primary/20 px-1.5 py-0.5 font-mono text-[9px] text-primary">NEW</span>
-              )}
             </RouterNavLink>
           ))}
         </nav>
@@ -155,11 +152,11 @@ export const AppNav = () => {
           {[
             links[0],
             links[2],
-            { ...links[4], highlight: true },
+            links[4],
             links[3],
             links[7],
           ].map((item) => (
-            <RouterNavLink key={item.label} to={item.to} className={({ isActive }) => cn(navClass({ isActive, highlight: item.highlight }), "flex-col justify-center gap-1 px-1 py-1.5 text-[9px]")} end={item.end}>
+            <RouterNavLink key={item.label} to={item.to} className={({ isActive }) => cn(navClass({ isActive }), "flex-col justify-center gap-1 px-1 py-1.5 text-[9px]")} end={item.end}>
               <item.icon className="size-4" />
               <span>{item.label}</span>
             </RouterNavLink>
