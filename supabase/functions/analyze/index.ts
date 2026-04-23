@@ -362,6 +362,7 @@ const runAnalysis = (csv: string) => {
       const leScore = analogCandidateScore(littleEndian);
       const score = Math.max(beScore, leScore);
       const values = beScore >= leScore ? bigEndian : littleEndian;
+      const trend = trendStats(values);
       return score > 0.48 ? {
         id,
         byte_start,
@@ -370,13 +371,25 @@ const runAnalysis = (csv: string) => {
         endianness: beScore >= leScore ? "big_endian_candidate" : "little_endian_candidate",
         min_value: Math.min(...values),
         max_value: Math.max(...values),
+        range: trend.range,
         unique_values: new Set(values).size,
+        direction: trend.direction,
+        rising_ratio: Number(trend.rising.toFixed(3)),
+        falling_ratio: Number(trend.falling.toFixed(3)),
+        reversals: trend.reversals,
+        mean_abs_delta: Number(trend.meanAbsDelta.toFixed(3)),
+        smoothness: Number(trend.smoothness.toFixed(3)),
         confidence_score: Number(Math.min(0.96, score).toFixed(3)),
         likely_signal_type: byte_start <= 2 && Math.max(...values) > 900 && Math.max(...values) < 9000 ? "rpm_candidate" : "analog_signal_candidate",
-        reasoning: "Smooth changing 16-bit byte pair with enough range and transitions to resemble an analog engine/sensor signal.",
+        reasoning: "Smooth changing 16-bit byte pair with enough range, transitions, and directional structure to resemble a live vehicle signal.",
       } : null;
     }).filter(Boolean);
   }) as JsonRecord[];
+
+  analogSignals.forEach((signal) => {
+    signal.likely_signal_type = classifySignal(signal);
+    signal.evidence = describeSignalEvidence(signal);
+  });
 
   analogSignals.filter((signal) => signal.likely_signal_type === "rpm_candidate").forEach((signal) => rpmIds.add(String(signal.id)));
 
