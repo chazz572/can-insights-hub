@@ -134,10 +134,18 @@ const runAnalysis = (csv: string) => {
   const bitTransitions = Array.from({ length: 64 }, () => 0);
   const bitPrevious = Array.from<number | null>({ length: 64 }, () => null);
   const timingById = new Map<string, number[]>();
+  const idProfiles = new Map<string, IdProfile>();
 
   forEachCsvRecord(csv, ({ id, data, timestamp }) => {
     totalMessages += 1;
     idCounts.set(id, (idCounts.get(id) ?? 0) + 1);
+    const profile = idProfiles.get(id) ?? { count: 0, lengths: new Map<number, number>(), timestamps: [], byteCounts: Array.from({ length: 8 }, () => new Map<number, number>()), previousData: null, changes: 0 };
+    profile.count += 1;
+    profile.lengths.set(data.length, (profile.lengths.get(data.length) ?? 0) + 1);
+    if (Number.isFinite(timestamp)) profile.timestamps.push(timestamp);
+    if (profile.previousData !== null && profile.previousData !== cleanHex(data)) profile.changes += 1;
+    profile.previousData = cleanHex(data);
+    idProfiles.set(id, profile);
 
     if (cleanHex(id).length > 3) extendedIds += 1;
 
@@ -151,6 +159,10 @@ const runAnalysis = (csv: string) => {
     if (payloadLength === 1) pedalIds.add(id);
 
     const bytes = byteValues(data);
+
+    bytes.forEach((byte, byteIndex) => {
+      profile.byteCounts[byteIndex].set(byte, (profile.byteCounts[byteIndex].get(byte) ?? 0) + 1);
+    });
 
     for (let byteIndex = 0; byteIndex < bytes.length; byteIndex += 1) {
       const byte = bytes[byteIndex];
