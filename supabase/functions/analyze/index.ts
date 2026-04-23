@@ -789,6 +789,16 @@ const runAnalysis = (csv: string) => {
       display_reason: "DBC-defined signal appeared in the log; preserved regardless of activity, variance, or change detection.",
     }];
   }) : [];
+  const dbcMessageIds = [...new Set(dbcSignals.map((signal) => String(signal.message_id)))];
+  const matchedDbcMessageIds = dbcMessageIds.filter((messageId) => canIdAliases(messageId).some((candidateId) => idProfiles.has(candidateId)));
+  const unmatchedDbcMessageIds = dbcMessageIds.filter((messageId) => !matchedDbcMessageIds.includes(messageId));
+  const dbcMatching = {
+    log_ids_before_decoding: canIdInventory,
+    dbc_message_ids: dbcMessageIds.map((id) => ({ decimal_id: Number(id), hex_id: formatCanIdHex(id), normalized_id: id })),
+    matched_message_ids: matchedDbcMessageIds.map((id) => ({ decimal_id: Number(id), hex_id: formatCanIdHex(id), normalized_id: id })),
+    unmatched_message_ids: unmatchedDbcMessageIds.map((id) => ({ decimal_id: Number(id), hex_id: formatCanIdHex(id), normalized_id: id })),
+    note: unmatchedDbcMessageIds.length && !matchedDbcMessageIds.length ? "No DBC IDs matched the parsed log IDs. For ASC files, 'base hex' means IDs like 256 are parsed as 0x256 / decimal 598; use 100, 200, 300 under base hex or switch the ASC header to base dec for decimal 256, 512, 768." : "DBC matching used normalized decimal IDs after format-specific parsing.",
+  };
 
   const decodedSpeedIds = decodedSignals.filter((signal) => /speed|wheel/i.test(String(signal.signal_name))).map((signal) => String(signal.id));
   const decodedRpmIds = decodedSignals.filter((signal) => /rpm|engine|motor/i.test(String(signal.signal_name))).map((signal) => String(signal.id));
@@ -919,6 +929,7 @@ const runAnalysis = (csv: string) => {
         signals: dbcSignals,
         bit_layout: dbcSignals.map((signal) => ({ message_id: signal.message_id, signal_name: signal.signal_name, start_bit: signal.start_bit, bit_length: signal.bit_length, byte_start: Math.floor(Number(signal.start_bit) / 8), byte_end: Math.floor((Number(signal.start_bit) + Number(signal.bit_length) - 1) / 8), multiplex: signal.multiplex })),
       },
+      dbc_matching: dbcMatching,
       decoded_signals: decodedSignals,
       byte_analysis: byteAnalysis,
       bit_analysis: bitAnalysis,
