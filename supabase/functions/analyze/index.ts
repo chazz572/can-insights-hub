@@ -15,6 +15,7 @@ type IdProfile = {
   byteCounts: Array<Map<number, number>>;
   previousData: string | null;
   changes: number;
+  cleanSamples: string[];
 };
 
 const jsonResponse = (body: unknown) =>
@@ -117,6 +118,16 @@ const entropy = (values: number[]) => {
   }, 0).toFixed(4));
 };
 
+const analogCandidateScore = (values: number[]) => {
+  if (values.length < 20) return 0;
+  const unique = new Set(values).size;
+  const range = Math.max(...values) - Math.min(...values);
+  const transitions = values.slice(1).filter((value, index) => value !== values[index]).length;
+  const transitionRate = transitions / Math.max(values.length - 1, 1);
+  const smoothSteps = values.slice(1).filter((value, index) => Math.abs(value - values[index]) > 0 && Math.abs(value - values[index]) < Math.max(80, range * 0.18)).length;
+  return unique >= 12 && range >= 250 ? transitionRate * 0.45 + (smoothSteps / Math.max(values.length - 1, 1)) * 0.35 + Math.min(0.2, unique / values.length) : 0;
+};
+
 const runAnalysis = (csv: string) => {
   let totalMessages = 0;
   let extendedIds = 0;
@@ -139,12 +150,13 @@ const runAnalysis = (csv: string) => {
   forEachCsvRecord(csv, ({ id, data, timestamp }) => {
     totalMessages += 1;
     idCounts.set(id, (idCounts.get(id) ?? 0) + 1);
-    const profile = idProfiles.get(id) ?? { count: 0, lengths: new Map<number, number>(), timestamps: [], byteCounts: Array.from({ length: 8 }, () => new Map<number, number>()), previousData: null, changes: 0 };
+    const profile = idProfiles.get(id) ?? { count: 0, lengths: new Map<number, number>(), timestamps: [], byteCounts: Array.from({ length: 8 }, () => new Map<number, number>()), previousData: null, changes: 0, cleanSamples: [] };
     profile.count += 1;
     profile.lengths.set(data.length, (profile.lengths.get(data.length) ?? 0) + 1);
     if (Number.isFinite(timestamp)) profile.timestamps.push(timestamp);
     if (profile.previousData !== null && profile.previousData !== cleanHex(data)) profile.changes += 1;
     profile.previousData = cleanHex(data);
+    if (profile.cleanSamples.length < 800) profile.cleanSamples.push(cleanHex(data));
     idProfiles.set(id, profile);
 
     if (cleanHex(id).length > 3) extendedIds += 1;
@@ -298,6 +310,34 @@ const runAnalysis = (csv: string) => {
     };
   }).sort((a, b) => Number(b.messages) - Number(a.messages));
 
+  const analogSignals = [...idProfiles.entries()].flatMap(([id, profile]) => {
+    const samples = profile.cleanSamples.map(byteValues).filter((bytes) => bytes.length >= 2);
+    if (samples.length < 20) return [];
+    return Array.from({ length: 7 }, (_, byte_start) => {
+      const bigEndian = samples.filter((bytes) => bytes.length > byte_start + 1).map((bytes) => bytes[byte_start] * 256 + bytes[byte_start + 1]);
+      const littleEndian = samples.filter((bytes) => bytes.length > byte_start + 1).map((bytes) => bytes[byte_start] + bytes[byte_start + 1] * 256);
+      const beScore = analogCandidateScore(bigEndian);
+      const leScore = analogCandidateScore(littleEndian);
+      const score = Math.max(beScore, leScore);
+      const values = beScore >= leScore ? bigEndian : littleEndian;
+      return score > 0.48 ? {
+        id,
+        byte_start,
+        bit_start: byte_start * 8,
+        bit_length: 16,
+        endianness: beScore >= leScore ? "big_endian_candidate" : "little_endian_candidate",
+        min_value: Math.min(...values),
+        max_value: Math.max(...values),
+        unique_values: new Set(values).size,
+        confidence_score: Number(Math.min(0.96, score).toFixed(3)),
+        likely_signal_type: byte_start <= 2 && Math.max(...values) > 900 && Math.max(...values) < 9000 ? "rpm_candidate" : "analog_signal_candidate",
+        reasoning: "Smooth changing 16-bit byte pair with enough range and transitions to resemble an analog engine/sensor signal.",
+      } : null;
+    }).filter(Boolean);
+  }) as JsonRecord[];
+
+  analogSignals.filter((signal) => signal.likely_signal_type === "rpm_candidate").forEach((signal) => rpmIds.add(String(signal.id)));
+
   const networkHealth = {
     estimated_bus_load_score: Math.min(100, Math.round((totalMessages / Math.max(idCounts.size, 1)) * 10)),
     dominant_ids: idStats.filter((item) => item.percentage > 10).slice(0, 8),
@@ -401,6 +441,8 @@ const runAnalysis = (csv: string) => {
       signals: {
         byte_signal_candidates: byteAnalysis.filter((item) => Number(item.entropy ?? 0) > 0.5),
         active_bit_candidates: bitAnalysis.filter((item) => Number(item.activity ?? 0) > 0.05),
+        analog_signal_candidates: analogSignals,
+        rpm_signal_candidates: analogSignals.filter((item) => item.likely_signal_type === "rpm_candidate"),
       },
       systems,
       id_deep_dive: idDeepDive,
