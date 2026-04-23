@@ -412,12 +412,41 @@ const runAnalysis = (csv: string) => {
     diagnostic_id_candidates: [...idCounts.keys()].filter((id) => /^7[0-9A-F]{2}$/i.test(cleanHex(id)) || /^18DA/i.test(cleanHex(id))).slice(0, 16),
   };
 
+  const speedSignals = analogSignals.filter((signal) => /speed|wheel/i.test(String(signal.likely_signal_type))).slice(0, 8);
+  const rpmSignals = analogSignals.filter((signal) => String(signal.likely_signal_type) === "rpm_candidate").slice(0, 8);
+  const pedalBrakeSteeringSignals = analogSignals.filter((signal) => /pedal|brake|steering/i.test(String(signal.likely_signal_type))).slice(0, 8);
+  const loadSignals = analogSignals.filter((signal) => /analog_sensor/i.test(String(signal.likely_signal_type)) && Number(signal.range ?? 0) > 500).slice(0, 8);
+  const risingMotion = speedSignals.some((signal) => signal.direction === "rising") || pedalBrakeSteeringSignals.some((signal) => signal.direction === "rising");
+  const fallingMotion = speedSignals.some((signal) => signal.direction === "falling") || pedalBrakeSteeringSignals.some((signal) => signal.direction === "falling");
+  const oscillatingMotion = speedSignals.some((signal) => signal.direction === "oscillating") || pedalBrakeSteeringSignals.some((signal) => signal.direction === "oscillating");
+  const engineActive = rpmSignals.length > 0 || loadSignals.length > 0;
+  const behaviorLabel = risingMotion && !fallingMotion
+    ? "accelerating or increasing load"
+    : fallingMotion && !risingMotion
+      ? "decelerating, braking, or load dropping"
+      : risingMotion && fallingMotion
+        ? "transient driving with acceleration and deceleration phases"
+        : oscillatingMotion
+          ? "turning, pedal modulation, or low-speed maneuvering"
+          : engineActive && !speedSignals.length
+            ? "stationary engine activity / idle under varying load"
+            : "stationary awake-module state with no defensible motion signal";
+  const behaviorConfidence = Math.min(0.94, 0.42 + speedSignals.length * 0.12 + rpmSignals.length * 0.1 + pedalBrakeSteeringSignals.length * 0.08 + (engineActive ? 0.08 : 0));
+  const behavioralEvidence = [...speedSignals, ...rpmSignals, ...pedalBrakeSteeringSignals, ...loadSignals].slice(0, 12).map(describeSignalEvidence);
+  const subtleAbnormalities = [
+    ...timing.filter((item) => Number(item.period_jitter) > Math.max(Number(item.average_period) * 0.2, 0.003)).map((item) => ({ id: item.id, type: "timing_jitter_or_drift", severity: Number(item.period_jitter) > Math.max(Number(item.average_period) * 0.75, 0.02) ? "moderate" : "minor", evidence: `Average period ${item.average_period}s with jitter ${item.period_jitter}s; max gap ${item.max_period}s.` })),
+    ...idDeepDive.filter((item) => Number(item.payload_change_rate) === 0 && Number(item.messages) > 8).map((item) => ({ id: item.id, type: "stuck_payload_or_static_status", severity: "minor", evidence: `Payload did not change across ${item.messages} messages; likely static status, but worth noting if it should be live.` })),
+    ...idDeepDive.filter((item) => Number(item.messages) <= 2).map((item) => ({ id: item.id, type: "unusual_id_silence_or_sparse_frame", severity: "minor", evidence: `Only ${item.messages} frame(s) observed; this can indicate one-shot status, wake/sleep traffic, or missing expected repetition.` })),
+  ].slice(0, 32);
   const driverBehavior = {
-    movement_confidence: speedIds.size ? "candidate" : "unknown",
-    engine_activity_confidence: rpmIds.size ? "candidate" : "unknown",
-    pedal_activity_confidence: pedalIds.size ? "candidate" : "unknown",
+    behavior: behaviorLabel,
+    confidence_score: Number(behaviorConfidence.toFixed(3)),
+    movement_confidence: speedSignals.length ? "supported_by_signal_shape" : "not_supported_by_motion_bytes",
+    engine_activity_confidence: rpmSignals.length || loadSignals.length ? "supported_by_dynamic_powertrain_like_bytes" : "not_isolated",
+    pedal_activity_confidence: pedalBrakeSteeringSignals.length ? "supported_by_compact_input_like_bytes" : "not_isolated",
     harsh_event_candidates: anomalies.slice(0, 12),
-    interpretation: speedIds.size || pedalIds.size ? "Vehicle activity signals are present, but exact driving behavior requires DBC validation." : "Driving behavior cannot be confirmed from this capture without stronger speed/pedal candidates.",
+    evidence: behavioralEvidence.length ? behavioralEvidence : ["No byte pair showed the rising/falling motion shape required to defend speed, pedal, brake, steering, or wheel-speed claims."],
+    interpretation: `${behaviorLabel}. This conclusion is based on byte-level trend direction, smoothness, entropy, timing cadence, and cross-ID relationships rather than message counts alone.`,
   };
 
   const eventTimeline = anomalies.slice(0, 24).map((item, index) => ({
@@ -467,9 +496,10 @@ const runAnalysis = (csv: string) => {
   ].filter(Boolean);
 
   const vehicleState = {
-    classification: speedIds.size || pedalIds.size ? "possible_low_speed_or_driving" : rpmIds.size ? "engine_running_stationary" : "ignition_on_idle_or_accessory",
-    confidence_score: speedIds.size || pedalIds.size ? 0.62 : 0.86,
-    reasoning: speedIds.size || pedalIds.size ? "Motion-like candidates exist, but full driving state needs validation against controlled movement." : "Motion, wheel-speed, pedal, brake, steering, torque, and gear signals are absent while periodic housekeeping traffic is present.",
+    classification: behaviorLabel.replace(/ /g, "_"),
+    confidence_score: Number(behaviorConfidence.toFixed(3)),
+    reasoning: behavioralEvidence.length ? behavioralEvidence.join(" ") : "The log contains periodic CAN housekeeping traffic, but it lacks correlated, directional byte movement needed to defend motion or driver-input claims.",
+    evidence: behavioralEvidence,
   };
 
   const correlationPairs = idDeepDive.flatMap((left, leftIndex) => idDeepDive.slice(leftIndex + 1).map((right) => ({ left: left.id, right: right.id, correlation: Number((1 - Math.min(1, Math.abs(Number(left.average_period) - Number(right.average_period)))).toFixed(4)), relationship: "timing_cadence_similarity" }))).filter((item) => item.correlation >= 0.72).slice(0, 24);
