@@ -97,7 +97,7 @@ const forEachCsvRecord = (csv: string, callback: (record: ParsedRecord) => void)
 
     const values = parseCsvLine(line);
     callback({
-      id: cleanHex(values[indexes.idIndex] ?? "").replace(/^0+(?=[0-9A-F])/, "") || "0",
+      id: normalizeCanId(values[indexes.idIndex] ?? ""),
       data: values[indexes.dataIndex] ?? "",
       timestamp: Number(values[indexes.timestampIndex] ?? Number.NaN),
       metadata: indexes.metadataIndex >= 0 ? values[indexes.metadataIndex] ?? "" : "",
