@@ -574,8 +574,9 @@ const runAnalysis = (csv: string) => {
   const enhancedNetworkHealth = { ...networkHealth, bus_health_score: Math.max(0, Math.min(100, 100 - anomalies.length * 4 - Math.round(Number(networkHealth.timing_irregularity_score) * 120))), chatter_classification: idStats.some((item) => item.percentage > 35) ? "dominant_id_chatter" : totalMessages / Math.max(idCounts.size, 1) > 60 ? "busy_periodic_chatter" : "normal_idle_chatter", dropout_events: timing.filter((item) => Number(item.max_period) > Math.max(Number(item.average_period) * 3, 0.1)).map((item) => ({ id: item.id, max_period: item.max_period, average_period: item.average_period, classification: "possible_gap_or_dropout" })).slice(0, 16) };
   const derivedEvents = enhancedNetworkHealth.dropout_events.map((item, index) => ({ event_index: eventTimeline.length + index + 1, id: item.id, timestamp: null, event_type: "possible_module_dropout", description: `Timing gap detected: max period ${item.max_period}s vs average ${item.average_period}s.`, before_after_hint: "Compare nearby frames to confirm wake/sleep or missing traffic." }));
   const whatDataShows = [
-    isDbcReference ? `This is a DBC definition map, not live CAN traffic. Its message/signal names strongly indicate ${metadataInsights.likely_oem_or_platform} and an EV architecture at ${Math.round(metadataEvConfidence * 100)}% confidence.` : `The strongest defensible vehicle-state conclusion is ${behaviorLabel} at ${Math.round(behaviorConfidence * 100)}% confidence.`,
-    metadataInsights.has_dbc_metadata ? `DBC/OEM evidence: ${metadataInsights.explanation} EV evidence IDs include ${metadataInsights.ev_evidence_ids.slice(0, 8).join(", ") || "none"}.` : "No DBC metadata was available, so EV/OEM identity relies only on traffic shape.",
+    isDbcReference ? "This is a DBC definition map, not live CAN traffic. It defines message IDs, signal names, transmitters, and likely ECU groups, but it does not prove vehicle type or motion." : `The strongest defensible vehicle-state conclusion is ${behaviorLabel} at ${Math.round(behaviorConfidence * 100)}% confidence.`,
+    `Vehicle type: ${vehicleType.classification} ${vehicleType.confidence_score ? `(${Math.round(vehicleType.confidence_score * 100)}% confidence)` : ""}. ${vehicleType.reasoning}`,
+    metadataInsights.has_dbc_metadata ? `DBC/OEM evidence: ${metadataInsights.explanation} This metadata is used for structure and decoding support only, not vehicle-type classification by itself.` : "No DBC metadata was available; vehicle type remains unclassified unless explicit decoded EV, hybrid, or ICE signals are present.",
     behavioralEvidence.length ? `Behavior evidence: ${behavioralEvidence.slice(0, 4).join(" ")}` : "Behavior evidence: no correlated directional speed, wheel, pedal, brake, steering, or gear-shaped byte movement was present, so motion claims are intentionally limited.",
     `Protocol behavior: ${protocolInsights.likely_protocol}; extended-ID ratio ${(protocolInsights.extended_id_ratio * 100).toFixed(1)}%, diagnostic-shaped IDs ${protocolInsights.diagnostic_id_candidates.join(", ") || "not present"}.`,
     subtleAbnormalities.length ? `Subtle abnormalities found: ${subtleAbnormalities.slice(0, 5).map((item) => `${item.type} on ${item.id}`).join("; ")}.` : "Subtle abnormality checks did not isolate jitter, drift, sparse-ID, stuck-byte, or entropy-spike evidence above the current thresholds.",
@@ -625,6 +626,7 @@ const runAnalysis = (csv: string) => {
       id_classifications: idClassifications,
       module_type_heuristics: systems,
       vehicle_state: vehicleState,
+      vehicle_type: vehicleType,
       missing_physical_signals: missingPhysicalSignals,
       infotainment_security_frames: systems.filter((item) => ["infotainment_or_cluster", "body_control_or_security"].includes(String(item.module_type))),
       correlation_analysis: {
