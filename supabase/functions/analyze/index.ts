@@ -620,7 +620,7 @@ const runAnalysis = (csv: string) => {
         byte_signal_candidates: byteAnalysis.filter((item) => Number(item.entropy ?? 0) > 0.5),
         active_bit_candidates: bitAnalysis.filter((item) => Number(item.activity ?? 0) > 0.05),
         analog_signal_candidates: analogSignals,
-        rpm_signal_candidates: analogSignals.filter((item) => item.likely_signal_type === "rpm_candidate"),
+        rpm_signal_candidates: analogSignals.filter((item) => /rpm_candidate/.test(String(item.likely_signal_type))),
       },
       systems,
       metadata_insights: metadataInsights,
