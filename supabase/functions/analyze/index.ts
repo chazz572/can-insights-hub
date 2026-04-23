@@ -210,6 +210,61 @@ const summarizeMetadata = (metadataById: Map<string, string>, idCounts: Map<stri
   };
 };
 
+const classifyModuleFromEvidence = ({ id, metadata, profile, timingRow }: { id: string; metadata: string; profile?: IdProfile; timingRow?: JsonRecord }) => {
+  const cleanIdValue = cleanHex(id);
+  const numeric = Number.parseInt(cleanIdValue, 16);
+  const text = metadata.toLowerCase();
+  const changeRate = profile ? profile.changes / Math.max(profile.count - 1, 1) : 0;
+  const averagePeriod = Number(timingRow?.average_period ?? 0);
+  const periodJitter = Number(timingRow?.period_jitter ?? 0);
+  const byteEntropy = profile?.byteCounts.map((counts, byteIndex) => ({ byteIndex, entropy: entropy([...counts.entries()].flatMap(([value, count]) => Array.from({ length: count }, () => value))), unique: counts.size })) ?? [];
+  const dynamicBytes = byteEntropy.filter((row) => row.entropy > 0.7 || row.unique > 8).map((row) => row.byteIndex);
+  const hasMetadata = text.trim().length > 0;
+
+  const metadataRules = [
+    { type: "battery_management_hv_energy", category: "energy_management", terms: ["bms", "battery", "cell", "pack", "hv", "soc", "charger", "charge", "dc"] },
+    { type: "drive_inverter_motor_control", category: "traction_powertrain", terms: ["inverter", "motor", "drive unit", "di_", "regen", "traction", "motor rpm", "torque"] },
+    { type: "brake_abs_stability_control", category: "chassis_dynamics", terms: ["brake", "abs", "esp", "stability", "wheel speed", "yaw", "accelerometer"] },
+    { type: "steering_epas_control", category: "chassis_dynamics", terms: ["steering", "epas", "sas", "steer angle"] },
+    { type: "gateway_diagnostic_router", category: "diagnostics_gateway", terms: ["gateway", "diagnostic", "uds", "isotp", "tester", "obd"] },
+    { type: "adas_autopilot_sensing", category: "driver_assistance", terms: ["autopilot", "adas", "radar", "camera", "lidar", "vision", "lane"] },
+    { type: "instrument_cluster_display", category: "driver_interface", terms: ["cluster", "display", "ui_", "speedometer", "tell tale", "warning"] },
+    { type: "body_control_lighting_access", category: "body_control", terms: ["door", "lock", "window", "mirror", "seat", "light", "lamp", "wiper", "hvac"] },
+    { type: "security_immobilizer_access", category: "security_access", terms: ["security", "immobilizer", "key", "alarm", "auth", "tpms"] },
+    { type: "thermal_hvac_management", category: "thermal_comfort", terms: ["thermal", "temperature", "coolant", "pump", "fan", "heat", "ac", "hvac"] },
+  ];
+
+  const metadataMatch = metadataRules.find((rule) => containsAny(text, rule.terms));
+  if (metadataMatch) {
+    return { category: metadataMatch.category, module_type: metadataMatch.type, confidence_score: 0.92, confidence: "dbc_metadata_supported", reasoning: `DBC/message names for ${cleanIdValue} contain ${metadataMatch.terms.filter((term) => text.includes(term)).slice(0, 4).join(", ")}, supporting ${metadataMatch.type}.` };
+  }
+
+  if (/^7[0-9A-F]{2}$/i.test(cleanIdValue) || /^18DA/i.test(cleanIdValue)) {
+    return { category: "diagnostics_gateway", module_type: "uds_isotp_diagnostic_endpoint", confidence_score: 0.86, confidence: "protocol_shape", reasoning: `Identifier ${cleanIdValue} matches common UDS/ISO-TP diagnostic request/response ranges.` };
+  }
+
+  if (cleanIdValue.length >= 8 && numeric >= 0x18F00000) {
+    return { category: "j1939_or_extended_network", module_type: "extended_pgn_periodic_status", confidence_score: 0.78, confidence: "extended_id_shape", reasoning: `Extended identifier ${cleanIdValue} has J1939/29-bit PGN-like shape; module role needs PGN decoding for certainty.` };
+  }
+
+  const stableFast = averagePeriod > 0 && averagePeriod <= 0.025 && periodJitter <= Math.max(averagePeriod * 0.3, 0.003);
+  const stableMedium = averagePeriod > 0.025 && averagePeriod <= 0.12 && periodJitter <= Math.max(averagePeriod * 0.35, 0.006);
+  const mostlyStatic = changeRate <= 0.05 && dynamicBytes.length <= 1;
+  const dynamicSensorLike = changeRate > 0.35 && dynamicBytes.length >= 2;
+
+  const fallback = dynamicSensorLike && stableFast
+    ? { category: "dynamic_control_or_sensor", module_type: "high_rate_control_sensor_candidate", confidence_score: 0.67, reason: "fast periodic timing with multiple changing bytes" }
+    : dynamicSensorLike && stableMedium
+      ? { category: "dynamic_status_or_sensor", module_type: "medium_rate_sensor_status_candidate", confidence_score: 0.63, reason: "periodic timing with multi-byte payload changes" }
+      : mostlyStatic && stableMedium
+        ? { category: "status_housekeeping", module_type: "periodic_status_or_keepalive", confidence_score: 0.61, reason: "stable periodic timing with near-static payload" }
+        : mostlyStatic
+          ? { category: "state_flag_or_configuration", module_type: "static_state_flag_candidate", confidence_score: 0.56, reason: "payload is mostly static in this capture" }
+          : { category: "unresolved_active_module", module_type: "unlabeled_active_ecu_candidate", confidence_score: 0.52, reason: "no DBC names or diagnostic pattern identify the module" };
+
+  return { ...fallback, confidence: hasMetadata ? "metadata_unmatched_plus_behavior" : "timing_payload_heuristic", reasoning: `${fallback.reason}; ID range alone is not treated as body/chassis/powertrain proof for ${cleanIdValue}.` };
+};
+
 const runAnalysis = (csv: string) => {
   let totalMessages = 0;
   let extendedIds = 0;
@@ -348,33 +403,10 @@ const runAnalysis = (csv: string) => {
   });
 
   const systems = [...idCounts.keys()].map((id) => {
-    const numeric = Number.parseInt(cleanHex(id), 16);
-    const category = Number.isFinite(numeric) && numeric >= 0x18F00000
-      ? "powertrain_or_diagnostic"
-      : Number.isFinite(numeric) && numeric >= 0x700
-        ? "diagnostic"
-        : "body_or_chassis";
-
-    const module_type = category === "diagnostic"
-      ? "diagnostic"
-      : Number.isFinite(numeric) && numeric >= 0x500
-        ? "infotainment_or_cluster"
-        : Number.isFinite(numeric) && numeric >= 0x300
-          ? "body_control_or_security"
-          : Number.isFinite(numeric) && numeric >= 0x180
-            ? "chassis_or_powertrain"
-            : "body_control";
-
-    const metadata = (metadataById.get(id) ?? "").toLowerCase();
-    const metadataModule = containsAny(metadata, ["bms", "battery", "charge", "charger", "hv", "inverter", "motor", "drive", "torque"])
-      ? "ev_powertrain_or_battery"
-      : containsAny(metadata, ["autopilot", "camera", "radar", "gps", "ui_", "display"])
-        ? "adas_or_infotainment"
-        : containsAny(metadata, ["brake", "steering", "wheel", "epas", "esp"])
-          ? "chassis_brake_steering"
-          : module_type;
-    return { id, category: metadataModule.includes("ev_") ? "ev_powertrain_energy" : category, module_type: metadataModule, confidence_score: metadata ? 0.9 : category === "diagnostic" ? 0.82 : 0.58, confidence: metadata ? "dbc_metadata_supported" : "heuristic", reasoning: metadata ? `DBC/message names for ${cleanHex(id)} indicate ${metadataModule}.` : `ID range ${cleanHex(id)} maps heuristically to ${module_type}.` };
-  });
+    const metadata = metadataById.get(id) ?? "";
+    const timingRow = timing.find((row) => row.id === id);
+    return { id, ...classifyModuleFromEvidence({ id, metadata, profile: idProfiles.get(id), timingRow }) };
+  }).sort((a, b) => Number(b.confidence_score) - Number(a.confidence_score));
 
   const idDeepDive = [...idProfiles.entries()].map(([id, profile]) => {
     const periods = [...profile.timestamps].sort((a, b) => a - b).slice(1).map((timestamp, index, sorted) => timestamp - sorted[index]);
