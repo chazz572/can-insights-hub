@@ -63,7 +63,7 @@ export const AppNav = () => {
             CAN
           </span>
           <span>
-            <span className="block text-base font-bold text-foreground">CANAI Analyzer</span>
+            <span className="block text-base font-bold text-foreground">CJL CAN Intelligence Platform</span>
             <span className="text-xs font-medium text-muted-foreground">AI Analytics Suite</span>
           </span>
         </Link>
@@ -86,7 +86,7 @@ export const AppNav = () => {
         </div>
 
         <div className="mt-auto rounded-lg border border-glass-border bg-glass p-4 backdrop-blur">
-          <p className="text-xs font-semibold uppercase text-primary">Universal CAN Platform</p>
+          <p className="text-xs font-semibold uppercase text-primary">CJL CAN Intelligence Platform</p>
           <p className="mt-2 text-sm leading-6 text-muted-foreground">Formats · Diagnostics · Engineering · Fleet · AI</p>
         </div>
       </aside>
@@ -94,7 +94,7 @@ export const AppNav = () => {
       <header className="fixed inset-x-0 top-0 z-30 border-b border-glass-border bg-background/70 px-4 py-3 shadow-dashboard backdrop-blur-xl md:left-72 md:px-8">
         <div className="flex items-center justify-between gap-4">
           <div className="min-w-0">
-            <p className="text-xs font-semibold uppercase text-primary">Automotive Intelligence Platform</p>
+            <p className="text-xs font-semibold uppercase text-primary">CJL CAN Intelligence Platform</p>
             <p className="truncate text-sm text-muted-foreground">Cloud CAN Analysis · Diagnostics · Reverse Engineering</p>
           </div>
           <div className="flex items-center gap-2">

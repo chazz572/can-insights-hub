@@ -73,7 +73,7 @@ const buildDetailedReport = ({ data, fileId, anomalies, diagnostics, summaryText
   const pedalIds = (vehicleBehavior.possible_pedal_ids ?? []).map(renderText).join(", ") || "none found";
 
   return [
-    "CANAI Mechanic Health Report",
+    "CJL CAN Intelligence Platform Mechanic Health Report",
     `Checked: ${generatedAt}`,
     "",
     "What I’m Seeing",
@@ -380,7 +380,7 @@ const Results = () => {
     const url = URL.createObjectURL(new Blob([report], { type: "text/plain" }));
     const link = document.createElement("a");
     link.href = url;
-    link.download = `canai-health-report-${fileId}.txt`;
+    link.download = `cjl-can-health-report-${fileId}.txt`;
     link.click();
     URL.revokeObjectURL(url);
   };
