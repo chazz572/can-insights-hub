@@ -28,32 +28,34 @@ export interface AnalysisResult {
   [key: string]: unknown;
 }
 
-const parseJsonResponse = async <T>(response: Response): Promise<T> => {
-  if (!response.ok) {
-    const message = await response.text().catch(() => "");
-    throw new Error(message || `Request failed with status ${response.status}`);
-  }
-
-  return response.json() as Promise<T>;
-};
+export interface UploadResult {
+  file_id?: string;
+  filename: string;
+  detected_format?: string;
+  frame_count?: number;
+  warnings?: string[];
+  error?: string;
+}
 
 export const uploadCsv = async (file: File): Promise<string> => {
-  const formData = new FormData();
-  formData.append("file", file);
+  const payload = await uploadCanFiles([file]);
+  const first = payload.files.find((item) => item.file_id);
+  if (!first?.file_id) throw new Error("Upload succeeded, but no file_id was returned.");
+  return first.file_id;
+};
 
-  const { data: payload, error } = await supabase.functions.invoke<{ file_id?: string; filename?: string }>("upload", {
+export const uploadCanFiles = async (files: File[]): Promise<{ file_id?: string; files: UploadResult[] }> => {
+  const formData = new FormData();
+  files.forEach((file) => formData.append("files", file));
+
+  const { data: payload, error } = await supabase.functions.invoke<{ file_id?: string; files?: UploadResult[]; error?: string }>("upload", {
     body: formData,
   });
 
-  if (error) {
-    throw new Error(error.message || "Upload request failed.");
-  }
-
-  if (!payload?.file_id) {
-    throw new Error("Upload succeeded, but no file_id was returned.");
-  }
-
-  return payload.file_id;
+  if (error) throw new Error(error.message || "Upload request failed.");
+  if (payload?.error && !payload.files?.length) throw new Error(payload.error);
+  if (!payload?.files?.length) throw new Error("Upload returned no converted files.");
+  return { file_id: payload.file_id, files: payload.files };
 };
 
 export const analyzeFile = async (fileId: string): Promise<AnalysisResult> => {
