@@ -17,26 +17,26 @@ const Workspace = () => {
 
   const averageHealth = vehicles.length ? Math.round(vehicles.reduce((sum, vehicle) => sum + Number(vehicle.health_score ?? 0), 0) / vehicles.length) : 96;
   const statCards: Array<[string, string | number, LucideIcon]> = [
-    ["Saved analyses", analyses.length, FileText],
-    ["Fleet vehicles", vehicles.length, Car],
-    ["Avg. health", `${averageHealth}/100`, Gauge],
-    ["API status", "Ready", KeyRound],
+    ["Saved Analyses", analyses.length, FileText],
+    ["Fleet Vehicles", vehicles.length, Car],
+    ["Avg. Health", `${averageHealth}/100`, Gauge],
+    ["API Status", "Ready", KeyRound],
   ];
   const featureCards: Array<[string, string, LucideIcon]> = [
-    ["Team accounts", "Invite engineers, mechanics, and fleet managers with role-based access.", Users],
+    ["Team Accounts", "Invite engineers, mechanics, and fleet managers with role-based access.", Users],
     ["Developer API", "Use API keys for automated log ingestion and external tools.", Code2],
-    ["Webhook notifications", "Send completion and anomaly events to fleet systems.", Webhook],
-    ["Shareable links", "Package analysis summaries for customers and shop teams.", Share2],
-    ["Maintenance prediction", "Track fleet health trends and prioritize service workflows.", Activity],
+    ["Webhook Notifications", "Send completion and anomaly events to fleet systems.", Webhook],
+    ["Shareable Links", "Package analysis summaries for customers and shop teams.", Share2],
+    ["Maintenance Prediction", "Track fleet health trends and prioritize service workflows.", Activity],
   ];
 
   return (
     <main className="mx-auto min-h-screen max-w-7xl px-4 py-8 sm:px-6 lg:px-10">
       <section className="mb-8 animate-fade-up">
         <p className="inline-flex items-center gap-2 rounded-lg border border-glass-border bg-glass px-3 py-1 text-sm font-semibold uppercase text-primary shadow-glow backdrop-blur">
-          <Database className="size-4" /> Commercial workspace
+          <Database className="size-4" /> Commercial Workspace
         </p>
-        <h1 className="mt-4 text-4xl font-extrabold tracking-tight sm:text-5xl">SaaS command center</h1>
+        <h1 className="mt-4 text-4xl font-extrabold tracking-tight sm:text-5xl">SaaS Command Center</h1>
         <p className="mt-3 max-w-2xl text-muted-foreground">Saved diagnostics, fleet health, subscription tiers, team access, and developer API readiness.</p>
       </section>
 
@@ -56,7 +56,7 @@ const Workspace = () => {
 
       <div className="mt-6 grid gap-6 xl:grid-cols-[1.1fr_0.9fr]">
         <Card className="animate-fade-up overflow-hidden">
-          <CardHeader><CardTitle className="flex items-center gap-2"><BarChart3 className="text-primary" /> Recent saved analyses</CardTitle></CardHeader>
+          <CardHeader><CardTitle className="flex items-center gap-2"><BarChart3 className="text-primary" /> Recent Saved Analyses</CardTitle></CardHeader>
           <CardContent className="space-y-3">
             {analyses.length ? analyses.slice(0, 5).map((analysis) => (
               <div key={String(analysis.id)} className="flex items-center justify-between gap-3 rounded-lg border border-glass-border bg-glass p-4">
@@ -68,7 +68,7 @@ const Workspace = () => {
         </Card>
 
         <Card className="animate-fade-up overflow-hidden">
-          <CardHeader><CardTitle className="flex items-center gap-2"><CreditCard className="text-primary" /> Subscription tiers</CardTitle></CardHeader>
+          <CardHeader><CardTitle className="flex items-center gap-2"><CreditCard className="text-primary" /> Subscription Tiers</CardTitle></CardHeader>
           <CardContent className="grid gap-3">
             {[
               ["Free", "Basic analysis", "1 vehicle"],
@@ -86,7 +86,7 @@ const Workspace = () => {
       </div>
 
       <Card className="mt-6 animate-fade-up overflow-hidden">
-        <CardHeader><CardTitle className="flex items-center gap-2"><BellRing className="text-primary" /> Onboarding checklist</CardTitle></CardHeader>
+        <CardHeader><CardTitle className="flex items-center gap-2"><BellRing className="text-primary" /> Onboarding Checklist</CardTitle></CardHeader>
         <CardContent className="grid gap-3 md:grid-cols-4">
           {["Upload first log", "Review AI summary", "Save analysis", "Invite team"].map((step, index) => <div key={step} className="rounded-lg border border-glass-border bg-glass p-4"><p className="font-mono text-xs text-primary">0{index + 1}</p><p className="mt-2 font-semibold">{step}</p></div>)}
         </CardContent>
