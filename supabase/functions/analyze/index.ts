@@ -503,6 +503,7 @@ const runAnalysis = (csv: string) => {
     frame_count: item.count,
     percentage: item.percentage,
   }));
+  const availableDbcIds = [...new Set([...metadataById.values()].flatMap((metadata) => (metadataValue(metadata, "available_dbc_ids_dec") || "").split("|")).filter(Boolean).map((id) => normalizeCanId(id, 10)))];
 
   const reverseEngineering = idStats.map((item, index) => ({
     id: item.id,
@@ -793,7 +794,7 @@ const runAnalysis = (csv: string) => {
       display_reason: "DBC-defined signal appeared in the log; preserved regardless of activity, variance, or change detection.",
     }];
   }) : [];
-  const dbcMessageIds = [...new Set(dbcSignals.map((signal) => String(signal.message_id)))];
+  const dbcMessageIds = [...new Set([...dbcSignals.map((signal) => String(signal.message_id)), ...availableDbcIds])];
   const matchedDbcMessageIds = dbcMessageIds.filter((messageId) => canIdAliases(messageId).some((candidateId) => idProfiles.has(candidateId)));
   const unmatchedDbcMessageIds = dbcMessageIds.filter((messageId) => !matchedDbcMessageIds.includes(messageId));
   const dbcMatching = {
