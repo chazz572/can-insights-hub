@@ -820,6 +820,7 @@ const runAnalysis = (csv: string) => {
       module_type_heuristics: systems,
       vehicle_state: vehicleState,
       vehicle_type: vehicleType,
+      behavior_pattern: baselinePattern,
       missing_physical_signals: missingPhysicalSignals,
       infotainment_security_frames: systems.filter((item) => ["infotainment_or_cluster", "body_control_or_security"].includes(String(item.module_type))),
       correlation_analysis: {
