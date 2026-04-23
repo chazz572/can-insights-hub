@@ -24,17 +24,22 @@ const cleanId = (value: string, base: 10 | 16 | "auto" = "auto") => {
   return Number.isFinite(parsed) ? String(parsed) : "0";
 };
 const metadataValue = (metadata: string, key: string) => metadata.match(new RegExp(`${key}=([^;]+)`, "i"))?.[1] ?? "";
+const hintedIdBase = (value: string, metadata = ""): 10 | 16 | "auto" => {
+  const baseHint = metadataValue(metadata, "id_base");
+  if (baseHint === "10") return 10;
+  if (baseHint === "16") return 16;
+  return /^0x/i.test(value) || /[a-f]/i.test(value) || /[xh]$/i.test(value) ? 16 : "auto";
+};
 const canIdAliases = (storedId: string, metadata = "") => {
-  const aliases = new Set<string>([cleanId(storedId, 10)]);
+  const aliases = new Set<string>([cleanId(storedId, hintedIdBase(storedId, metadata))]);
   const raw = metadataValue(metadata, "raw_can_id") || storedId;
-  aliases.add(cleanId(raw, 10));
-  if (/^0x|[a-f]|[xh]$/i.test(raw)) aliases.add(cleanId(raw, 16));
-  if (/^\d+$/.test(raw)) aliases.add(cleanId(raw, 16));
+  aliases.add(cleanId(raw, hintedIdBase(raw, metadata)));
+  if (hintedIdBase(raw, metadata) === 16) aliases.add(cleanId(raw, 16));
   [...aliases].forEach((id) => {
     const numeric = Number(id);
     if (Number.isFinite(numeric) && numeric > 0x1fffffff) aliases.add(String(numeric & 0x1fffffff));
   });
-  return [...aliases].filter((id) => id !== "0");
+  return [...aliases].filter((id) => id !== "NaN");
 };
 const cleanByte = (value: string) => value.replace(/^0x/i, "").replace(/[^a-fA-F0-9]/g, "").slice(0, 2).padStart(2, "0").toUpperCase();
 const isId = (value: string) => /^[0-9a-fA-F]{1,8}[xh]?$/.test(value.replace(/^0x/i, ""));
@@ -142,6 +147,10 @@ const parseCrtd = (text: string) => text.split(/\r?\n/).map((line, index) => {
 const parseTrc = (text: string) => text.split(/\r?\n/).map((line, index) => {
   const trimmed = line.trim();
   if (!trimmed || trimmed.startsWith(";") || trimmed.startsWith("$")) return null;
+  const structured = trimmed.match(/^\s*\d+\)\s+(\d+(?:\.\d+)?)\s+\w+\s+([0-9a-fA-F]+)\s+(\d+)\s+(.+)$/);
+  if (structured) {
+    return normalizeFrame(String(Number(structured[1]) / 1000), structured[2], structured[4].split(/\s+/).filter(isByte), Number(structured[3]), undefined, 16);
+  }
   const parts = trimmed.split(/[\s,;]+/).filter(Boolean);
   const idIndex = parts.findIndex((part, partIndex) => partIndex > 0 && isId(part) && cleanId(part).length >= 2);
   if (idIndex < 0) return null;
@@ -152,15 +161,26 @@ const parseTrc = (text: string) => text.split(/\r?\n/).map((line, index) => {
   return normalizeFrame(timestamp, parts[idIndex].replace(/[xh]$/i, ""), parts.slice(byteStart).filter(isByte), dlcIndex >= 0 ? Number(parts[dlcIndex]) : undefined, undefined, 16);
 }).filter((frame): frame is Frame => Boolean(frame));
 
-const parseAsc = (text: string) => text.split(/\r?\n/).map((line) => {
+const parseAsc = (text: string) => {
+  const idBase: 10 | 16 = /base\s+dec/i.test(text.split(/\r?\n/).slice(0, 12).join(" ")) ? 10 : 16;
+  return text.split(/\r?\n/).map((line) => {
   const parts = line.trim().split(/\s+/).filter(Boolean);
   if (parts.length < 6 || !/^\d+(\.\d+)?$/.test(parts[0])) return null;
-  const idIndex = parts.findIndex((part, index) => index > 0 && isId(part));
+  const structured = line.match(/^\s*(\d+(?:\.\d+)?)\s+\d+\s+([0-9A-Fa-f]+)\s+(?:Rx|Tx|rx|tx)\s+d\s+(\d+)\s+(.+)$/);
+  if (structured) {
+    return normalizeFrame(structured[1], structured[2], structured[4].split(/\s+/).filter(isByte), Number(structured[3]), undefined, idBase);
+  }
+  const idIndex = parts.findIndex((part, index) => index > 1 && isId(part));
   if (idIndex < 0) return null;
-  const dlcIndex = parts.findIndex((part, index) => index > idIndex && /^\d+$/.test(part) && Number(part) <= 64);
-  if (dlcIndex < 0) return null;
-  return normalizeFrame(parts[0], parts[idIndex].replace(/x$/i, ""), parts.slice(dlcIndex + 1).filter(isByte), Number(parts[dlcIndex]), undefined, 16);
+  const dataMarkerIndex = parts.findIndex((part, index) => index > idIndex && /^d$/i.test(part));
+  const dlcIndex = dataMarkerIndex >= 0
+    ? dataMarkerIndex + 1
+    : parts.findIndex((part, index) => index > idIndex && /^\d+$/.test(part) && Number(part) <= 64);
+  if (dlcIndex < 0 || !/^\d+$/.test(parts[dlcIndex] ?? "")) return null;
+  const byteStart = dataMarkerIndex >= 0 ? dlcIndex + 1 : dlcIndex + 1;
+  return normalizeFrame(parts[0], parts[idIndex].replace(/x$/i, ""), parts.slice(byteStart).filter(isByte), Number(parts[dlcIndex]), undefined, idBase);
 }).filter((frame): frame is Frame => Boolean(frame));
+};
 
 const parseDbc = (text: string, warnings: string[]) => {
   const signalCounts = new Map<string, number>();
