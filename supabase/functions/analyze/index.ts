@@ -340,9 +340,8 @@ const runAnalysis = (csv: string) => {
     vehicle_behavior: vehicleBehavior,
     diagnostics: {
       protocol: {
-        likely_protocol: extendedIds > totalMessages / 2 ? "CAN 2.0B / extended identifiers" : "CAN 2.0A / standard identifiers",
+        ...protocolInsights,
         total_ids_sampled: totalMessages,
-        extended_id_ratio: totalMessages ? Number((extendedIds / totalMessages).toFixed(4)) : 0,
       },
       byte_analysis: byteAnalysis,
       bit_analysis: bitAnalysis,
@@ -352,6 +351,10 @@ const runAnalysis = (csv: string) => {
         active_bit_candidates: bitAnalysis.filter((item) => Number(item.activity ?? 0) > 0.05),
       },
       systems,
+      id_deep_dive: idDeepDive,
+      network_health: networkHealth,
+      driver_behavior: driverBehavior,
+      event_timeline: eventTimeline,
       mechanic_summary: `Capture contains ${totalMessages} CAN messages. ${anomalies.length} anomalous payloads were detected. Candidate speed IDs: ${vehicleBehavior.possible_speed_ids.join(", ") || "none"}. Candidate RPM IDs: ${vehicleBehavior.possible_rpm_ids.join(", ") || "none"}.`,
     },
   };
