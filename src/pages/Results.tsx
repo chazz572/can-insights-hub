@@ -251,40 +251,41 @@ const Results = () => {
             <MetricCard title="Anomalies Detected" value={anomalies.length} icon={AlertTriangle} />
           </div>
 
-          <div className="grid gap-6 xl:grid-cols-2">
-            <AnalysisCard title="Basic View" description="Frequency distribution by CAN identifier." icon={<Binary className="size-5" />}>
+          <div className="grid gap-5">
+            <CollapsiblePanel title="Basic View" icon={<Binary className="size-5" />} defaultOpen>
+              <FrequencyChart data={data.id_stats} />
               <JsonTable data={data.id_stats} />
-            </AnalysisCard>
+            </CollapsiblePanel>
 
-            <AnalysisCard title="Diagnostics" description="Backend-detected anomalies in the capture." icon={<AlertTriangle className="size-5" />}>
+            <CollapsiblePanel title="Diagnostics" icon={<AlertTriangle className="size-5" />} defaultOpen>
               <JsonTable data={data.anomalies} />
-            </AnalysisCard>
-          </div>
+            </CollapsiblePanel>
 
-          <AnalysisCard title="Reverse Engineering" description="Clustered identifiers and inferred signal groups." icon={<Radar className="size-5" />}>
-            <JsonTable data={data.reverse_engineering} />
-          </AnalysisCard>
+            <CollapsiblePanel title="Reverse Engineering" icon={<Radar className="size-5" />}>
+              <JsonTable data={data.reverse_engineering} />
+            </CollapsiblePanel>
 
-          <AnalysisCard title="Vehicle Behavior" icon={<Gauge className="size-5" />}>
-            <div className="grid gap-5">
-              <div className="grid gap-5 lg:grid-cols-3">
-                <div className="space-y-3"><h3 className="font-semibold">Possible Speed IDs</h3>{renderList(vehicleBehavior.possible_speed_ids)}</div>
-                <div className="space-y-3"><h3 className="font-semibold">Possible RPM IDs</h3>{renderList(vehicleBehavior.possible_rpm_ids)}</div>
-                <div className="space-y-3"><h3 className="font-semibold">Possible Pedal IDs</h3>{renderList(vehicleBehavior.possible_pedal_ids)}</div>
+            <CollapsiblePanel title="Vehicle Behavior" icon={<Gauge className="size-5" />}>
+              <div className="grid gap-5">
+                <div className="grid gap-5 lg:grid-cols-3">
+                  <div className="space-y-3"><h3 className="font-semibold">Possible Speed IDs</h3>{renderList(vehicleBehavior.possible_speed_ids)}</div>
+                  <div className="space-y-3"><h3 className="font-semibold">Possible RPM IDs</h3>{renderList(vehicleBehavior.possible_rpm_ids)}</div>
+                  <div className="space-y-3"><h3 className="font-semibold">Possible Pedal IDs</h3>{renderList(vehicleBehavior.possible_pedal_ids)}</div>
+                </div>
+                <JsonTable data={vehicleBehavior} />
               </div>
-              <JsonTable data={vehicleBehavior} />
-            </div>
-          </AnalysisCard>
+            </CollapsiblePanel>
+          </div>
 
           <AnalysisCard title="Advanced Diagnostics" description="Complete diagnostics payload returned by the backend." icon={<BrainCircuit className="size-5" />}>
             <div className="grid gap-4">
-              <DiagnosticBlock field="diagnostics.protocol" value={diagnostics.protocol} />
-              <DiagnosticBlock field="diagnostics.byte_analysis" value={diagnostics.byte_analysis} collapsible />
-              <DiagnosticBlock field="diagnostics.bit_analysis" value={diagnostics.bit_analysis} collapsible />
-              <DiagnosticBlock field="diagnostics.timing" value={diagnostics.timing} />
-              <DiagnosticBlock field="diagnostics.signals" value={diagnostics.signals} />
-              <DiagnosticBlock field="diagnostics.systems" value={diagnostics.systems} />
-              <DiagnosticBlock field="diagnostics.mechanic_summary" value={diagnostics.mechanic_summary} />
+              <CollapsiblePanel title="protocol" icon={<Cpu className="size-5" />} defaultOpen><JsonTable data={diagnostics.protocol} /></CollapsiblePanel>
+              <CollapsiblePanel title="byte_analysis" icon={<Layers3 className="size-5" />}><ByteEntropyHeatmap data={diagnostics.byte_analysis} /><div className="mt-4"><JsonTable data={diagnostics.byte_analysis} /></div></CollapsiblePanel>
+              <CollapsiblePanel title="bit_analysis" icon={<Binary className="size-5" />}><JsonTable data={diagnostics.bit_analysis} /></CollapsiblePanel>
+              <CollapsiblePanel title="timing" icon={<Clock className="size-5" />}><TimingLineChart data={diagnostics.timing} /><JsonTable data={diagnostics.timing} /></CollapsiblePanel>
+              <CollapsiblePanel title="signals" icon={<Radar className="size-5" />}><JsonTable data={diagnostics.signals} /></CollapsiblePanel>
+              <CollapsiblePanel title="systems" icon={<Gauge className="size-5" />}><SystemsBadges data={diagnostics.systems} /><div className="mt-4"><JsonTable data={diagnostics.systems} /></div></CollapsiblePanel>
+              <CollapsiblePanel title="mechanic_summary" icon={<Wrench className="size-5" />} defaultOpen><MechanicSummary data={diagnostics.mechanic_summary} /></CollapsiblePanel>
             </div>
           </AnalysisCard>
         </div>
