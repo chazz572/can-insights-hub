@@ -467,6 +467,9 @@ const LogPipelinePanels = ({ data, diagnostics, idStats, anomalies, vehicleBehav
 
 const LogDbcPipelinePanels = ({ data, diagnostics, idStats }: { data: AnalysisResult; diagnostics: NonNullable<AnalysisResult["diagnostics"]>; idStats: JsonRecord[] }) => (
   <div className="grid gap-5">
+    <AnalysisCard title="Pre-Decode CAN ID Inventory" description="Unique merged-log IDs printed before DBC matching, in decimal and hex." icon={<Hash className="size-5" />}>
+      <JsonTable data={diagnostics.can_id_inventory} />
+    </AnalysisCard>
     <AnalysisCard title="Full Power LOG + DBC Dashboard" description="Decoded-signal workflow: live log frames are interpreted with matching DBC definitions." icon={<Gauge className="size-5" />}>
       <JsonTable data={diagnostics.decoded_signals} />
     </AnalysisCard>
@@ -762,6 +765,7 @@ const Results = () => {
           <AnalysisCard title="Advanced Diagnostics" description="Complete diagnostics payload returned by the backend." icon={<BrainCircuit className="size-5" />}>
             <div className="grid gap-4">
               <CollapsiblePanel title="Protocol" icon={<Cpu className="size-5" />} defaultOpen><JsonTable data={diagnostics.protocol} /></CollapsiblePanel>
+              <CollapsiblePanel title="Pre-Decode CAN ID Inventory" icon={<Hash className="size-5" />} defaultOpen><JsonTable data={diagnostics.can_id_inventory} /></CollapsiblePanel>
               <CollapsiblePanel title="Byte Analysis" icon={<Layers3 className="size-5" />}><ByteEntropyHeatmap data={diagnostics.byte_analysis} /><div className="mt-4"><ByteCorrelationHeatmap data={diagnostics.byte_analysis} /></div><div className="mt-4"><JsonTable data={diagnostics.byte_analysis} /></div></CollapsiblePanel>
               <CollapsiblePanel title="Bit Analysis" icon={<Binary className="size-5" />}><BitToggleVisualization data={diagnostics.bit_analysis} /><JsonTable data={diagnostics.bit_analysis} /></CollapsiblePanel>
               <CollapsiblePanel title="Timing" icon={<Clock className="size-5" />}><TimingLineChart data={diagnostics.timing} /><JsonTable data={diagnostics.timing} /></CollapsiblePanel>

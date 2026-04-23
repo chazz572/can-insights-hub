@@ -134,6 +134,10 @@ const canIdAliases = (id: string, metadata = "") => {
   return [...aliases].filter((alias) => alias && alias !== "NaN");
 };
 const cleanHex = (value: string) => value.replace(/[^a-fA-F0-9]/g, "").toUpperCase();
+const formatCanIdHex = (id: string) => {
+  const numeric = Number(id);
+  return Number.isFinite(numeric) ? `0x${numeric.toString(16).toUpperCase()}` : "0x0";
+};
 const byteValues = (value: string) => cleanHex(value).match(/.{1,2}/g)?.slice(0, 8).map((byte) => Number.parseInt(byte, 16)).filter((byte) => Number.isFinite(byte)) ?? [];
 const average = (values: number[]) => values.length ? values.reduce((sum, value) => sum + value, 0) / values.length : 0;
 const standardDeviation = (values: number[]) => {
@@ -489,6 +493,13 @@ const runAnalysis = (csv: string) => {
   const idStats = [...idCounts.entries()]
     .sort((a, b) => b[1] - a[1])
     .map(([id, count]) => ({ id, count, percentage: totalMessages ? Number(((count / totalMessages) * 100).toFixed(2)) : 0 }));
+  const canIdInventory = idStats.map((item) => ({
+    decimal_id: Number(item.id),
+    hex_id: formatCanIdHex(item.id),
+    normalized_id: item.id,
+    frame_count: item.count,
+    percentage: item.percentage,
+  }));
 
   const reverseEngineering = idStats.map((item, index) => ({
     id: item.id,
@@ -898,6 +909,7 @@ const runAnalysis = (csv: string) => {
         ...protocolInsights,
         total_ids_sampled: totalMessages,
       },
+      can_id_inventory: canIdInventory,
       file_routing: {
         file_type: pipeline,
         analysis_pipeline: pipelineLabel,
