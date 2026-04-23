@@ -816,9 +816,9 @@ const runAnalysis = (csv: string) => {
   ];
   const logDbcSummaryLines = [
     `Full Power mode matched this log with DBC metadata and produced ${decodedSignals.length} decoded signal range(s).`,
-    decodedEvents.length ? `Decoded behavior clues: ${decodedEvents.join("; ")}.` : "The DBC was attached, but no changing decoded speed, RPM, torque, pedal, brake, steering, SOC, or temperature signal crossed the activity threshold in this capture.",
+    decodedEvents.length ? `Decoded behavior clues: ${decodedEvents.join("; ")}.` : "DBC-defined signals are displayed even when static; no decoded speed, RPM, torque, pedal, brake, steering, SOC, or temperature signal showed a changing behavior clue in this capture.",
     subtleAbnormalities.length ? `Network issues to review: ${subtleAbnormalities.slice(0, 4).map((item) => `${item.type.replace(/_/g, " ")} on ${item.id}`).join("; ")}.` : "Network timing and payload health did not show major threshold-level issues.",
-    "Decoded physical signals take priority; raw byte heuristics are suppressed unless no decoded context exists for a message.",
+    "Decoded physical signals take priority and are never filtered by activity, variance, or change detection when their DBC message appears in the log.",
   ];
   const whatDataShows = pipeline === "log_dbc" ? logDbcSummaryLines : pipeline === "dbc" ? dbcSummaryLines : logSummaryLines;
   const detailedSummary = pipeline === "log_dbc"
@@ -850,7 +850,7 @@ const runAnalysis = (csv: string) => {
       file_routing: {
         file_type: pipeline,
         analysis_pipeline: pipelineLabel,
-        enforced_rules: pipeline === "dbc" ? ["DBC viewer only", "no behavior inference", "no vehicle-type classification"] : pipeline === "log_dbc" ? ["decode with DBC metadata", "signal charts enabled", "raw and decoded evidence shown"] : ["raw frame timing", "entropy", "ECU activity", "reverse-engineering only", "no signal decoding without DBC"],
+        enforced_rules: pipeline === "dbc" ? ["DBC viewer only", "no behavior inference", "no vehicle-type classification"] : pipeline === "log_dbc" ? ["decode with DBC metadata", "show every DBC-defined signal whose message appears in the log", "do not filter decoded signals by activity variance or change detection", "signal charts enabled", "raw and decoded evidence shown"] : ["raw frame timing", "entropy", "ECU activity", "reverse-engineering only", "no signal decoding without DBC"],
       },
       dbc: {
         messages: dbcMessages,
