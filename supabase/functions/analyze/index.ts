@@ -441,6 +441,8 @@ const runAnalysis = (csv: string) => {
       signals: {
         byte_signal_candidates: byteAnalysis.filter((item) => Number(item.entropy ?? 0) > 0.5),
         active_bit_candidates: bitAnalysis.filter((item) => Number(item.activity ?? 0) > 0.05),
+        analog_signal_candidates: analogSignals,
+        rpm_signal_candidates: analogSignals.filter((item) => item.likely_signal_type === "rpm_candidate"),
       },
       systems,
       id_deep_dive: idDeepDive,
