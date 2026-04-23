@@ -16,10 +16,11 @@ const jsonResponse = (body: unknown) =>
     headers: { ...corsHeaders, "Content-Type": "application/json" },
   });
 
-const cleanId = (value: string) => {
+const cleanId = (value: string, base: 10 | 16 | "auto" = "auto") => {
   const raw = value.trim().replace(/[xh]$/i, "").replace(/^0x/i, "");
   const cleaned = raw.replace(/[^a-fA-F0-9]/g, "").toUpperCase().replace(/^0+(?=[0-9A-F])/, "") || "0";
-  const parsed = Number.parseInt(cleaned, 16);
+  const radix = base === "auto" ? (/[A-F]/i.test(cleaned) ? 16 : 10) : base;
+  const parsed = Number.parseInt(cleaned, radix);
   return Number.isFinite(parsed) ? String(parsed) : "0";
 };
 const cleanByte = (value: string) => value.replace(/^0x/i, "").replace(/[^a-fA-F0-9]/g, "").slice(0, 2).padStart(2, "0").toUpperCase();
@@ -59,8 +60,8 @@ const toCsv = (frames: Frame[]) => ["timestamp,id,dlc,data,metadata", ...frames.
   csvEscape(frame.metadata ?? ""),
 ].join(","))].join("\n");
 
-const normalizeFrame = (timestamp: string, id: string, bytes: string[], dlc?: number, metadata?: string): Frame | null => {
-  const normalizedId = cleanId(id);
+const normalizeFrame = (timestamp: string, id: string, bytes: string[], dlc?: number, metadata?: string, idBase: 10 | 16 | "auto" = "auto"): Frame | null => {
+  const normalizedId = cleanId(id, idBase);
   const normalizedBytes = bytes.map(cleanByte).filter((byte) => /^[0-9A-F]{2}$/.test(byte)).slice(0, 8);
   if (!normalizedId || !normalizedBytes.length) return null;
   return { timestamp: timestamp || "0", id: normalizedId, dlc: Math.min(Number.isFinite(Number(dlc)) ? Number(dlc) : normalizedBytes.length, 8), data: normalizedBytes, metadata };
