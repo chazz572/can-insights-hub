@@ -723,25 +723,34 @@ const runAnalysis = (csv: string) => {
     possible_pedal_ids: [...pedalIds],
   };
 
-  const decodedSignals = pipeline === "log_dbc" ? analogSignals.flatMap((signal) => {
-    const dbcSignal = dbcSignals.find((candidate) => String(candidate.message_id) === String(signal.id) && Number(candidate.start_bit) <= Number(signal.bit_start ?? 0) && Number(candidate.start_bit) + Number(candidate.bit_length) >= Number(signal.bit_start ?? 0));
-    if (!dbcSignal) return [];
-    const rawMidpoint = (Number(signal.min_value ?? 0) + Number(signal.max_value ?? 0)) / 2;
-    const decodedMin = Number(signal.min_value ?? 0) * Number(dbcSignal.factor) + Number(dbcSignal.offset);
-    const decodedMax = Number(signal.max_value ?? 0) * Number(dbcSignal.factor) + Number(dbcSignal.offset);
+  const decodedSignals = pipeline === "log_dbc" ? dbcSignals.flatMap((dbcSignal) => {
+    const profile = idProfiles.get(String(dbcSignal.message_id));
+    if (!profile) return [];
+    const rawValues = profile.cleanSamples
+      .map(byteValues)
+      .map((bytes) => decodeDbcRawValue(bytes, dbcSignal))
+      .filter((value): value is number => value !== null && Number.isFinite(value));
+    const decodedValues = rawValues.map((value) => value * Number(dbcSignal.factor) + Number(dbcSignal.offset));
+    const summary = summarizeDecodedValues(decodedValues);
     return [{
-      id: signal.id,
+      id: dbcSignal.message_id,
       signal_name: dbcSignal.signal_name,
       unit: dbcSignal.unit || "raw",
       start_bit: dbcSignal.start_bit,
       bit_length: dbcSignal.bit_length,
       endianness: dbcSignal.endianness,
+      signed: dbcSignal.signed,
       factor: dbcSignal.factor,
       offset: dbcSignal.offset,
-      decoded_min: Number(decodedMin.toFixed(3)),
-      decoded_max: Number(decodedMax.toFixed(3)),
-      latest_estimate: Number((rawMidpoint * Number(dbcSignal.factor) + Number(dbcSignal.offset)).toFixed(3)),
-      observed_trend: signal.direction,
+      dbc_minimum: dbcSignal.minimum,
+      dbc_maximum: dbcSignal.maximum,
+      decoded_min: summary.min === null ? null : Number(summary.min.toFixed(3)),
+      decoded_max: summary.max === null ? null : Number(summary.max.toFixed(3)),
+      latest_estimate: summary.latest === null ? null : Number(summary.latest.toFixed(3)),
+      observed_trend: summary.trend,
+      observed_samples: decodedValues.length,
+      unique_values: summary.unique,
+      display_reason: "DBC-defined signal appeared in the log; preserved regardless of activity, variance, or change detection.",
     }];
   }) : [];
 
