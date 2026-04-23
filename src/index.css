@@ -159,6 +159,13 @@ All colors MUST be HSL.
 }
 
 @layer utilities {
+  .text-fit-tile {
+    min-width: 0;
+    max-width: 100%;
+    overflow-wrap: anywhere;
+    word-break: break-word;
+  }
+
   .diagnostic-grid {
     background-image: linear-gradient(hsl(var(--glass-border)) 1px, transparent 1px), linear-gradient(90deg, hsl(var(--glass-border)) 1px, transparent 1px);
     background-size: 28px 28px;
