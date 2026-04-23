@@ -117,6 +117,16 @@ const entropy = (values: number[]) => {
   }, 0).toFixed(4));
 };
 
+const analogCandidateScore = (values: number[]) => {
+  if (values.length < 20) return 0;
+  const unique = new Set(values).size;
+  const range = Math.max(...values) - Math.min(...values);
+  const transitions = values.slice(1).filter((value, index) => value !== values[index]).length;
+  const transitionRate = transitions / Math.max(values.length - 1, 1);
+  const smoothSteps = values.slice(1).filter((value, index) => Math.abs(value - values[index]) > 0 && Math.abs(value - values[index]) < Math.max(80, range * 0.18)).length;
+  return unique >= 12 && range >= 250 ? transitionRate * 0.45 + (smoothSteps / Math.max(values.length - 1, 1)) * 0.35 + Math.min(0.2, unique / values.length) : 0;
+};
+
 const runAnalysis = (csv: string) => {
   let totalMessages = 0;
   let extendedIds = 0;
