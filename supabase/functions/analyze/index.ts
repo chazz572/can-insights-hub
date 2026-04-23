@@ -237,6 +237,38 @@ const extractDbcSignals = (metadata: string) => [...metadata.matchAll(/signal=([
   maximum: Number(match[10]),
   unit: match[11],
 }));
+
+const decodeDbcRawValue = (bytes: number[], signal: JsonRecord) => {
+  const startBit = Number(signal.start_bit ?? 0);
+  const bitLength = Number(signal.bit_length ?? 0);
+  if (!Number.isFinite(startBit) || !Number.isFinite(bitLength) || bitLength <= 0) return null;
+  if (startBit + bitLength > bytes.length * 8) return null;
+
+  const littleEndian = /little|intel/i.test(String(signal.endianness ?? ""));
+  let raw = 0;
+
+  for (let offset = 0; offset < bitLength; offset += 1) {
+    const sourceBit = littleEndian ? startBit + offset : startBit + bitLength - 1 - offset;
+    const byteIndex = Math.floor(sourceBit / 8);
+    const bitIndex = littleEndian ? sourceBit % 8 : 7 - (sourceBit % 8);
+    raw += ((bytes[byteIndex] >> bitIndex) & 1) * (2 ** offset);
+  }
+
+  if (signal.signed && bitLength < 53 && raw >= 2 ** (bitLength - 1)) raw -= 2 ** bitLength;
+  return raw;
+};
+
+const summarizeDecodedValues = (values: number[]) => {
+  if (!values.length) return { min: null, max: null, latest: null, unique: 0, trend: "not_decoded" };
+  const trend = trendStats(values);
+  return {
+    min: Math.min(...values),
+    max: Math.max(...values),
+    latest: values[values.length - 1],
+    unique: new Set(values).size,
+    trend: trend.direction,
+  };
+};
 const summarizeMetadata = (metadataById: Map<string, string>, idCounts: Map<string, number>) => {
   const rows = [...metadataById.entries()].map(([id, metadata]) => ({ id, metadata, text: metadata.toLowerCase(), tokens: metadataTokens(metadata) }));
   const scoreRows = (terms: string[]) => rows.filter((row) => containsAny(row.text, terms));
@@ -691,25 +723,34 @@ const runAnalysis = (csv: string) => {
     possible_pedal_ids: [...pedalIds],
   };
 
-  const decodedSignals = pipeline === "log_dbc" ? analogSignals.flatMap((signal) => {
-    const dbcSignal = dbcSignals.find((candidate) => String(candidate.message_id) === String(signal.id) && Number(candidate.start_bit) <= Number(signal.bit_start ?? 0) && Number(candidate.start_bit) + Number(candidate.bit_length) >= Number(signal.bit_start ?? 0));
-    if (!dbcSignal) return [];
-    const rawMidpoint = (Number(signal.min_value ?? 0) + Number(signal.max_value ?? 0)) / 2;
-    const decodedMin = Number(signal.min_value ?? 0) * Number(dbcSignal.factor) + Number(dbcSignal.offset);
-    const decodedMax = Number(signal.max_value ?? 0) * Number(dbcSignal.factor) + Number(dbcSignal.offset);
+  const decodedSignals = pipeline === "log_dbc" ? dbcSignals.flatMap((dbcSignal) => {
+    const profile = idProfiles.get(String(dbcSignal.message_id));
+    if (!profile) return [];
+    const rawValues = profile.cleanSamples
+      .map(byteValues)
+      .map((bytes) => decodeDbcRawValue(bytes, dbcSignal))
+      .filter((value): value is number => value !== null && Number.isFinite(value));
+    const decodedValues = rawValues.map((value) => value * Number(dbcSignal.factor) + Number(dbcSignal.offset));
+    const summary = summarizeDecodedValues(decodedValues);
     return [{
-      id: signal.id,
+      id: dbcSignal.message_id,
       signal_name: dbcSignal.signal_name,
       unit: dbcSignal.unit || "raw",
       start_bit: dbcSignal.start_bit,
       bit_length: dbcSignal.bit_length,
       endianness: dbcSignal.endianness,
+      signed: dbcSignal.signed,
       factor: dbcSignal.factor,
       offset: dbcSignal.offset,
-      decoded_min: Number(decodedMin.toFixed(3)),
-      decoded_max: Number(decodedMax.toFixed(3)),
-      latest_estimate: Number((rawMidpoint * Number(dbcSignal.factor) + Number(dbcSignal.offset)).toFixed(3)),
-      observed_trend: signal.direction,
+      dbc_minimum: dbcSignal.minimum,
+      dbc_maximum: dbcSignal.maximum,
+      decoded_min: summary.min === null ? null : Number(summary.min.toFixed(3)),
+      decoded_max: summary.max === null ? null : Number(summary.max.toFixed(3)),
+      latest_estimate: summary.latest === null ? null : Number(summary.latest.toFixed(3)),
+      observed_trend: summary.trend,
+      observed_samples: decodedValues.length,
+      unique_values: summary.unique,
+      display_reason: "DBC-defined signal appeared in the log; preserved regardless of activity, variance, or change detection.",
     }];
   }) : [];
 
@@ -775,9 +816,9 @@ const runAnalysis = (csv: string) => {
   ];
   const logDbcSummaryLines = [
     `Full Power mode matched this log with DBC metadata and produced ${decodedSignals.length} decoded signal range(s).`,
-    decodedEvents.length ? `Decoded behavior clues: ${decodedEvents.join("; ")}.` : "The DBC was attached, but no changing decoded speed, RPM, torque, pedal, brake, steering, SOC, or temperature signal crossed the activity threshold in this capture.",
+    decodedEvents.length ? `Decoded behavior clues: ${decodedEvents.join("; ")}.` : "DBC-defined signals are displayed even when static; no decoded speed, RPM, torque, pedal, brake, steering, SOC, or temperature signal showed a changing behavior clue in this capture.",
     subtleAbnormalities.length ? `Network issues to review: ${subtleAbnormalities.slice(0, 4).map((item) => `${item.type.replace(/_/g, " ")} on ${item.id}`).join("; ")}.` : "Network timing and payload health did not show major threshold-level issues.",
-    "Decoded physical signals take priority; raw byte heuristics are suppressed unless no decoded context exists for a message.",
+    "Decoded physical signals take priority and are never filtered by activity, variance, or change detection when their DBC message appears in the log.",
   ];
   const whatDataShows = pipeline === "log_dbc" ? logDbcSummaryLines : pipeline === "dbc" ? dbcSummaryLines : logSummaryLines;
   const detailedSummary = pipeline === "log_dbc"
@@ -809,7 +850,7 @@ const runAnalysis = (csv: string) => {
       file_routing: {
         file_type: pipeline,
         analysis_pipeline: pipelineLabel,
-        enforced_rules: pipeline === "dbc" ? ["DBC viewer only", "no behavior inference", "no vehicle-type classification"] : pipeline === "log_dbc" ? ["decode with DBC metadata", "signal charts enabled", "raw and decoded evidence shown"] : ["raw frame timing", "entropy", "ECU activity", "reverse-engineering only", "no signal decoding without DBC"],
+        enforced_rules: pipeline === "dbc" ? ["DBC viewer only", "no behavior inference", "no vehicle-type classification"] : pipeline === "log_dbc" ? ["decode with DBC metadata", "show every DBC-defined signal whose message appears in the log", "do not filter decoded signals by activity variance or change detection", "signal charts enabled", "raw and decoded evidence shown"] : ["raw frame timing", "entropy", "ECU activity", "reverse-engineering only", "no signal decoding without DBC"],
       },
       dbc: {
         messages: dbcMessages,
