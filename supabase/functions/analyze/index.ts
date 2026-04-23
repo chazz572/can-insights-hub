@@ -366,7 +366,10 @@ const runAnalysis = (csv: string) => {
   });
 
   const metadataInsights = summarizeMetadata(metadataById, idCounts);
-  const isDbcReference = metadataInsights.has_dbc_metadata && totalMessages === idCounts.size;
+  const metadataTextForRouting = [...metadataById.values()].join(" ").toLowerCase();
+  const isExplicitDbcDefinition = metadataTextForRouting.includes("source_file_type=dbc_definition");
+  const isExplicitLogWithDbc = metadataTextForRouting.includes("source_file_type=log_with_dbc");
+  const isDbcReference = isExplicitDbcDefinition || (metadataInsights.has_dbc_metadata && totalMessages === idCounts.size);
   const pipeline: PipelineKind = isDbcReference ? "dbc" : metadataInsights.has_dbc_metadata ? "log_dbc" : "log";
   const pipelineLabel = pipeline === "dbc" ? "DBC definition viewer" : pipeline === "log_dbc" ? "Full Power decoded LOG + DBC analysis" : "Raw CAN log intelligence";
   const idStats = [...idCounts.entries()]
@@ -387,6 +390,45 @@ const runAnalysis = (csv: string) => {
     return { id, message_name: messageName, transmitter, signal_count: signals.length, signals };
   });
   const dbcSignals = dbcMessages.flatMap((message) => message.signals.map((signal) => ({ message_id: message.id, message_name: message.message_name, ...signal })));
+
+  if (pipeline === "dbc") {
+    const bitLayout = dbcSignals.map((signal) => ({ message_id: signal.message_id, signal_name: signal.signal_name, start_bit: signal.start_bit, bit_length: signal.bit_length, byte_start: Math.floor(Number(signal.start_bit) / 8), byte_end: Math.floor((Number(signal.start_bit) + Number(signal.bit_length) - 1) / 8), endianness: signal.endianness, signed: signal.signed, multiplex: signal.multiplex, factor: signal.factor, offset: signal.offset, minimum: signal.minimum, maximum: signal.maximum, unit: signal.unit }));
+    const summaryText = [
+      "DBC Definition Summary",
+      `- Parsed ${dbcMessages.length} message definition(s) and ${dbcSignals.length} signal definition(s).`,
+      "- This is a definition file, not live CAN traffic.",
+      "- Behavior, motion, vehicle health, faults, and vehicle type are intentionally not inferred from a DBC alone.",
+      "",
+      "What Cannot Be Determined",
+      "- No timestamps or live payload changes exist in a DBC, so timing, jitter, ECU activity, driving state, anomalies, and events cannot be measured.",
+    ].join("\n");
+
+    return {
+      ok: true,
+      file_type: "dbc",
+      analysis_pipeline: "DBC definition viewer",
+      supported_file_type: true,
+      summary: { text: summaryText, what_the_data_actually_shows: ["DBC definitions only; no live behavior is present."] },
+      total_messages: 0,
+      unique_ids: dbcMessages.length,
+      id_stats: dbcMessages.map((message) => ({ id: message.id, message_name: message.message_name, signal_count: message.signal_count, transmitter: message.transmitter })),
+      anomalies: [],
+      reverse_engineering: [],
+      vehicle_behavior: { possible_speed_ids: [], possible_rpm_ids: [], possible_pedal_ids: [] },
+      diagnostics: {
+        file_routing: { file_type: "dbc", analysis_pipeline: "DBC definition viewer", enforced_rules: ["parse BO_ messages", "parse SG_ signals", "show bit/scaling details", "no behavior inference", "no vehicle-type classification", isExplicitDbcDefinition ? "explicit DBC upload marker found" : "DBC inferred from definition-only structure"] },
+        dbc: { messages: dbcMessages, signals: dbcSignals, bit_layout: bitLayout },
+        protocol: { likely_protocol: "not_applicable_to_dbc", reason: "DBC files do not contain timestamped bus traffic." },
+        byte_analysis: [],
+        bit_analysis: [],
+        timing: [],
+        signals: { dbc_signals: dbcSignals },
+        systems: dbcMessages.map((message) => ({ id: message.id, module_type: "dbc_defined_message", category: "definition_only", confidence_score: 1, reasoning: "Message exists in the DBC definition file; no live ECU activity is implied." })),
+        mechanic_summary: summaryText,
+        what_the_data_actually_shows: ["DBC definitions only; no live behavior is present."],
+      },
+    };
+  }
 
   const byteAnalysis = byteCounts.map((counts, byteIndex) => {
     const values = [...counts.entries()].flatMap(([value, count]) => Array.from({ length: count }, () => value));
