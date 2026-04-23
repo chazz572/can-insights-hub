@@ -123,7 +123,8 @@ const parseTrc = (text: string) => text.split(/\r?\n/).map((line, index) => {
   const parts = trimmed.split(/[\s,;]+/).filter(Boolean);
   const idIndex = parts.findIndex((part, partIndex) => partIndex > 0 && isId(part) && cleanId(part).length >= 2);
   if (idIndex < 0) return null;
-  const timestamp = parts.slice(0, idIndex).reverse().find((part) => /^\d+(?:\.\d+)?$/.test(part)) ?? String(index);
+  const rawTimestamp = parts.slice(0, idIndex).reverse().find((part) => /^\d+(?:\.\d+)?$/.test(part));
+  const timestamp = rawTimestamp ? String(Number(rawTimestamp) / 1000) : String(index);
   const dlcIndex = parts.findIndex((part, partIndex) => partIndex > idIndex && /^\d+$/.test(part) && Number(part) <= 64);
   const byteStart = dlcIndex >= 0 ? dlcIndex + 1 : idIndex + 1;
   return normalizeFrame(timestamp, parts[idIndex].replace(/[xh]$/i, ""), parts.slice(byteStart).filter(isByte), dlcIndex >= 0 ? Number(parts[dlcIndex]) : undefined);

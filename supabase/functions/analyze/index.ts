@@ -198,7 +198,7 @@ const runAnalysis = (csv: string) => {
   const anomalies: JsonRecord[] = [];
 
   forEachCsvRecord(csv, ({ id, data }) => {
-    if (data.length > anomalyThreshold) {
+    if (byteValues(data).length > anomalyThreshold) {
       anomalies.push({ id, data, reason: "Unusually long data payload" });
     }
   });
