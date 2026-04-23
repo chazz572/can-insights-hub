@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 
 const workflow = [
-  { label: "Upload CSV", detail: "Drop raw CAN captures", icon: UploadCloud },
+  { label: "Upload Any CAN Log", detail: "Drop raw CAN captures", icon: UploadCloud },
   { label: "Analyze CAN IDs", detail: "Detect patterns instantly", icon: Radar },
   { label: "Review Dashboard", detail: "Inspect anomalies and signals", icon: BarChart3 },
 ];
@@ -17,16 +17,16 @@ const Home = () => (
         <div className="animate-fade-up">
           <div className="mb-6 inline-flex items-center gap-2 rounded-lg border border-glass-border bg-glass px-4 py-2 text-sm font-semibold text-primary shadow-glow backdrop-blur">
             <BrainCircuit className="size-4" />
-            CAN bus intelligence
+            CAN Bus Intelligence
           </div>
           <h1 className="max-w-4xl text-5xl font-extrabold leading-tight text-foreground sm:text-6xl lg:text-7xl">CAN AI Analyzer</h1>
           <p className="mt-6 max-w-2xl text-lg leading-8 text-muted-foreground">
-            Upload a CSV capture and turn raw CAN traffic into structured anomaly reports, signal candidates, and vehicle behavior insights.
+            Upload CSV, candump, ASC, BLF, MF4, CRTD, J1939, or TXT logs and turn raw CAN traffic into structured anomaly reports, signal candidates, and vehicle behavior insights.
           </p>
           <div className="mt-8 flex flex-col gap-3 sm:flex-row">
             <Button asChild variant="analyzer" size="lg">
               <Link to="/upload">
-                Upload CSV <ArrowRight className="size-4" />
+                Upload CAN Log <ArrowRight className="size-4" />
               </Link>
             </Button>
             <Button asChild variant="outline" size="lg">
@@ -39,8 +39,8 @@ const Home = () => (
           <CardContent className="p-6">
             <div className="mb-6 flex items-center justify-between border-b border-glass-border pb-5">
               <div>
-                <p className="text-sm font-semibold uppercase text-primary">Analysis pipeline</p>
-                <h2 className="mt-2 text-2xl font-bold">Premium CAN telemetry suite</h2>
+                <p className="text-sm font-semibold uppercase text-primary">Analysis Pipeline</p>
+                <h2 className="mt-2 text-2xl font-bold">Premium CAN Telemetry Suite</h2>
               </div>
               <ShieldAlert className="size-8 text-accent" />
             </div>

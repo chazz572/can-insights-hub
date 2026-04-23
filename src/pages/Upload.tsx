@@ -113,7 +113,7 @@ const Upload = () => {
           <div className="mb-3 grid size-14 place-items-center rounded-lg bg-gradient-accent text-primary-foreground shadow-glow">
             <UploadCloud className="size-7" />
           </div>
-          <CardTitle className="text-3xl">Universal CAN log upload</CardTitle>
+          <CardTitle className="text-3xl">Universal CAN Log Upload</CardTitle>
           <CardDescription>Auto-detect CSV, candump, CRTD, ASC, BLF, MF4/MDF, CANedge, J1939, and generic text logs, then normalize them into the internal CSV pipeline.</CardDescription>
         </CardHeader>
         <CardContent>
@@ -123,7 +123,7 @@ const Upload = () => {
             </div>
 
             <div className="space-y-3">
-              <Label htmlFor="can-files">CAN log files</Label>
+              <Label htmlFor="can-files">CAN Log Files</Label>
               <Label
                 htmlFor="can-files"
                 onDragOver={handleDragOver}
@@ -139,7 +139,7 @@ const Upload = () => {
                 <span className="grid size-20 place-items-center rounded-lg border border-glass-border bg-gradient-subtle text-primary shadow-glow transition-transform duration-300 group-hover:scale-105">
                   {isComplete ? <CheckCircle2 className="size-10 text-success" /> : files.length > 1 ? <Files className="size-10" /> : files.length ? <FileText className="size-10" /> : <UploadCloud className="size-10" />}
                 </span>
-                <span className="mt-6 text-xl font-bold text-foreground">{files.length ? `${files.length} file${files.length > 1 ? "s" : ""} ready` : "Drop any CAN log format here"}</span>
+                <span className="mt-6 text-xl font-bold text-foreground">{files.length ? `${files.length} File${files.length > 1 ? "s" : ""} Ready` : "Drop Any CAN Log Format Here"}</span>
                 <span className="mt-2 max-w-md text-sm leading-6 text-muted-foreground">Batch upload up to 12 files. Each file is detected, validated, converted, stored as normalized CSV, and analyzed independently.</span>
                 <Input id="can-files" className="sr-only" type="file" multiple accept={acceptedTypes} onChange={handleFileChange} disabled={isLoading} />
               </Label>
