@@ -263,6 +263,10 @@ const Results = () => {
   const summary = data?.summary;
   const summaryText = summary && typeof summary === "object" && !Array.isArray(summary) ? summary.text ?? summary : summary;
   const diagnostics = data?.diagnostics ?? {};
+  const idStats = data?.id_stats ?? [];
+  const busLoad = Math.min(100, Math.round(((data?.total_messages ?? 0) / Math.max(Number(data?.unique_ids ?? 1), 1)) * 10));
+  const componentHealth = Math.max(0, Math.min(100, 100 - anomalies.length * 12));
+  const suspectIds = toRecordArray(idStats).filter((row) => numericValue(row, ["count", "frequency", "messages", "total", "value"]) > 1).length;
 
   return (
     <main className="mx-auto min-h-screen max-w-7xl px-4 py-8 sm:px-6 lg:px-10">
@@ -316,10 +320,22 @@ const Results = () => {
             <MetricCard title="Anomalies Detected" value={anomalies.length} icon={AlertTriangle} />
           </div>
 
+          <div className="grid gap-6 lg:grid-cols-4">
+            <InsightCard title="Fault Prediction" value={anomalies.length ? "Watch" : "Low risk"} detail="Derived from anomaly density and ID activity." icon={ShieldCheck} />
+            <InsightCard title="Component Health" value={`${componentHealth}/100`} detail="Heuristic score from detected anomalies." icon={Gauge} score={componentHealth} />
+            <InsightCard title="Suspect IDs" value={String(suspectIds)} detail="High-activity candidates for review." icon={Radar} />
+            <InsightCard title="CAN Bus Load" value={`${busLoad}%`} detail="Estimated from message volume per identifier." icon={Zap} score={100 - busLoad} />
+          </div>
+
+          <AnalysisCard title="Mechanic Mode" description="Simplified diagnostic summary for service workflows." icon={<Wrench className="size-5" />}>
+            <MechanicSummary data={diagnostics.mechanic_summary ?? summaryText} />
+          </AnalysisCard>
+
           <div className="grid gap-5">
             <CollapsiblePanel title="Basic View" icon={<Binary className="size-5" />} defaultOpen>
-              <FrequencyChart data={data.id_stats} />
-              <JsonTable data={data.id_stats} />
+              <FrequencyChart data={idStats} />
+              <div className="mb-4"><IdActivityTimeline data={idStats} /></div>
+              <JsonTable data={idStats} />
             </CollapsiblePanel>
 
             <CollapsiblePanel title="Diagnostics" icon={<AlertTriangle className="size-5" />} defaultOpen>
@@ -345,8 +361,8 @@ const Results = () => {
           <AnalysisCard title="Advanced Diagnostics" description="Complete diagnostics payload returned by the backend." icon={<BrainCircuit className="size-5" />}>
             <div className="grid gap-4">
               <CollapsiblePanel title="protocol" icon={<Cpu className="size-5" />} defaultOpen><JsonTable data={diagnostics.protocol} /></CollapsiblePanel>
-              <CollapsiblePanel title="byte_analysis" icon={<Layers3 className="size-5" />}><ByteEntropyHeatmap data={diagnostics.byte_analysis} /><div className="mt-4"><JsonTable data={diagnostics.byte_analysis} /></div></CollapsiblePanel>
-              <CollapsiblePanel title="bit_analysis" icon={<Binary className="size-5" />}><JsonTable data={diagnostics.bit_analysis} /></CollapsiblePanel>
+              <CollapsiblePanel title="byte_analysis" icon={<Layers3 className="size-5" />}><ByteEntropyHeatmap data={diagnostics.byte_analysis} /><div className="mt-4"><ByteCorrelationHeatmap data={diagnostics.byte_analysis} /></div><div className="mt-4"><JsonTable data={diagnostics.byte_analysis} /></div></CollapsiblePanel>
+              <CollapsiblePanel title="bit_analysis" icon={<Binary className="size-5" />}><BitToggleVisualization data={diagnostics.bit_analysis} /><JsonTable data={diagnostics.bit_analysis} /></CollapsiblePanel>
               <CollapsiblePanel title="timing" icon={<Clock className="size-5" />}><TimingLineChart data={diagnostics.timing} /><JsonTable data={diagnostics.timing} /></CollapsiblePanel>
               <CollapsiblePanel title="signals" icon={<Radar className="size-5" />}><JsonTable data={diagnostics.signals} /></CollapsiblePanel>
               <CollapsiblePanel title="systems" icon={<Gauge className="size-5" />}><SystemsBadges data={diagnostics.systems} /><div className="mt-4"><JsonTable data={diagnostics.systems} /></div></CollapsiblePanel>
