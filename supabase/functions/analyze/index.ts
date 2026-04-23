@@ -96,27 +96,34 @@ const forEachCsvRecord = (csv: string, callback: (record: ParsedRecord) => void)
     }
 
     const values = parseCsvLine(line);
+    const metadata = indexes.metadataIndex >= 0 ? values[indexes.metadataIndex] ?? "" : "";
     callback({
-      id: normalizeCanId(values[indexes.idIndex] ?? ""),
+      id: normalizeCanId(values[indexes.idIndex] ?? "", hintedIdBase(values[indexes.idIndex] ?? "", metadata)),
       data: values[indexes.dataIndex] ?? "",
       timestamp: Number(values[indexes.timestampIndex] ?? Number.NaN),
-      metadata: indexes.metadataIndex >= 0 ? values[indexes.metadataIndex] ?? "" : "",
+      metadata,
     });
   }
 };
 
-const normalizeCanId = (value: string) => {
+const normalizeCanId = (value: string, base: 10 | 16 | "auto" = "auto") => {
   const raw = value.trim().replace(/[xh]$/i, "").replace(/^0x/i, "");
   const cleaned = raw.replace(/[^a-fA-F0-9]/g, "").toUpperCase().replace(/^0+(?=[0-9A-F])/, "") || "0";
-  const parsed = Number.parseInt(cleaned, /[A-F]/i.test(cleaned) ? 16 : 10);
+  const radix = base === "auto" ? (/[A-F]/i.test(cleaned) ? 16 : 10) : base;
+  const parsed = Number.parseInt(cleaned, radix);
   return Number.isFinite(parsed) ? String(parsed) : "0";
 };
 const metadataValue = (metadata: string, key: string) => metadata.match(new RegExp(`${key}=([^;]+)`, "i"))?.[1] ?? "";
+const hintedIdBase = (value: string, metadata = ""): 10 | 16 | "auto" => {
+  const baseHint = metadataValue(metadata, "id_base");
+  if (baseHint === "10") return 10;
+  if (baseHint === "16") return 16;
+  return /^0x/i.test(value) || /[a-f]/i.test(value) || /[xh]$/i.test(value) ? 16 : "auto";
+};
 const canIdAliases = (id: string, metadata = "") => {
   const raw = metadataValue(metadata, "raw_can_id") || id;
-  const aliases = new Set<string>([normalizeCanId(id), normalizeCanId(raw)]);
-  if (/^0x|[a-f]|[xh]$/i.test(raw)) aliases.add(String(Number.parseInt(raw.replace(/[xh]$/i, "").replace(/^0x/i, ""), 16)));
-  if (/^\d+$/.test(raw)) aliases.add(String(Number.parseInt(raw, 16)));
+  const aliases = new Set<string>([normalizeCanId(id, hintedIdBase(id, metadata)), normalizeCanId(raw, hintedIdBase(raw, metadata))]);
+  if (hintedIdBase(raw, metadata) === 16) aliases.add(normalizeCanId(raw, 16));
   [...aliases].forEach((alias) => {
     const numeric = Number(alias);
     if (Number.isFinite(numeric) && numeric > 0x1fffffff) aliases.add(String(numeric & 0x1fffffff));
