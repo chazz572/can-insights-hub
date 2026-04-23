@@ -599,6 +599,12 @@ const runAnalysis = (csv: string) => {
     possible_pedal_ids: [...pedalIds],
   };
 
+  const decodedSignals = pipeline === "log_dbc" ? analogSignals.map((signal) => {
+    const dbcSignal = dbcSignals.find((candidate) => String(candidate.message_id) === String(signal.id) && Number(candidate.start_bit) <= Number(signal.bit_start ?? 0) && Number(candidate.start_bit) + Number(candidate.bit_length) >= Number(signal.bit_start ?? 0));
+    const rawMidpoint = (Number(signal.min_value ?? 0) + Number(signal.max_value ?? 0)) / 2;
+    return { id: signal.id, signal_name: dbcSignal?.signal_name ?? signal.likely_signal_type, unit: dbcSignal?.unit ?? "raw", decoded_min: dbcSignal ? Number(signal.min_value ?? 0) * Number(dbcSignal.factor) + Number(dbcSignal.offset) : signal.min_value, decoded_max: dbcSignal ? Number(signal.max_value ?? 0) * Number(dbcSignal.factor) + Number(dbcSignal.offset) : signal.max_value, latest_estimate: dbcSignal ? Number((rawMidpoint * Number(dbcSignal.factor) + Number(dbcSignal.offset)).toFixed(3)) : rawMidpoint, evidence: signal.evidence };
+  }) : [];
+
   const idClassifications = idDeepDive.map((item) => {
     const volatileByteCount = Array.isArray(item.volatile_bytes) ? item.volatile_bytes.length : 0;
     const changeRate = Number(item.payload_change_rate);
@@ -642,7 +648,7 @@ const runAnalysis = (csv: string) => {
   const enhancedNetworkHealth = { ...networkHealth, bus_health_score: Math.max(0, Math.min(100, 100 - anomalies.length * 4 - Math.round(Number(networkHealth.timing_irregularity_score) * 120))), chatter_classification: idStats.some((item) => item.percentage > 35) ? "dominant_id_chatter" : totalMessages / Math.max(idCounts.size, 1) > 60 ? "busy_periodic_chatter" : "normal_idle_chatter", dropout_events: timing.filter((item) => Number(item.max_period) > Math.max(Number(item.average_period) * 3, 0.1)).map((item) => ({ id: item.id, max_period: item.max_period, average_period: item.average_period, classification: "possible_gap_or_dropout" })).slice(0, 16) };
   const derivedEvents = enhancedNetworkHealth.dropout_events.map((item, index) => ({ event_index: eventTimeline.length + index + 1, id: item.id, timestamp: null, event_type: "possible_module_dropout", description: `Timing gap detected: max period ${item.max_period}s vs average ${item.average_period}s.`, before_after_hint: "Compare nearby frames to confirm wake/sleep or missing traffic." }));
   const whatDataShows = [
-    isDbcReference ? "Vehicle State Summary: this is a DBC definition map, not live CAN traffic. It defines message IDs, signal names, transmitters, and likely ECU groups, but it does not prove vehicle type or motion." : hasDefensibleMotion ? `Vehicle State Summary: strongest defensible state is ${behaviorLabel} at ${Math.round(behaviorConfidence * 100)}% confidence.` : hasBehaviorCandidateEvidence ? `Vehicle State Summary: ${behaviorLabel} at ${Math.round(behaviorConfidence * 100)}% candidate confidence. This is based on byte dynamics, not decoded physical units.` : "Vehicle State Summary: motion cannot be determined from this log because no validated speed, wheel-speed, pedal, brake, steering, gear, torque, engine-RPM, or motor-RPM signal was isolated.",
+    pipeline === "dbc" ? "DBC Summary: this file contains message and signal definitions only. No behavior, motion, health state, or vehicle type can be inferred from a DBC alone." : pipeline === "log_dbc" ? `Decoded LOG + DBC Summary: ${decodedSignals.length} decoded signal candidates were matched against DBC metadata; strongest state is ${behaviorLabel} at ${Math.round(behaviorConfidence * 100)}% confidence when decoded/named evidence supports it.` : hasDefensibleMotion ? `Vehicle State Summary: strongest defensible state is ${behaviorLabel} at ${Math.round(behaviorConfidence * 100)}% confidence.` : hasBehaviorCandidateEvidence ? `Vehicle State Summary: ${behaviorLabel} at ${Math.round(behaviorConfidence * 100)}% candidate confidence. This is based on byte dynamics, not decoded physical units.` : "Vehicle State Summary: motion cannot be determined from this log because no validated speed, wheel-speed, pedal, brake, steering, gear, torque, engine-RPM, or motor-RPM signal was isolated.",
     `Vehicle type: ${vehicleType.classification} ${vehicleType.confidence_score ? `(${Math.round(vehicleType.confidence_score * 100)}% confidence)` : ""}. ${vehicleType.reasoning}`,
     metadataInsights.has_dbc_metadata ? `DBC/OEM evidence: ${metadataInsights.explanation} This metadata is used for structure and decoding support only, not vehicle-type classification by itself.` : "No DBC metadata was available; vehicle type remains unclassified unless explicit decoded EV, hybrid, or ICE signals are present.",
     behavioralEvidence.length ? `Evidence: ${behavioralEvidence.slice(0, 6).join(" ")}${hasDefensibleMotion ? "" : " These remain unvalidated behavior candidates until decoded with a DBC or controlled captures."}` : "Evidence: no correlated directional speed, wheel, pedal, brake, steering, gear, torque, RPM, or sensor-like byte movement crossed threshold.",
@@ -676,6 +682,9 @@ const runAnalysis = (csv: string) => {
 
   return {
     ok: true,
+    file_type: pipeline,
+    analysis_pipeline: pipelineLabel,
+    supported_file_type: true,
     summary: {
       text: detailedSummary,
       what_the_data_actually_shows: whatDataShows,
