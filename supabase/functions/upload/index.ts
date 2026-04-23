@@ -5,7 +5,7 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
-type CanFormat = "CSV" | "J1939 CSV" | "candump" | "CRTD" | "ASC" | "BLF" | "MDF/MF4" | "CANedge" | "DBC" | "key/value" | "generic TXT";
+type CanFormat = "CSV" | "J1939 CSV" | "candump" | "CRTD" | "TRC" | "ASC" | "BLF" | "MDF/MF4" | "CANedge" | "DBC" | "key/value" | "generic TXT";
 type Frame = { timestamp: string; id: string; dlc: number; data: string[] };
 type ConversionResult = { format: CanFormat; csv: string; frameCount: number; warnings: string[] };
 
@@ -17,7 +17,7 @@ const jsonResponse = (body: unknown, status = 200) =>
 
 const cleanId = (value: string) => value.replace(/^0x/i, "").replace(/[^a-fA-F0-9]/g, "").toUpperCase();
 const cleanByte = (value: string) => value.replace(/^0x/i, "").replace(/[^a-fA-F0-9]/g, "").slice(0, 2).padStart(2, "0").toUpperCase();
-const isId = (value: string) => /^[0-9a-fA-F]{1,8}x?$/.test(value.replace(/^0x/i, ""));
+const isId = (value: string) => /^[0-9a-fA-F]{1,8}[xh]?$/.test(value.replace(/^0x/i, ""));
 const isByte = (value: string) => /^(0x)?[0-9a-fA-F]{1,2}$/.test(value);
 const splitBytes = (value: string) => value.replace(/[^a-fA-F0-9]/g, "").match(/.{1,2}/g)?.slice(0, 8).map(cleanByte) ?? [];
 const csvEscape = (value: string | number) => `"${String(value).replace(/"/g, '""')}"`;
@@ -67,6 +67,7 @@ const detectFormat = (name: string, bytes: Uint8Array, text: string): CanFormat 
   if (signature.startsWith("MDF") || lower.endsWith(".mf4") || lower.endsWith(".mdf")) return "MDF/MF4";
   if (lower.endsWith(".dbc") || /(^|\n)\s*BO_\s+\d+\s+\S+\s*:\s*\d+\s+\S+/m.test(text)) return "DBC";
   if (lower.endsWith(".asc") || /date\s+.*base\s+hex|internal events logged|begin triggerblock/i.test(firstLines)) return "ASC";
+  if (lower.endsWith(".trc") || /\$FILEVERSION=|;\s*\$STARTTIME=|\bPCAN-Trace\b/i.test(firstLines)) return "TRC";
   if (lower.endsWith(".crtd") || /^\s*\d+(?:\.\d+)?\s+[0-9a-fA-F]{3,8}\s+\d\s+/m.test(text)) return "CRTD";
   if (/\(\d+\.\d+\)\s+\w+\s+[0-9a-fA-F]+#|\w+\s+[0-9a-fA-F]+\s+\[\d\]/m.test(text) || lower.endsWith(".log")) return "candump";
   if (/pgn|source|destination|priority|j1939/i.test(firstLines) && lower.endsWith(".csv")) return "J1939 CSV";
