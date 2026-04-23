@@ -9,7 +9,7 @@ import { JsonTable } from "@/components/JsonTable";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Tooltip as UiTooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import { analyzeFile, AnalysisResult } from "@/lib/canApi";
+import { analyzeFile, AnalysisResult, type JsonRecord } from "@/lib/canApi";
 import { requestAiInsight, saveAnalysisSnapshot, type AiInsightKind } from "@/lib/saasApi";
 import { cn } from "@/lib/utils";
 
@@ -46,6 +46,68 @@ const toRecordArray = (value: unknown): Array<Record<string, unknown>> => {
 const numericValue = (row: Record<string, unknown>, keys: string[]) => {
   const value = keys.map((key) => row[key]).find((item) => typeof item === "number" || (typeof item === "string" && !Number.isNaN(Number(item))));
   return value === undefined ? 0 : Number(value);
+};
+
+const titleCase = (value: string) => value.replace(/\w\S*/g, (word) => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase());
+
+const formatReportRows = (title: string, value: unknown, limit = 12) => {
+  const rows = toRecordArray(value).slice(0, limit);
+  if (!rows.length) return `${title}\n- None detected.\n`;
+
+  return `${title}\n${rows.map((row, index) => {
+    const fields = Object.entries(row)
+      .slice(0, 6)
+      .map(([key, item]) => `${titleCase(key.replace(/_/g, " "))}: ${renderText(item).replace(/\n/g, " ")}`)
+      .join(" | ");
+    return `${index + 1}. ${fields}`;
+  }).join("\n")}\n`;
+};
+
+const buildDetailedReport = ({ data, fileId, anomalies, diagnostics, summaryText, componentHealth, busLoad, suspectIds }: { data: AnalysisResult; fileId?: string; anomalies: JsonRecord[]; diagnostics: NonNullable<AnalysisResult["diagnostics"]>; summaryText: unknown; componentHealth: number; busLoad: number; suspectIds: number }) => {
+  const vehicleBehavior = data.vehicle_behavior ?? {};
+  const generatedAt = new Date().toLocaleString();
+  const protocol = diagnostics.protocol && typeof diagnostics.protocol === "object" ? diagnostics.protocol as JsonRecord : {};
+
+  return [
+    "CANAI Detailed Vehicle Health Report",
+    `Generated: ${generatedAt}`,
+    `File ID: ${fileId ?? "—"}`,
+    "",
+    "Executive Snapshot",
+    `- Total Messages: ${data.total_messages ?? "—"}`,
+    `- Unique CAN IDs: ${data.unique_ids ?? "—"}`,
+    `- Anomalies Detected: ${anomalies.length}`,
+    `- Suspect / Repeating IDs: ${suspectIds}`,
+    `- Component Health Score: ${componentHealth}/100`,
+    `- Estimated CAN Bus Load: ${busLoad}%`,
+    `- Likely Protocol: ${renderText(protocol.likely_protocol ?? "Unknown")}`,
+    `- Extended ID Ratio: ${renderText(protocol.extended_id_ratio ?? "—")}`,
+    "",
+    "Mechanic Summary",
+    renderText(diagnostics.mechanic_summary ?? summaryText),
+    "",
+    "Action Notes For Shop Review",
+    anomalies.length
+      ? "- Inspect the listed anomaly frames first, then compare payload length and byte changes against normal operating captures."
+      : "- No payload anomalies were flagged by the current heuristic pass; verify with a second drive-cycle capture if symptoms persist.",
+    "- Prioritize high-frequency IDs when hunting for speed, RPM, pedal, battery, inverter, and chassis signals.",
+    "- Treat candidate signals as leads, not final decoded definitions, until confirmed against vehicle state changes.",
+    "",
+    formatReportRows("Top CAN ID Frequency", data.id_stats, 20),
+    formatReportRows("Anomaly Frames", anomalies, 20),
+    formatReportRows("Reverse Engineering Candidates", data.reverse_engineering, 20),
+    "Vehicle Behavior Candidates",
+    `- Possible Speed IDs: ${(vehicleBehavior.possible_speed_ids ?? []).map(renderText).join(", ") || "None"}`,
+    `- Possible RPM IDs: ${(vehicleBehavior.possible_rpm_ids ?? []).map(renderText).join(", ") || "None"}`,
+    `- Possible Pedal IDs: ${(vehicleBehavior.possible_pedal_ids ?? []).map(renderText).join(", ") || "None"}`,
+    "",
+    formatReportRows("Byte Entropy Analysis", diagnostics.byte_analysis, 8),
+    formatReportRows("Active Bit Candidates", diagnostics.signals && typeof diagnostics.signals === "object" ? (diagnostics.signals as JsonRecord).active_bit_candidates : undefined, 24),
+    formatReportRows("Timing / Jitter Review", diagnostics.timing, 20),
+    formatReportRows("System Classification", diagnostics.systems, 20),
+    "Raw Diagnostic Package",
+    JSON.stringify({ summary: data.summary, diagnostics: data.diagnostics }, null, 2),
+  ].join("\n");
 };
 
 const CollapsiblePanel = ({ title, icon, children, defaultOpen = false }: { title: string; icon: ReactNode; children: ReactNode; defaultOpen?: boolean }) => (
@@ -315,7 +377,7 @@ const Results = () => {
 
   const downloadReport = () => {
     if (!data) return;
-    const report = `CANAI Vehicle Health Report\n\nFile ID: ${fileId}\nTotal messages: ${data.total_messages ?? "—"}\nUnique IDs: ${data.unique_ids ?? "—"}\nAnomalies: ${anomalies.length}\nComponent health: ${componentHealth}/100\nCAN bus load: ${busLoad}%\n\nMechanic Summary:\n${renderText(diagnostics.mechanic_summary ?? summaryText)}`;
+    const report = buildDetailedReport({ data, fileId, anomalies, diagnostics, summaryText, componentHealth, busLoad, suspectIds });
     const url = URL.createObjectURL(new Blob([report], { type: "text/plain" }));
     const link = document.createElement("a");
     link.href = url;
