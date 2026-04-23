@@ -164,6 +164,27 @@ const parseKeyValue = (text: string) => text.split(/\r?\n/).map((line, index) =>
   return id && data ? normalizeFrame(timestamp, id, splitBytes(data)) : null;
 }).filter((frame): frame is Frame => Boolean(frame));
 
+const parseCanedge = (text: string) => text.split(/\r?\n/).flatMap((line, index) => {
+  const trimmed = line.trim().replace(/^,|,$/g, "");
+  if (!trimmed) return [];
+  try {
+    const value = JSON.parse(trimmed);
+    const rows = Array.isArray(value) ? value : [value];
+    return rows.map((row, rowIndex) => {
+      if (!row || typeof row !== "object") return null;
+      const record = row as Record<string, unknown>;
+      const id = record.id ?? record.can_id ?? record.arbitration_id ?? record.message_id ?? record.pgn;
+      const data = record.data ?? record.payload ?? record.bytes ?? record.data_hex;
+      const timestamp = record.timestamp ?? record.time ?? record.ts ?? `${index}.${rowIndex}`;
+      if (id === undefined || data === undefined) return null;
+      const byteArray = Array.isArray(data) ? data.map(String) : splitBytes(String(data));
+      return normalizeFrame(String(timestamp), String(id), byteArray);
+    }).filter((frame): frame is Frame => Boolean(frame));
+  } catch {
+    return [];
+  }
+});
+
 const parseGeneric = (text: string) => text.split(/\r?\n/).map((line, index) => {
   const tokens = line.trim().replace(/[#,;|]/g, " ").split(/\s+/).filter(Boolean);
   const idIndex = tokens.findIndex((token) => isId(token) && cleanId(token).length >= 2);
@@ -188,7 +209,8 @@ const convertFile = async (file: File): Promise<ConversionResult> => {
     : format === "CRTD" ? parseCrtd(text)
     : format === "ASC" ? parseAsc(text)
     : format === "DBC" ? parseDbc(text, warnings)
-    : format === "key/value" || format === "CANedge" ? [...parseKeyValue(text), ...parseGeneric(text)]
+    : format === "key/value" ? [...parseKeyValue(text), ...parseGeneric(text)]
+    : format === "CANedge" ? [...parseCanedge(text), ...parseKeyValue(text), ...parseGeneric(text)]
     : format === "BLF" || format === "MDF/MF4" ? parseBinaryBestEffort(bytes, format, warnings)
     : parseGeneric(text);
 
