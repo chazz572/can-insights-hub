@@ -1,4 +1,4 @@
-import { ArrowRight, BarChart3, BrainCircuit, Radar, ShieldAlert, UploadCloud } from "lucide-react";
+import { Activity, ArrowRight, BarChart3, BrainCircuit, Gauge, Radar, ShieldAlert, UploadCloud, Zap } from "lucide-react";
 import { Link } from "react-router-dom";
 
 import { Button } from "@/components/ui/button";
@@ -19,7 +19,7 @@ const Home = () => (
             <BrainCircuit className="size-4" />
             CAN Bus Intelligence
           </div>
-          <h1 className="max-w-4xl text-5xl font-extrabold leading-tight text-foreground sm:text-6xl lg:text-7xl">CAN AI Analyzer</h1>
+          <h1 className="max-w-4xl text-5xl font-extrabold leading-tight text-foreground sm:text-6xl lg:text-7xl">CAN Intelligence Workstation</h1>
           <p className="mt-6 max-w-2xl text-lg leading-8 text-muted-foreground">
             Upload CSV, candump, ASC, BLF, MF4, CRTD, J1939, or TXT logs and turn raw CAN traffic into structured anomaly reports, signal candidates, and vehicle behavior insights.
           </p>
@@ -33,9 +33,18 @@ const Home = () => (
               <Link to={localStorage.getItem("can_ai_file_id") ? `/results/${localStorage.getItem("can_ai_file_id")}` : "/upload"}>View Results</Link>
             </Button>
           </div>
+          <div className="mt-8 grid max-w-2xl grid-cols-2 gap-3 sm:grid-cols-4">
+            {[[Gauge, "Bus Load", "32%"], [Zap, "Fault Risk", "Low"], [Activity, "Frame Rate", "Live"], [ShieldAlert, "DTC Watch", "Ready"]].map(([Icon, label, value]) => (
+              <div key={String(label)} className="scanline-panel rounded-lg border border-glass-border bg-glass p-3 shadow-glow backdrop-blur">
+                <Icon className="mb-2 size-4 text-primary" />
+                <p className="text-xs font-semibold uppercase text-muted-foreground">{String(label)}</p>
+                <p className="mt-1 font-mono text-lg font-bold text-foreground">{String(value)}</p>
+              </div>
+            ))}
+          </div>
         </div>
 
-        <Card className="animate-fade-up overflow-hidden [animation-delay:120ms]">
+        <Card className="scanline-panel animate-fade-up overflow-hidden [animation-delay:120ms]">
           <CardContent className="p-6">
             <div className="mb-6 flex items-center justify-between border-b border-glass-border pb-5">
               <div>
