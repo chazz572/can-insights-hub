@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { BellRing, CheckCircle2, Code2, Download, FileJson, FileText, Link2, Share2, Webhook } from "lucide-react";
+import { BellRing, CheckCircle2, Code2, Download, FileJson, FileText, Link2, ShieldCheck, Share2, Webhook } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -20,10 +20,19 @@ const Reports = () => {
 
   return (
   <main className="mx-auto min-h-screen max-w-7xl px-4 py-8 sm:px-6 lg:px-10">
-    <section className="mb-8 animate-fade-up">
+    <section className="mb-8 animate-fade-up rounded-lg border border-glass-border bg-glass-strong p-5 shadow-dashboard backdrop-blur sm:p-7">
       <p className="inline-flex items-center gap-2 rounded-lg border border-glass-border bg-glass px-3 py-1 text-sm font-semibold uppercase text-primary shadow-glow backdrop-blur"><Download className="size-4" /> Reports & API</p>
-      <h1 className="mt-4 text-4xl font-extrabold tracking-tight sm:text-5xl">Export, Share, and Automate</h1>
-      <p className="mt-3 max-w-2xl text-muted-foreground">Commercial reporting, developer API access, and notification surfaces for production diagnostics workflows.</p>
+      <div className="mt-5 grid gap-6 lg:grid-cols-[1fr_0.75fr] lg:items-end">
+        <div>
+          <h1 className="text-4xl font-extrabold tracking-tight sm:text-5xl">Export, Share, and Automate</h1>
+          <p className="mt-3 max-w-2xl text-muted-foreground">Commercial reporting, developer API access, and notification surfaces for production diagnostics workflows.</p>
+        </div>
+        <div className="rounded-lg border border-primary/30 bg-gradient-subtle p-4">
+          <ShieldCheck className="mb-3 size-6 text-primary" />
+          <p className="font-semibold text-foreground">Professional delivery layer</p>
+          <p className="mt-1 text-sm leading-6 text-muted-foreground">Outputs are structured for customer review, engineering export, and workflow automation.</p>
+        </div>
+      </div>
     </section>
 
     <div className="grid gap-6 lg:grid-cols-4">

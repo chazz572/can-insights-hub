@@ -1,5 +1,5 @@
 import { FormEvent, useEffect, useState } from "react";
-import { AlertTriangle, Car, Gauge, Loader2, MapPinned, Route, ShieldCheck, Wrench } from "lucide-react";
+import { AlertTriangle, BarChart3, Car, Gauge, Loader2, MapPinned, Route, ShieldCheck, TrendingUp, Wrench } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -33,10 +33,17 @@ const Fleet = () => {
 
   return (
     <main className="mx-auto min-h-screen max-w-7xl px-4 py-8 sm:px-6 lg:px-10">
-      <section className="mb-8 animate-fade-up">
+      <section className="mb-8 animate-fade-up rounded-lg border border-glass-border bg-glass-strong p-5 shadow-dashboard backdrop-blur sm:p-7">
         <p className="inline-flex items-center gap-2 rounded-lg border border-glass-border bg-glass px-3 py-1 text-sm font-semibold uppercase text-primary shadow-glow backdrop-blur"><Car className="size-4" /> Fleet Intelligence</p>
-        <h1 className="mt-4 text-4xl font-extrabold tracking-tight sm:text-5xl">Multi-Vehicle Health Dashboard</h1>
-        <p className="mt-3 max-w-2xl text-muted-foreground">Track health scores, driver behavior signals, and maintenance prediction across commercial vehicles.</p>
+        <div className="mt-5 grid gap-6 lg:grid-cols-[1fr_0.75fr] lg:items-end">
+          <div>
+            <h1 className="text-4xl font-extrabold tracking-tight sm:text-5xl">Multi-Vehicle Health Operations</h1>
+            <p className="mt-3 max-w-2xl text-muted-foreground">Track health scores, driver behavior signals, maintenance prediction, and readiness across commercial vehicles.</p>
+          </div>
+          <div className="grid gap-3 sm:grid-cols-3 lg:grid-cols-1">
+            {[[Gauge, `${vehicles.length || 3}`, "Assets"], [TrendingUp, "Live", "Risk model"], [BarChart3, "Ready", "Reports"]].map(([Icon, value, label]) => <div key={String(label)} className="rounded-lg border border-glass-border bg-glass p-3"><Icon className="mb-2 size-4 text-primary" /><p className="font-mono text-lg font-bold text-foreground">{String(value)}</p><p className="text-xs font-semibold uppercase text-muted-foreground">{String(label)}</p></div>)}
+          </div>
+        </div>
       </section>
       <Card className="mb-6 animate-fade-up overflow-hidden">
         <CardContent className="p-5">

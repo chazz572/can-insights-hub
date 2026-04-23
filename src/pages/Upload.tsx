@@ -1,5 +1,5 @@
 import { ChangeEvent, DragEvent, FormEvent, useEffect, useState } from "react";
-import { AlertTriangle, CheckCircle2, FileArchive, FileCode2, FileText, Files, Loader2, UploadCloud } from "lucide-react";
+import { AlertTriangle, CheckCircle2, FileArchive, FileCode2, FileText, Files, Loader2, Route, ScanLine, ShieldCheck, UploadCloud } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 
 import { Button } from "@/components/ui/button";
@@ -107,14 +107,25 @@ const Upload = () => {
   };
 
   return (
-    <main className="grid min-h-screen place-items-center px-4 py-10 sm:px-6 lg:px-8">
-      <Card className="w-full max-w-4xl animate-fade-up overflow-hidden">
+    <main className="mx-auto grid min-h-screen max-w-7xl gap-6 px-4 py-10 sm:px-6 lg:px-8 xl:grid-cols-[0.9fr_1.1fr] xl:items-start">
+      <section className="animate-fade-up rounded-lg border border-glass-border bg-glass-strong p-5 shadow-dashboard backdrop-blur sm:p-7">
+        <p className="inline-flex items-center gap-2 rounded-lg border border-glass-border bg-glass px-3 py-1 text-sm font-semibold uppercase text-primary shadow-glow"><ScanLine className="size-4" /> Intake Pipeline</p>
+        <h1 className="mt-5 text-4xl font-extrabold tracking-tight sm:text-5xl">Upload once. Route every CAN artifact correctly.</h1>
+        <p className="mt-4 text-sm leading-6 text-muted-foreground">Professional intake for logs, DBC definitions, mixed captures, and batch workflows with clear status before analysis begins.</p>
+        <div className="mt-6 grid gap-3">
+          {[[Route, "Format-aware routing", "LOG, DBC, LOG+DBC, and batch paths remain distinct."], [ShieldCheck, "Evidence integrity", "Files are validated before conversion and analysis."], [FileText, "Workspace handoff", "Successful uploads open the right result or batch review screen."]].map(([Icon, title, text]) => (
+            <div key={String(title)} className="flex gap-3 rounded-lg border border-glass-border bg-glass p-4"><Icon className="mt-1 size-5 shrink-0 text-primary" /><div><p className="font-semibold text-foreground">{String(title)}</p><p className="text-sm leading-6 text-muted-foreground">{String(text)}</p></div></div>
+          ))}
+        </div>
+      </section>
+
+      <Card className="w-full animate-fade-up overflow-hidden">
         <CardHeader>
           <div className="mb-3 grid size-14 place-items-center rounded-lg bg-gradient-accent text-primary-foreground shadow-glow">
             <UploadCloud className="size-7" />
           </div>
-          <CardTitle className="text-3xl">Universal CAN Log Upload</CardTitle>
-          <CardDescription>Auto-detect CSV, TRC, candump, CRTD, ASC, BLF, MF4/MDF, CANedge, DBC, J1939, and generic text logs, then normalize them into the internal CSV pipeline.</CardDescription>
+          <CardTitle className="text-3xl">Universal CAN Intake</CardTitle>
+          <CardDescription>Auto-detect CSV, TRC, candump, CRTD, ASC, BLF, MF4/MDF, CANedge, DBC, J1939, and generic text logs, then route each file into the appropriate analysis pipeline.</CardDescription>
         </CardHeader>
         <CardContent>
           <form className="space-y-6" onSubmit={handleSubmit}>
