@@ -103,6 +103,8 @@ const Results = () => {
   const data = analysis;
   const anomalies = data?.anomalies ?? [];
   const vehicleBehavior = data?.vehicle_behavior ?? {};
+  const summary = data?.summary;
+  const summaryText = summary && typeof summary === "object" && !Array.isArray(summary) ? summary.text ?? summary : summary;
 
   return (
     <main className="mx-auto min-h-screen max-w-7xl px-4 py-8 sm:px-6 lg:px-10">
@@ -143,7 +145,7 @@ const Results = () => {
         <div className="grid gap-6">
           <div className="grid gap-6 xl:grid-cols-[1.25fr_0.75fr]">
             <AnalysisCard title="Summary" icon={<MessageSquareText className="size-5" />}>
-              <pre className="whitespace-pre-wrap rounded-lg border border-glass-border bg-glass p-5 text-sm leading-7 text-foreground backdrop-blur">{renderText(data.summary)}</pre>
+              <pre className="whitespace-pre-wrap rounded-lg border border-glass-border bg-glass p-5 text-sm leading-7 text-foreground backdrop-blur">{renderText(summaryText)}</pre>
             </AnalysisCard>
             <AnalysisCard title="Signal Activity" description="Live telemetry intensity preview." icon={<BarChart3 className="size-5" />}>
               <MiniChart />
@@ -171,11 +173,18 @@ const Results = () => {
           </AnalysisCard>
 
           <AnalysisCard title="Vehicle Behavior" icon={<Gauge className="size-5" />}>
-            <div className="grid gap-5 lg:grid-cols-3">
-              <div className="space-y-3"><h3 className="font-semibold">Possible Speed IDs</h3>{renderList(vehicleBehavior.possible_speed_ids)}</div>
-              <div className="space-y-3"><h3 className="font-semibold">Possible RPM IDs</h3>{renderList(vehicleBehavior.possible_rpm_ids)}</div>
-              <div className="space-y-3"><h3 className="font-semibold">Possible Pedal IDs</h3>{renderList(vehicleBehavior.possible_pedal_ids)}</div>
+            <div className="grid gap-5">
+              <div className="grid gap-5 lg:grid-cols-3">
+                <div className="space-y-3"><h3 className="font-semibold">Possible Speed IDs</h3>{renderList(vehicleBehavior.possible_speed_ids)}</div>
+                <div className="space-y-3"><h3 className="font-semibold">Possible RPM IDs</h3>{renderList(vehicleBehavior.possible_rpm_ids)}</div>
+                <div className="space-y-3"><h3 className="font-semibold">Possible Pedal IDs</h3>{renderList(vehicleBehavior.possible_pedal_ids)}</div>
+              </div>
+              <JsonTable data={vehicleBehavior} />
             </div>
+          </AnalysisCard>
+
+          <AnalysisCard title="Advanced Diagnostics" description="Complete diagnostics payload returned by the backend." icon={<BrainCircuit className="size-5" />}>
+            <JsonTable data={data.diagnostics} />
           </AnalysisCard>
         </div>
       ) : null}

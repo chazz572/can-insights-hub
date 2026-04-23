@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { analyzeFile, uploadCsv } from "@/lib/canApi";
+import { uploadCsv } from "@/lib/canApi";
 import { cn } from "@/lib/utils";
 
 const Upload = () => {
@@ -72,7 +72,6 @@ const Upload = () => {
 
     try {
       const fileId = await uploadCsv(file);
-      await analyzeFile(fileId);
       setProgress(100);
       setIsComplete(true);
       localStorage.setItem("can_ai_file_id", fileId);
