@@ -4,12 +4,13 @@ import { Link, NavLink as RouterNavLink, useLocation } from "react-router-dom";
 
 import { cn } from "@/lib/utils";
 
-const navClass = ({ isActive }: { isActive: boolean }) =>
+const navClass = ({ isActive, highlight }: { isActive: boolean; highlight?: boolean }) =>
   cn(
     "group flex items-center gap-3 rounded-lg px-4 py-3 text-sm font-semibold transition-all duration-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
     isActive
       ? "bg-gradient-accent text-primary-foreground shadow-glow"
       : "text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground hover:shadow-glow",
+    highlight && !isActive && "border border-primary/30 bg-primary/5 text-primary",
   );
 
 export const AppNav = () => {
