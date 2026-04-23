@@ -514,8 +514,9 @@ const Results = () => {
   const summary = data?.summary;
   const summaryText = summary && typeof summary === "object" && !Array.isArray(summary) ? summary.text ?? summary : summary;
   const diagnostics = data?.diagnostics ?? {};
-  const fileType = String(data?.file_type ?? diagnostics.file_routing && typeof diagnostics.file_routing === "object" ? (diagnostics.file_routing as JsonRecord).file_type ?? "log" : "log");
-  const pipelineLabel = String(data?.analysis_pipeline ?? diagnostics.file_routing && typeof diagnostics.file_routing === "object" ? (diagnostics.file_routing as JsonRecord).analysis_pipeline ?? "Raw CAN log intelligence" : "Raw CAN log intelligence");
+  const routing = diagnostics.file_routing && typeof diagnostics.file_routing === "object" ? diagnostics.file_routing as JsonRecord : {};
+  const fileType = String(data?.file_type ?? routing.file_type ?? "log");
+  const pipelineLabel = String(data?.analysis_pipeline ?? routing.analysis_pipeline ?? "Raw CAN log intelligence");
   const idStats = data?.id_stats ?? [];
   const networkHealth = diagnostics.network_health && typeof diagnostics.network_health === "object" ? diagnostics.network_health as JsonRecord : {};
   const timingRows = toRecordArray(diagnostics.timing);
@@ -768,6 +769,7 @@ const Results = () => {
               <CollapsiblePanel title="Mechanic Summary" icon={<Wrench className="size-5" />} defaultOpen><MechanicSummary data={diagnostics.mechanic_summary} /></CollapsiblePanel>
             </div>
           </AnalysisCard>
+          </>}
         </div>
       ) : null}
     </main>
