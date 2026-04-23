@@ -171,7 +171,7 @@ const Workspace = () => {
         </div>
       </div>
 
-      <div className="mt-6 flex items-center justify-between rounded-sm border-2 border-primary/40 bg-primary/5 p-4">
+      <div className="data-panel mt-6 flex items-center justify-between p-4">
         <div className="flex items-center gap-3">
           <Wrench className="size-5 text-primary" />
           <p className="font-display text-sm font-bold uppercase tracking-wider text-foreground">Ready to start a job?</p>
