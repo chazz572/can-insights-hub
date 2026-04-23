@@ -570,6 +570,8 @@ const runAnalysis = (csv: string) => {
         reversals: trend.reversals,
         mean_abs_delta: Number(trend.meanAbsDelta.toFixed(3)),
         smoothness: Number(trend.smoothness.toFixed(3)),
+        net_change_ratio: trend.net_change_ratio,
+        cyclic_score: trend.cyclic_score,
         confidence_score: Number(Math.min(0.96, score).toFixed(3)),
         likely_signal_type: byte_start <= 2 && Math.max(...values) > 900 && Math.max(...values) < 9000 ? "rpm_candidate" : "analog_signal_candidate",
         reasoning: "Smooth changing 16-bit byte pair with enough range, transitions, and directional structure to resemble a live vehicle signal.",
