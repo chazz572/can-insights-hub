@@ -220,6 +220,7 @@ const convertFile = async (file: File): Promise<ConversionResult> => {
   const frames = format === "CSV" || format === "J1939 CSV" ? parseCsv(text, warnings, format)
     : format === "candump" ? parseCandump(text)
     : format === "CRTD" ? parseCrtd(text)
+    : format === "TRC" ? parseTrc(text)
     : format === "ASC" ? parseAsc(text)
     : format === "DBC" ? parseDbc(text, warnings)
     : format === "key/value" ? [...parseKeyValue(text), ...parseGeneric(text)]
@@ -234,7 +235,7 @@ const convertFile = async (file: File): Promise<ConversionResult> => {
     seen.add(key);
     return true;
   });
-  if (!deduped.length) throw new Error(`No valid CAN frames found in ${file.name}. Try ASC, CSV, candump, CRTD, or a text export if this is a proprietary binary log.`);
+  if (!deduped.length) throw new Error(`No valid CAN frames found in ${file.name}. Try ASC, CSV, TRC, candump, CRTD, or a text export if this is a proprietary binary log.`);
   const malformed = text.split(/\r?\n/).filter((line) => line.trim()).length - deduped.length;
   if (malformed > 0 && format !== "CSV" && format !== "BLF" && format !== "MDF/MF4") warnings.push(`${malformed} line(s) were skipped because they did not look like valid CAN frames.`);
   return { format, csv: toCsv(deduped), frameCount: deduped.length, warnings };
