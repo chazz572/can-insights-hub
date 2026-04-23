@@ -491,6 +491,10 @@ const Results = () => {
   const suspectIds = toRecordArray(idStats).filter((row) => numericValue(row, ["count", "frequency", "messages", "total", "value"]) > 1).length;
   const vehicleIdentification = data ? inferVehicleIdentification(data) : null;
   const partialDbcDraft = data ? buildPartialDbcDraft(generatePartialDbcCandidates(data)) : "";
+  const vehicleState = diagnostics.vehicle_state && typeof diagnostics.vehicle_state === "object" ? diagnostics.vehicle_state as JsonRecord : {};
+  const shortPlainSummary = data
+    ? `This log contains ${data.total_messages ?? "multiple"} CAN messages across ${data.unique_ids ?? "several"} IDs, and the strongest vehicle-state read is ${renderText(vehicleState.classification ?? "general module activity").replace(/_/g, " ")}. ${anomalies.length ? `${anomalies.length} unusual payload event${anomalies.length === 1 ? "" : "s"} should be reviewed.` : "No major payload abnormalities were detected in this capture."}`
+    : "";
 
   const saveSnapshot = async () => {
     if (!fileId || !data) return;
@@ -581,6 +585,7 @@ const Results = () => {
           <div className="grid gap-6 xl:grid-cols-[1.25fr_0.75fr]">
             <AnalysisCard title="Summary" icon={<MessageSquareText className="size-5" />}>
               <div className="grid gap-4">
+                <div className="rounded-lg border border-primary/30 bg-gradient-subtle p-4 text-sm font-medium leading-6 text-foreground shadow-glow backdrop-blur">{shortPlainSummary}</div>
                 <pre className="whitespace-pre-wrap rounded-lg border border-glass-border bg-glass p-5 text-sm leading-7 text-foreground backdrop-blur">{renderText(summaryText)}</pre>
               </div>
             </AnalysisCard>
