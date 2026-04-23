@@ -748,6 +748,21 @@ const runAnalysis = (csv: string) => {
     }];
   }) : [];
 
+  const decodedSpeedIds = decodedSignals.filter((signal) => /speed|wheel/i.test(String(signal.signal_name))).map((signal) => String(signal.id));
+  const decodedRpmIds = decodedSignals.filter((signal) => /rpm|engine|motor/i.test(String(signal.signal_name))).map((signal) => String(signal.id));
+  const decodedPedalIds = decodedSignals.filter((signal) => /pedal|brake|steer/i.test(String(signal.signal_name))).map((signal) => String(signal.id));
+  const vehicleBehavior = pipeline === "log_dbc" ? {
+    possible_speed_ids: [...new Set(decodedSpeedIds)],
+    possible_rpm_ids: [...new Set(decodedRpmIds)],
+    possible_pedal_ids: [...new Set(decodedPedalIds)],
+    decoded_signal_count: decodedSignals.length,
+    evidence_source: "DBC decoded signals only; raw byte heuristics suppressed.",
+  } : {
+    possible_speed_ids: [...speedIds],
+    possible_rpm_ids: [...rpmIds],
+    possible_pedal_ids: [...pedalIds],
+  };
+
   const idClassifications = idDeepDive.map((item) => {
     const volatileByteCount = Array.isArray(item.volatile_bytes) ? item.volatile_bytes.length : 0;
     const changeRate = Number(item.payload_change_rate);
