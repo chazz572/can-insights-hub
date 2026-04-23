@@ -434,6 +434,37 @@ const ModuleActivityMap = ({ systems }: { systems: unknown }) => {
   );
 };
 
+const PipelineBadge = ({ type, label }: { type: string; label: string }) => (
+  <span className="inline-flex max-w-full items-center gap-2 rounded-lg border border-glass-border bg-secondary px-3 py-1 text-xs font-bold uppercase leading-5 text-secondary-foreground shadow-glow">
+    <FileText className="size-4 shrink-0" />
+    <span className="text-fit-tile">{type.replace(/_/g, " ")} · {label}</span>
+  </span>
+);
+
+const DbcViewer = ({ diagnostics }: { diagnostics: AnalysisResult["diagnostics"] }) => {
+  const dbc = diagnostics?.dbc && typeof diagnostics.dbc === "object" ? diagnostics.dbc as JsonRecord : {};
+  return (
+    <div className="grid gap-6">
+      <AnalysisCard title="DBC Message List" description="Definitions from BO_ entries only; no vehicle behavior is inferred." icon={<FileCode2 className="size-5" />}><JsonTable data={dbc.messages} /></AnalysisCard>
+      <AnalysisCard title="DBC Signal List" description="SG_ bit positions, scaling, units, value ranges, signedness, and byte order." icon={<Binary className="size-5" />}><JsonTable data={dbc.signals} /></AnalysisCard>
+      <AnalysisCard title="Bit Layout Viewer" description="Signal placement and multiplexing structure by message." icon={<Layers3 className="size-5" />}><JsonTable data={dbc.bit_layout} /></AnalysisCard>
+    </div>
+  );
+};
+
+const LogPipelinePanels = ({ data, diagnostics, idStats, anomalies, vehicleBehavior, partialDbcDraft }: { data: AnalysisResult; diagnostics: NonNullable<AnalysisResult["diagnostics"]>; idStats: JsonRecord[]; anomalies: JsonRecord[]; vehicleBehavior: NonNullable<AnalysisResult["vehicle_behavior"]>; partialDbcDraft: string }) => (
+  <div className="grid gap-5">
+    <CollapsiblePanel title="Raw Message Table & ID Activity" icon={<Binary className="size-5" />} defaultOpen><FrequencyChart data={idStats} /><div className="mb-4"><IdActivityTimeline data={idStats} /></div><JsonTable data={idStats} /></CollapsiblePanel>
+    <CollapsiblePanel title="Timing Charts" icon={<Clock className="size-5" />} defaultOpen><TimingLineChart data={diagnostics.timing} /><JsonTable data={diagnostics.timing} /></CollapsiblePanel>
+    <CollapsiblePanel title="Entropy & Byte-Change Charts" icon={<Layers3 className="size-5" />}><ByteEntropyHeatmap data={diagnostics.byte_analysis} /><div className="mt-4"><ByteCorrelationHeatmap data={diagnostics.byte_analysis} /></div><div className="mt-4"><BitToggleVisualization data={diagnostics.bit_analysis} /></div></CollapsiblePanel>
+    <CollapsiblePanel title="ECU Activity Map" icon={<Map className="size-5" />}><ModuleActivityMap systems={diagnostics.systems} /></CollapsiblePanel>
+    <CollapsiblePanel title="Anomalies & Health Indicators" icon={<AlertTriangle className="size-5" />} defaultOpen><JsonTable data={anomalies} /></CollapsiblePanel>
+    <CollapsiblePanel title="Reverse-Engineering Insights" icon={<Radar className="size-5" />}><JsonTable data={data.reverse_engineering} /><div className="mt-4"><JsonTable data={diagnostics.counter_checksum_analysis} /></div></CollapsiblePanel>
+    <CollapsiblePanel title="Vehicle Behavior Candidates" icon={<Gauge className="size-5" />}><div className="grid gap-5 lg:grid-cols-3"><div className="space-y-3"><h3 className="font-semibold">Speed Candidates</h3>{renderList(vehicleBehavior.possible_speed_ids)}</div><div className="space-y-3"><h3 className="font-semibold">RPM Candidates</h3>{renderList(vehicleBehavior.possible_rpm_ids)}</div><div className="space-y-3"><h3 className="font-semibold">Pedal Candidates</h3>{renderList(vehicleBehavior.possible_pedal_ids)}</div></div></CollapsiblePanel>
+    <CollapsiblePanel title="Partial DBC Draft Available" icon={<Download className="size-5" />}><pre className="whitespace-pre-wrap rounded-lg border border-glass-border bg-glass p-4 text-sm text-foreground">{partialDbcDraft}</pre></CollapsiblePanel>
+  </div>
+);
+
 const Results = () => {
   const { id, file_id } = useParams();
   const fileId = file_id ?? id;
