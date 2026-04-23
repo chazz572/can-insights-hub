@@ -64,7 +64,7 @@ export const AppNav = () => {
           </span>
           <span>
             <span className="block text-base font-bold text-foreground">CANAI Analyzer</span>
-            <span className="text-xs font-medium text-muted-foreground">AI analytics suite</span>
+            <span className="text-xs font-medium text-muted-foreground">AI Analytics Suite</span>
           </span>
         </Link>
 
@@ -86,16 +86,16 @@ export const AppNav = () => {
         </div>
 
         <div className="mt-auto rounded-lg border border-glass-border bg-glass p-4 backdrop-blur">
-          <p className="text-xs font-semibold uppercase text-primary">Universal CAN platform</p>
-          <p className="mt-2 text-sm leading-6 text-muted-foreground">Formats · diagnostics · engineering · fleet · AI</p>
+          <p className="text-xs font-semibold uppercase text-primary">Universal CAN Platform</p>
+          <p className="mt-2 text-sm leading-6 text-muted-foreground">Formats · Diagnostics · Engineering · Fleet · AI</p>
         </div>
       </aside>
 
       <header className="fixed inset-x-0 top-0 z-30 border-b border-glass-border bg-background/70 px-4 py-3 shadow-dashboard backdrop-blur-xl md:left-72 md:px-8">
         <div className="flex items-center justify-between gap-4">
           <div className="min-w-0">
-            <p className="text-xs font-semibold uppercase text-primary">Automotive intelligence platform</p>
-            <p className="truncate text-sm text-muted-foreground">Cloud CAN analysis · diagnostics · reverse engineering</p>
+            <p className="text-xs font-semibold uppercase text-primary">Automotive Intelligence Platform</p>
+            <p className="truncate text-sm text-muted-foreground">Cloud CAN Analysis · Diagnostics · Reverse Engineering</p>
           </div>
           <div className="flex items-center gap-2">
             <button type="button" aria-label="Toggle theme" onClick={() => setTheme((current) => current === "dark" ? "light" : "dark")} className="grid size-10 place-items-center rounded-lg border border-glass-border bg-glass text-foreground shadow-glow backdrop-blur transition-all duration-300 hover:scale-105 hover:border-primary/40">
