@@ -1,4 +1,4 @@
-import { AlertTriangle, Activity, BarChart3, Binary, BrainCircuit, ChevronDown, Clock, Cpu, Gauge, Hash, Layers3, MessageSquareText, Radar, ShieldCheck, Wrench, Zap } from "lucide-react";
+import { AlertTriangle, Activity, BarChart3, Binary, BrainCircuit, ChevronDown, Clock, Cpu, Download, Gauge, Hash, Layers3, Loader2, MessageSquareText, Radar, Save, ShieldCheck, Sparkles, Wrench, Zap } from "lucide-react";
 import { useEffect, useState } from "react";
 import type { ReactNode } from "react";
 import { Link, useParams } from "react-router-dom";
@@ -9,6 +9,7 @@ import { JsonTable } from "@/components/JsonTable";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { analyzeFile, AnalysisResult } from "@/lib/canApi";
+import { requestAiInsight, saveAnalysisSnapshot, type AiInsightKind } from "@/lib/saasApi";
 import { cn } from "@/lib/utils";
 
 const renderText = (value: unknown) => {
@@ -222,6 +223,9 @@ const Results = () => {
   const fileId = file_id ?? id;
   const [analysis, setAnalysis] = useState<AnalysisResult | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [actionMessage, setActionMessage] = useState<string | null>(null);
+  const [aiInsight, setAiInsight] = useState<string | null>(null);
+  const [aiLoading, setAiLoading] = useState<AiInsightKind | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
@@ -267,6 +271,40 @@ const Results = () => {
   const busLoad = Math.min(100, Math.round(((data?.total_messages ?? 0) / Math.max(Number(data?.unique_ids ?? 1), 1)) * 10));
   const componentHealth = Math.max(0, Math.min(100, 100 - anomalies.length * 12));
   const suspectIds = toRecordArray(idStats).filter((row) => numericValue(row, ["count", "frequency", "messages", "total", "value"]) > 1).length;
+
+  const saveSnapshot = async () => {
+    if (!fileId || !data) return;
+    try {
+      await saveAnalysisSnapshot({ fileId, result: data });
+      setActionMessage("Analysis saved to your workspace.");
+    } catch (saveError) {
+      setActionMessage(saveError instanceof Error ? saveError.message : "Unable to save analysis.");
+    }
+  };
+
+  const runAi = async (kind: AiInsightKind) => {
+    if (!data) return;
+    setAiLoading(kind);
+    setAiInsight(null);
+    try {
+      setAiInsight(await requestAiInsight({ kind, analysis: data }));
+    } catch (aiError) {
+      setAiInsight(aiError instanceof Error ? aiError.message : "AI insight failed.");
+    } finally {
+      setAiLoading(null);
+    }
+  };
+
+  const downloadReport = () => {
+    if (!data) return;
+    const report = `CANAI Vehicle Health Report\n\nFile ID: ${fileId}\nTotal messages: ${data.total_messages ?? "—"}\nUnique IDs: ${data.unique_ids ?? "—"}\nAnomalies: ${anomalies.length}\nComponent health: ${componentHealth}/100\nCAN bus load: ${busLoad}%\n\nMechanic Summary:\n${renderText(diagnostics.mechanic_summary ?? summaryText)}`;
+    const url = URL.createObjectURL(new Blob([report], { type: "text/plain" }));
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `canai-health-report-${fileId}.txt`;
+    link.click();
+    URL.revokeObjectURL(url);
+  };
 
   return (
     <main className="mx-auto min-h-screen max-w-7xl px-4 py-8 sm:px-6 lg:px-10">
