@@ -14,6 +14,50 @@ export type Database = {
   }
   public: {
     Tables: {
+      api_keys: {
+        Row: {
+          created_at: string
+          id: string
+          key_prefix: string
+          last_used_at: string | null
+          name: string
+          revoked_at: string | null
+          scopes: string[]
+          team_id: string | null
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          key_prefix: string
+          last_used_at?: string | null
+          name: string
+          revoked_at?: string | null
+          scopes?: string[]
+          team_id?: string | null
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          key_prefix?: string
+          last_used_at?: string | null
+          name?: string
+          revoked_at?: string | null
+          scopes?: string[]
+          team_id?: string | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "api_keys_team_id_fkey"
+            columns: ["team_id"]
+            isOneToOne: false
+            referencedRelation: "teams"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       can_uploads: {
         Row: {
           content_type: string | null
@@ -41,12 +85,289 @@ export type Database = {
         }
         Relationships: []
       }
+      fleet_vehicles: {
+        Row: {
+          created_at: string
+          health_score: number
+          id: string
+          last_analysis_id: string | null
+          make: string | null
+          mileage: number | null
+          model: string | null
+          model_year: number | null
+          status: string
+          team_id: string | null
+          updated_at: string
+          user_id: string
+          vehicle_name: string
+          vin: string | null
+        }
+        Insert: {
+          created_at?: string
+          health_score?: number
+          id?: string
+          last_analysis_id?: string | null
+          make?: string | null
+          mileage?: number | null
+          model?: string | null
+          model_year?: number | null
+          status?: string
+          team_id?: string | null
+          updated_at?: string
+          user_id: string
+          vehicle_name: string
+          vin?: string | null
+        }
+        Update: {
+          created_at?: string
+          health_score?: number
+          id?: string
+          last_analysis_id?: string | null
+          make?: string | null
+          mileage?: number | null
+          model?: string | null
+          model_year?: number | null
+          status?: string
+          team_id?: string | null
+          updated_at?: string
+          user_id?: string
+          vehicle_name?: string
+          vin?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "fleet_vehicles_last_analysis_id_fkey"
+            columns: ["last_analysis_id"]
+            isOneToOne: false
+            referencedRelation: "saved_analyses"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "fleet_vehicles_team_id_fkey"
+            columns: ["team_id"]
+            isOneToOne: false
+            referencedRelation: "teams"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      profiles: {
+        Row: {
+          avatar_url: string | null
+          company_name: string | null
+          created_at: string
+          display_name: string | null
+          id: string
+          onboarding_completed: boolean
+          preferences: Json
+          role_title: string | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          avatar_url?: string | null
+          company_name?: string | null
+          created_at?: string
+          display_name?: string | null
+          id?: string
+          onboarding_completed?: boolean
+          preferences?: Json
+          role_title?: string | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          avatar_url?: string | null
+          company_name?: string | null
+          created_at?: string
+          display_name?: string | null
+          id?: string
+          onboarding_completed?: boolean
+          preferences?: Json
+          role_title?: string | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      saved_analyses: {
+        Row: {
+          created_at: string
+          file_id: string
+          health_score: number
+          id: string
+          notes: string | null
+          result_snapshot: Json
+          tags: string[]
+          team_id: string | null
+          title: string
+          updated_at: string
+          user_id: string
+          vehicle_label: string | null
+        }
+        Insert: {
+          created_at?: string
+          file_id: string
+          health_score?: number
+          id?: string
+          notes?: string | null
+          result_snapshot?: Json
+          tags?: string[]
+          team_id?: string | null
+          title: string
+          updated_at?: string
+          user_id: string
+          vehicle_label?: string | null
+        }
+        Update: {
+          created_at?: string
+          file_id?: string
+          health_score?: number
+          id?: string
+          notes?: string | null
+          result_snapshot?: Json
+          tags?: string[]
+          team_id?: string | null
+          title?: string
+          updated_at?: string
+          user_id?: string
+          vehicle_label?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "saved_analyses_team_id_fkey"
+            columns: ["team_id"]
+            isOneToOne: false
+            referencedRelation: "teams"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      saved_comparisons: {
+        Row: {
+          baseline_file_id: string | null
+          comparison_file_id: string | null
+          comparison_type: string
+          created_at: string
+          id: string
+          summary: Json
+          team_id: string | null
+          title: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          baseline_file_id?: string | null
+          comparison_file_id?: string | null
+          comparison_type?: string
+          created_at?: string
+          id?: string
+          summary?: Json
+          team_id?: string | null
+          title: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          baseline_file_id?: string | null
+          comparison_file_id?: string | null
+          comparison_type?: string
+          created_at?: string
+          id?: string
+          summary?: Json
+          team_id?: string | null
+          title?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "saved_comparisons_team_id_fkey"
+            columns: ["team_id"]
+            isOneToOne: false
+            referencedRelation: "teams"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      team_members: {
+        Row: {
+          created_at: string
+          id: string
+          member_role: string
+          team_id: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          member_role?: string
+          team_id: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          member_role?: string
+          team_id?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "team_members_team_id_fkey"
+            columns: ["team_id"]
+            isOneToOne: false
+            referencedRelation: "teams"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      teams: {
+        Row: {
+          billing_status: string
+          created_at: string
+          created_by: string
+          id: string
+          name: string
+          plan_tier: string
+          seat_limit: number
+          updated_at: string
+        }
+        Insert: {
+          billing_status?: string
+          created_at?: string
+          created_by: string
+          id?: string
+          name: string
+          plan_tier?: string
+          seat_limit?: number
+          updated_at?: string
+        }
+        Update: {
+          billing_status?: string
+          created_at?: string
+          created_by?: string
+          id?: string
+          name?: string
+          plan_tier?: string
+          seat_limit?: number
+          updated_at?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      is_team_admin: {
+        Args: { _team_id: string; _user_id: string }
+        Returns: boolean
+      }
+      is_team_member: {
+        Args: { _team_id: string; _user_id: string }
+        Returns: boolean
+      }
     }
     Enums: {
       [_ in never]: never
