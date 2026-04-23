@@ -188,15 +188,62 @@ const MechanicSummary = ({ data }: { data: unknown }) => (
   </div>
 );
 
-const PlainEnglishSummary = ({ totalMessages, uniqueIds, anomalies, suspectIds, componentHealth }: { totalMessages: unknown; uniqueIds: unknown; anomalies: number; suspectIds: number; componentHealth: number }) => {
-  const condition = anomalies > 5 || componentHealth < 55 ? "there are several things worth investigating" : anomalies > 0 || componentHealth < 80 ? "the log is mostly readable, but a few items need attention" : "the log looks generally normal from this scan";
+const averageNumeric = (rows: Array<Record<string, unknown>>, keys: string[]) => {
+  const values = rows.map((row) => numericValue(row, keys)).filter((value) => Number.isFinite(value) && value > 0);
+  return values.length ? values.reduce((sum, value) => sum + value, 0) / values.length : 0;
+};
+
+const describeVehicleState = ({ speedCandidates, rpmCandidates, pedalCandidates, byteRows, bitRows, timingRows, totalMessages }: { speedCandidates: unknown[]; rpmCandidates: unknown[]; pedalCandidates: unknown[]; byteRows: Array<Record<string, unknown>>; bitRows: Array<Record<string, unknown>>; timingRows: Array<Record<string, unknown>>; totalMessages: number }) => {
+  const avgEntropy = averageNumeric(byteRows, ["entropy", "unique_values", "value"]);
+  const avgBitActivity = averageNumeric(bitRows, ["activity", "transitions", "value"]);
+  const avgSamples = averageNumeric(timingRows, ["samples", "count", "messages"]);
+  const hasMotionSignals = speedCandidates.length > 0 || pedalCandidates.length > 0;
+  const hasEngineSignals = rpmCandidates.length > 0;
+  const busyCapture = totalMessages > 750 || avgSamples > 20;
+
+  if (hasMotionSignals && (avgEntropy > 1.4 || avgBitActivity > 0.04 || busyCapture)) {
+    return "This looks more like the vehicle was awake and possibly being driven or operated, because speed/pedal-style signals and changing data patterns were present.";
+  }
+
+  if (hasEngineSignals && !speedCandidates.length && (avgEntropy > 0.8 || avgBitActivity > 0.02)) {
+    return "This looks more like the vehicle may have been parked with ignition or engine activity, because RPM-style signals changed but clear speed-style movement was not obvious.";
+  }
+
+  if (!hasMotionSignals && !hasEngineSignals && avgEntropy < 0.8 && avgBitActivity < 0.02) {
+    return "This looks more like a parked or quiet capture, because very few movement-style signals changed during the recording.";
+  }
+
+  return "I cannot confidently tell whether the car was driving or parked from this log alone; the recording has some activity, but not enough clear speed/RPM/pedal evidence to call it one way.";
+};
+
+const PlainEnglishSummary = ({ data, anomalies, suspectIds, componentHealth }: { data: AnalysisResult; anomalies: number; suspectIds: number; componentHealth: number }) => {
+  const vehicleBehavior = data.vehicle_behavior ?? {};
+  const speedCandidates = vehicleBehavior.possible_speed_ids ?? [];
+  const rpmCandidates = vehicleBehavior.possible_rpm_ids ?? [];
+  const pedalCandidates = vehicleBehavior.possible_pedal_ids ?? [];
+  const byteRows = toRecordArray(data.diagnostics?.byte_analysis);
+  const bitRows = toRecordArray(data.diagnostics?.bit_analysis);
+  const timingRows = toRecordArray(data.diagnostics?.timing);
+  const totalMessages = Number(data.total_messages ?? 0);
+  const uniqueIds = Number(data.unique_ids ?? 0);
+  const protocol = data.diagnostics?.protocol && typeof data.diagnostics.protocol === "object" ? data.diagnostics.protocol as JsonRecord : {};
+  const movementSummary = describeVehicleState({ speedCandidates, rpmCandidates, pedalCandidates, byteRows, bitRows, timingRows, totalMessages });
+  const condition = anomalies > 5 || componentHealth < 55 ? "the capture has multiple warning signs and should be reviewed closely" : anomalies > 0 || componentHealth < 80 ? "the capture has a few unusual spots, but it is not automatically pointing to a failed part" : "the capture looks fairly steady based on the checks available here";
+  const signalDetails = [
+    speedCandidates.length ? `${speedCandidates.length} possible speed-related ID${speedCandidates.length === 1 ? "" : "s"}` : "no clear speed ID",
+    rpmCandidates.length ? `${rpmCandidates.length} possible RPM-related ID${rpmCandidates.length === 1 ? "" : "s"}` : "no clear RPM ID",
+    pedalCandidates.length ? `${pedalCandidates.length} possible pedal-related ID${pedalCandidates.length === 1 ? "" : "s"}` : "no clear pedal ID",
+  ].join(", ");
 
   return (
     <div className="rounded-lg border border-glass-border bg-glass p-5 backdrop-blur">
       <h3 className="mb-3 text-base font-bold text-foreground">Plain-English Explanation</h3>
-      <p className="text-sm leading-7 text-muted-foreground">
-        This file is a recording of the vehicle’s computers talking to each other. The platform reviewed {renderText(totalMessages)} messages from {renderText(uniqueIds)} message groups and looked for unusual timing, repeated patterns, and signals that may relate to speed, RPM, pedal input, faults, or module behavior. In simple terms, {condition}. {anomalies > 0 ? `It found ${anomalies} unusual event${anomalies === 1 ? "" : "s"} that should be checked against what the vehicle was doing at that moment.` : "It did not find obvious abnormal events in this recording."} {suspectIds > 0 ? `It also found ${suspectIds} active message group${suspectIds === 1 ? "" : "s"} that may help identify what parts of the vehicle were changing during the log.` : "It did not find strong live signal candidates in this recording."}
-      </p>
+      <div className="space-y-3 text-sm leading-7 text-muted-foreground">
+        <p>This log contains {totalMessages || "an unknown number of"} messages across {uniqueIds || "multiple"} CAN IDs. The detected network style is {renderText(protocol.likely_protocol ?? "not clear from this capture")}.</p>
+        <p>{movementSummary}</p>
+        <p>The main clue set is: {signalDetails}. Overall, {condition}. {anomalies > 0 ? `I found ${anomalies} unusual event${anomalies === 1 ? "" : "s"}; match those moments against what the vehicle was doing when the log was recorded.` : "I did not find obvious abnormal events in this recording."}</p>
+        <p>{suspectIds > 0 ? `${suspectIds} active message group${suspectIds === 1 ? "" : "s"} stood out as useful candidates for follow-up signal naming or DBC work.` : "No message group stood out strongly enough to call it a live signal candidate yet."}</p>
+      </div>
     </div>
   );
 };
@@ -442,7 +489,7 @@ const Results = () => {
             <AnalysisCard title="Summary" icon={<MessageSquareText className="size-5" />}>
               <div className="grid gap-4">
                 <pre className="whitespace-pre-wrap rounded-lg border border-glass-border bg-glass p-5 text-sm leading-7 text-foreground backdrop-blur">{renderText(summaryText)}</pre>
-                <PlainEnglishSummary totalMessages={data.total_messages} uniqueIds={data.unique_ids} anomalies={anomalies.length} suspectIds={suspectIds} componentHealth={componentHealth} />
+                <PlainEnglishSummary data={data} anomalies={anomalies.length} suspectIds={suspectIds} componentHealth={componentHealth} />
               </div>
             </AnalysisCard>
             <AnalysisCard title="Signal Activity" description="Live telemetry intensity preview." icon={<BarChart3 className="size-5" />}>
