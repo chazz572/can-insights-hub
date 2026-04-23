@@ -71,7 +71,7 @@ export const AppNav = () => {
 
         <nav className="space-y-1 overflow-y-auto pr-1">
           {links.map((item) => (
-            <RouterNavLink key={item.label} to={item.to} className={navClass} end={item.end}>
+            <RouterNavLink key={item.label} to={item.to} className={({ isActive }) => navClass({ isActive, highlight: item.highlight })} end={item.end}>
               <item.icon className="transition-transform duration-300 group-hover:scale-110" />
               {item.label}
             </RouterNavLink>
