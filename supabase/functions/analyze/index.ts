@@ -97,7 +97,7 @@ const forEachCsvRecord = (csv: string, callback: (record: ParsedRecord) => void)
 
     const values = parseCsvLine(line);
     callback({
-      id: values[indexes.idIndex] ?? "",
+      id: cleanHex(values[indexes.idIndex] ?? "").replace(/^0+(?=[0-9A-F])/, "") || "0",
       data: values[indexes.dataIndex] ?? "",
       timestamp: Number(values[indexes.timestampIndex] ?? Number.NaN),
       metadata: indexes.metadataIndex >= 0 ? values[indexes.metadataIndex] ?? "" : "",
@@ -413,8 +413,9 @@ const runAnalysis = (csv: string) => {
   const metadataTextForRouting = [...metadataById.values()].join(" ").toLowerCase();
   const isExplicitDbcDefinition = metadataTextForRouting.includes("source_file_type=dbc_definition");
   const isExplicitLogWithDbc = metadataTextForRouting.includes("source_file_type=log_with_dbc");
-  const isDbcReference = isExplicitDbcDefinition || (metadataInsights.has_dbc_metadata && totalMessages === idCounts.size);
-  const pipeline: PipelineKind = isDbcReference ? "dbc" : metadataInsights.has_dbc_metadata ? "log_dbc" : "log";
+  const hasRealDbcSignalMetadata = /dbc_message=|signal=.+\|start=.+\|length=/i.test(metadataTextForRouting);
+  const isDbcReference = isExplicitDbcDefinition || (hasRealDbcSignalMetadata && totalMessages === idCounts.size);
+  const pipeline: PipelineKind = isDbcReference ? "dbc" : isExplicitLogWithDbc || hasRealDbcSignalMetadata ? "log_dbc" : "log";
   const pipelineLabel = pipeline === "dbc" ? "DBC definition viewer" : pipeline === "log_dbc" ? "Full Power decoded LOG + DBC analysis" : "Raw CAN log intelligence";
   const idStats = [...idCounts.entries()]
     .sort((a, b) => b[1] - a[1])

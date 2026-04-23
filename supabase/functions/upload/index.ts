@@ -16,7 +16,7 @@ const jsonResponse = (body: unknown) =>
     headers: { ...corsHeaders, "Content-Type": "application/json" },
   });
 
-const cleanId = (value: string) => value.replace(/^0x/i, "").replace(/[^a-fA-F0-9]/g, "").toUpperCase();
+const cleanId = (value: string) => value.replace(/^0x/i, "").replace(/[^a-fA-F0-9]/g, "").toUpperCase().replace(/^0+(?=[0-9A-F])/, "") || "0";
 const cleanByte = (value: string) => value.replace(/^0x/i, "").replace(/[^a-fA-F0-9]/g, "").slice(0, 2).padStart(2, "0").toUpperCase();
 const isId = (value: string) => /^[0-9a-fA-F]{1,8}[xh]?$/.test(value.replace(/^0x/i, ""));
 const isByte = (value: string) => /^(0x)?[0-9a-fA-F]{1,2}$/.test(value);

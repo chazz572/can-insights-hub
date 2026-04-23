@@ -146,7 +146,7 @@ const Upload = () => {
             <UploadCloud className="size-7" />
           </div>
           <CardTitle className="text-3xl">Universal CAN Intake</CardTitle>
-          <CardDescription>Auto-detect CSV, TRC, candump, CRTD, ASC, BLF, MF4/MDF, CANedge, DBC, J1939, and generic text logs, then route each file into the appropriate analysis pipeline.</CardDescription>
+          <CardDescription>Auto-detect CSV, TRC, candump, CRTD, ASC, BLF, MF4/MDF, CANedge, DBC, J1939, and text logs. Raw logs merge into one analysis; DBC files stay separate as decoders.</CardDescription>
         </CardHeader>
         <CardContent>
           <form className="space-y-6" onSubmit={handleSubmit}>
@@ -172,7 +172,7 @@ const Upload = () => {
                   {isComplete ? <CheckCircle2 className="size-10 text-success" /> : files.length > 1 ? <Files className="size-10" /> : files.length ? <FileText className="size-10" /> : <UploadCloud className="size-10" />}
                 </span>
                 <span className="mt-6 text-xl font-bold text-foreground">{files.length ? `${files.length} File${files.length > 1 ? "s" : ""} Ready` : "Drop Any CAN Log Format Here"}</span>
-                <span className="mt-2 max-w-md text-sm leading-6 text-muted-foreground">Batch upload up to 12 files from Files, iCloud, Drive, or local storage. Each file is detected, validated, converted, stored as normalized CSV, and analyzed independently.</span>
+                <span className="mt-2 max-w-md text-sm leading-6 text-muted-foreground">Batch upload up to 12 files from Files, iCloud, Drive, or local storage. Raw logs are detected, validated, merged chronologically, stored as one normalized CSV, then analyzed as a single dataset.</span>
                 <Input id="can-files" className="sr-only" type="file" multiple onChange={handleFileChange} disabled={isLoading} />
               </Label>
             </div>
