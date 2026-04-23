@@ -188,6 +188,19 @@ const MechanicSummary = ({ data }: { data: unknown }) => (
   </div>
 );
 
+const PlainEnglishSummary = ({ totalMessages, uniqueIds, anomalies, suspectIds, componentHealth }: { totalMessages: unknown; uniqueIds: unknown; anomalies: number; suspectIds: number; componentHealth: number }) => {
+  const condition = anomalies > 5 || componentHealth < 55 ? "there are several things worth investigating" : anomalies > 0 || componentHealth < 80 ? "the log is mostly readable, but a few items need attention" : "the log looks generally normal from this scan";
+
+  return (
+    <div className="rounded-lg border border-glass-border bg-glass p-5 backdrop-blur">
+      <h3 className="mb-3 text-base font-bold text-foreground">Plain-English Explanation</h3>
+      <p className="text-sm leading-7 text-muted-foreground">
+        This file is a recording of the vehicle’s computers talking to each other. The platform reviewed {renderText(totalMessages)} messages from {renderText(uniqueIds)} message groups and looked for unusual timing, repeated patterns, and signals that may relate to speed, RPM, pedal input, faults, or module behavior. In simple terms, {condition}. {anomalies > 0 ? `It found ${anomalies} unusual event${anomalies === 1 ? "" : "s"} that should be checked against what the vehicle was doing at that moment.` : "It did not find obvious abnormal events in this recording."} {suspectIds > 0 ? `It also found ${suspectIds} active message group${suspectIds === 1 ? "" : "s"} that may help identify what parts of the vehicle were changing during the log.` : "It did not find strong live signal candidates in this recording."}
+      </p>
+    </div>
+  );
+};
+
 const scoreTone = (score: number) => score >= 80 ? "text-success" : score >= 55 ? "text-warning" : "text-destructive";
 
 const InsightCard = ({ title, value, detail, icon: Icon, score }: { title: string; value: string; detail: string; icon: typeof Activity; score?: number }) => (
@@ -427,7 +440,10 @@ const Results = () => {
         <div className="grid gap-6">
           <div className="grid gap-6 xl:grid-cols-[1.25fr_0.75fr]">
             <AnalysisCard title="Summary" icon={<MessageSquareText className="size-5" />}>
-              <pre className="whitespace-pre-wrap rounded-lg border border-glass-border bg-glass p-5 text-sm leading-7 text-foreground backdrop-blur">{renderText(summaryText)}</pre>
+              <div className="grid gap-4">
+                <pre className="whitespace-pre-wrap rounded-lg border border-glass-border bg-glass p-5 text-sm leading-7 text-foreground backdrop-blur">{renderText(summaryText)}</pre>
+                <PlainEnglishSummary totalMessages={data.total_messages} uniqueIds={data.unique_ids} anomalies={anomalies.length} suspectIds={suspectIds} componentHealth={componentHealth} />
+              </div>
             </AnalysisCard>
             <AnalysisCard title="Signal Activity" description="Live telemetry intensity preview." icon={<BarChart3 className="size-5" />}>
               <MiniChart />
