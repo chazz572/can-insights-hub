@@ -97,8 +97,9 @@ const forEachCsvRecord = (csv: string, callback: (record: ParsedRecord) => void)
 
     const values = parseCsvLine(line);
     const metadata = indexes.metadataIndex >= 0 ? values[indexes.metadataIndex] ?? "" : "";
+    const storedId = values[indexes.idIndex] ?? "";
     callback({
-      id: normalizeCanId(values[indexes.idIndex] ?? ""),
+      id: normalizeCanId(metadataValue(metadata, "normalized_can_id") || storedId, 10),
       data: values[indexes.dataIndex] ?? "",
       timestamp: Number(values[indexes.timestampIndex] ?? Number.NaN),
       metadata,
@@ -121,9 +122,10 @@ const hintedIdBase = (value: string, metadata = ""): 10 | 16 | "auto" => {
   return /^0x/i.test(value) || /[a-f]/i.test(value) || /[xh]$/i.test(value) ? 16 : "auto";
 };
 const canIdAliases = (id: string, metadata = "") => {
-  const raw = metadataValue(metadata, "raw_can_id") || id;
+  const canonical = metadataValue(metadata, "normalized_can_id") || id;
+  const raw = metadataValue(metadata, "raw_can_id") || canonical;
   const rawBase = hintedIdBase(raw, metadata);
-  const aliases = new Set<string>([normalizeCanId(id, 10), normalizeCanId(raw, rawBase)]);
+  const aliases = new Set<string>([normalizeCanId(canonical, 10), normalizeCanId(raw, rawBase)]);
   if (rawBase === 16) aliases.add(normalizeCanId(raw, 16));
   if (rawBase === "auto" && /^\d+$/.test(raw)) aliases.add(normalizeCanId(raw, 10));
   [...aliases].forEach((alias) => {
