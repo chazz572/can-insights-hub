@@ -284,10 +284,10 @@ const InsightCard = ({ title, value, detail, icon: Icon, score }: { title: strin
   <Card className="animate-fade-up overflow-hidden">
     <CardContent className="p-5">
       <div className="flex items-start justify-between gap-4">
-        <div className="min-w-0">
-          <p className="text-xs font-semibold uppercase text-muted-foreground">{title}</p>
-          <p className={cn("mt-3 text-2xl font-extrabold", score === undefined ? "text-primary" : scoreTone(score))}>{value}</p>
-          <p className="mt-2 text-sm leading-6 text-muted-foreground">{detail}</p>
+        <div className="min-w-0 flex-1">
+          <p className="text-fit-tile text-xs font-semibold uppercase text-muted-foreground">{title}</p>
+          <p className={cn("text-fit-tile mt-3 text-2xl font-extrabold", score === undefined ? "text-primary" : scoreTone(score))}>{value}</p>
+          <p className="text-fit-tile mt-2 text-sm leading-6 text-muted-foreground">{detail}</p>
         </div>
         <span className="grid size-11 shrink-0 place-items-center rounded-lg border border-glass-border bg-glass text-primary shadow-glow backdrop-blur"><Icon className="size-5" /></span>
       </div>
@@ -358,9 +358,9 @@ const MetricCard = ({ title, value, icon: Icon }: { title: string; value: unknow
   <Card className="animate-fade-up overflow-hidden">
     <CardContent className="p-6">
       <div className="flex items-start justify-between gap-4">
-        <div>
-          <p className="text-sm font-semibold uppercase text-muted-foreground">{title}</p>
-          <p className="mt-4 text-4xl font-extrabold text-primary">{renderText(value)}</p>
+        <div className="min-w-0 flex-1">
+          <p className="text-fit-tile text-sm font-semibold uppercase text-muted-foreground">{title}</p>
+          <p className="text-fit-tile mt-4 text-3xl font-extrabold text-primary sm:text-4xl">{renderText(value)}</p>
         </div>
         <div className="grid size-12 place-items-center rounded-lg border border-glass-border bg-glass text-primary shadow-glow backdrop-blur">
           <Icon className="size-6" />
