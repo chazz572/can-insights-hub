@@ -124,12 +124,20 @@ const hintedIdBase = (value: string, metadata = ""): 10 | 16 | "auto" => {
 const canIdAliases = (id: string, metadata = "") => {
   const canonical = metadataValue(metadata, "normalized_can_id") || id;
   const raw = metadataValue(metadata, "raw_can_id") || canonical;
+  const rawStripped = raw.trim().replace(/[xh]$/i, "").replace(/^0x/i, "");
   const rawBase = hintedIdBase(raw, metadata);
+  const hasHexChars = /[a-f]/i.test(rawStripped);
+  const isDecimalLike = /^\d+$/.test(rawStripped);
   const aliases = new Set<string>([normalizeCanId(canonical, 10), normalizeCanId(raw, rawBase)]);
-  if (rawBase === 16) aliases.add(normalizeCanId(raw, 16));
-  if (rawBase === "auto" && /^\d+$/.test(raw)) aliases.add(normalizeCanId(raw, 10));
+  // Hex interpretation when plausibly hex
+  if (rawBase === 16 || hasHexChars) aliases.add(normalizeCanId(raw, 16));
+  // Decimal interpretation whenever raw is decimal-like — auto-corrects the
+  // "base hex declared but IDs are decimal-like" case (256, 512, 768).
+  if (isDecimalLike) aliases.add(normalizeCanId(raw, 10));
+  // Standard 11-bit mask for extended frames
   [...aliases].forEach((alias) => {
     const numeric = Number(alias);
+    if (Number.isFinite(numeric) && numeric > 0x7ff && numeric <= 0x1fffffff) aliases.add(String(numeric & 0x7ff));
     if (Number.isFinite(numeric) && numeric > 0x1fffffff) aliases.add(String(numeric & 0x1fffffff));
   });
   return [...aliases].filter((alias) => alias && alias !== "NaN");
