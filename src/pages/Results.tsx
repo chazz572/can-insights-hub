@@ -225,6 +225,42 @@ const NarrativeBlock = ({ title, items }: { title: string; items: string[] }) =>
   </section>
 );
 
+const buildPlainEnglishSummaryReport = ({ data, fileId, anomalies, suspectIds, componentHealth }: { data: AnalysisResult; fileId?: string; anomalies: number; suspectIds: number; componentHealth: number }) => {
+  const vehicleBehavior = data.vehicle_behavior ?? {};
+  const speedCandidates = vehicleBehavior.possible_speed_ids ?? [];
+  const rpmCandidates = vehicleBehavior.possible_rpm_ids ?? [];
+  const pedalCandidates = vehicleBehavior.possible_pedal_ids ?? [];
+  const byteRows = toRecordArray(data.diagnostics?.byte_analysis);
+  const bitRows = toRecordArray(data.diagnostics?.bit_analysis);
+  const timingRows = toRecordArray(data.diagnostics?.timing);
+  const totalMessages = Number(data.total_messages ?? 0);
+  const uniqueIds = Number(data.unique_ids ?? 0);
+  const protocol = data.diagnostics?.protocol && typeof data.diagnostics.protocol === "object" ? data.diagnostics.protocol as JsonRecord : {};
+  const systems = toRecordArray(data.diagnostics?.systems);
+  const idRows = toRecordArray(data.id_stats);
+  const highEntropyBytes = byteRows.filter((row) => numericValue(row, ["entropy", "unique_values", "value"]) > 1.5).length;
+  const activeBits = bitRows.filter((row) => numericValue(row, ["activity", "transitions", "value"]) > 0.05).length;
+  const stuckBits = bitRows.filter((row) => numericValue(row, ["ones"]) === 0 || numericValue(row, ["zeros"]) === 0).length;
+  const noisyIds = idRows.filter((row) => numericValue(row, ["percentage"]) > 25 || numericValue(row, ["count", "messages", "total"]) > totalMessages * 0.25).map((row) => renderText(row.id ?? row.key)).slice(0, 4);
+  const diagnosticPresent = systems.some((row) => String(row.category ?? "").includes("diagnostic")) || idRows.some((row) => /^7|18DA/i.test(renderText(row.id ?? row.key)));
+  const avgJitter = averageNumeric(timingRows, ["period_jitter", "jitter"]);
+  const busLoad = Math.min(100, Math.round((totalMessages / Math.max(uniqueIds || 1, 1)) * 10));
+  const movementSummary = describeVehicleState({ speedCandidates, rpmCandidates, pedalCandidates, byteRows, bitRows, timingRows, totalMessages });
+  const condition = anomalies > 5 || componentHealth < 55 ? "the capture has multiple warning signs and should be reviewed closely" : anomalies > 0 || componentHealth < 80 ? "the capture has a few unusual spots, but it is not automatically pointing to a failed part" : "the capture looks fairly steady based on the checks available here";
+  const timelineRows = toRecordArray(data.anomalies).slice(0, 3);
+
+  const sections = [
+    ["Vehicle Activity", [movementSummary, speedCandidates.length ? "Speed-related traffic may show movement, acceleration, cruising, or stopping after validation." : "No reliable speed signal was identified.", pedalCandidates.length ? "Pedal-sized signals were present, so accelerator or brake-style inputs may be extractable after validation." : "Accelerator and brake use are not confirmed from the current candidates.", rpmCandidates.length ? "RPM-style IDs were present, which may indicate idle, engine-on activity, or changing load." : "Engine idle or load cannot be confirmed because no strong RPM candidate was found."]],
+    ["Systems Active", [`Powertrain or diagnostic-style traffic ${systems.some((row) => String(row.category ?? "").includes("powertrain")) ? "appears present" : "is not clearly dominant"}.`, `Body control traffic ${systems.some((row) => String(row.category ?? "").includes("body")) ? "appears present" : "is limited or unclear"}.`, noisyIds.length ? `Unusually noisy IDs: ${noisyIds.join(", ")}.` : "No single ID appears overwhelmingly noisy."]],
+    ["Abnormal Behavior", [avgJitter > 0 ? `Average timing jitter is about ${avgJitter.toFixed(4)}.` : "Timing irregularity is not obvious from the available timing rows.", highEntropyBytes ? `${highEntropyBytes} byte position(s) show higher variation.` : "Byte patterns look relatively stable.", stuckBits ? `${stuckBits} bit position(s) appear stuck high or low during this recording.` : "No stuck-bit pattern stands out strongly.", busLoad > 80 ? "Estimated bus activity is high, so chatter or overload should be reviewed." : "Estimated bus load does not look overloaded.", anomalies ? `${anomalies} anomaly event(s) should be matched against symptoms, wiring checks, or sensor behavior.` : "No obvious anomaly events were detected."]],
+    ["Driver Behavior Indicators", [speedCandidates.length ? "Driving behavior may be extractable once the speed candidate is validated." : "Driving style cannot be measured confidently without a speed candidate.", pedalCandidates.length ? "Pedal candidates may help identify acceleration or braking after validation." : "Harsh braking or aggressive acceleration are not confirmed.", rpmCandidates.length && !speedCandidates.length ? "The vehicle may have been idling or stationary with engine activity." : "Idling cannot be confirmed without validated RPM and vehicle state reference."]],
+    ["Reverse-Engineering Insights", [speedCandidates.length ? `Likely speed ID candidates: ${speedCandidates.map(renderText).slice(0, 5).join(", ")}.` : "No strong speed ID candidate was found.", rpmCandidates.length ? `Likely RPM ID candidates: ${rpmCandidates.map(renderText).slice(0, 5).join(", ")}.` : "No strong RPM ID candidate was found.", pedalCandidates.length ? `Likely pedal/brake-sized ID candidates: ${pedalCandidates.map(renderText).slice(0, 5).join(", ")}.` : "No strong pedal or brake candidate was found.", `${activeBits} active bit candidate(s) and ${highEntropyBytes} changing byte area(s) are useful starting points for DBC signal work.`]],
+    ["Protocol, Network, And Timeline", [`Protocol impression: ${renderText(protocol.likely_protocol ?? "unknown")}.`, diagnosticPresent ? "Diagnostic-style traffic appears present, so UDS/ISO-TP or service-tool activity may be included." : "Diagnostic messages are not obvious in the current ID set.", `The log includes ${totalMessages || "unknown"} messages across ${uniqueIds || "multiple"} IDs; overall, ${condition}.`, timelineRows.length ? `Key events: ${timelineRows.map((row, index) => `event ${index + 1} on ID ${renderText(row.id ?? row.key ?? "unknown")}`).join("; ")}.` : "No clear event timeline was detected."]],
+  ] as Array<[string, string[]]>;
+
+  return [`CJL CAN Intelligence Platform Plain English Summary`, `Log ID: ${fileId ?? "—"}`, `Generated: ${new Date().toLocaleString()}`, "", ...sections.flatMap(([title, items]) => [title, ...items.map((item) => `- ${item}`), ""])].join("\n");
+};
+
 const PlainEnglishSummary = ({ data, anomalies, suspectIds, componentHealth }: { data: AnalysisResult; anomalies: number; suspectIds: number; componentHealth: number }) => {
   const vehicleBehavior = data.vehicle_behavior ?? {};
   const speedCandidates = vehicleBehavior.possible_speed_ids ?? [];
