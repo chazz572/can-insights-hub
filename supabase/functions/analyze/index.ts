@@ -169,18 +169,58 @@ const classifySignal = (signal: JsonRecord, metadata = "") => {
   const maxValue = Number(signal.max_value ?? 0);
   const range = Number(signal.range ?? 0);
   const direction = String(signal.direction ?? "mixed");
+  const unique = Number(signal.unique_values ?? 0);
+  const cyclicScore = Number(signal.cyclic_score ?? 0);
   const text = metadata.toLowerCase();
   if (/engine[^a-z0-9]*rpm|crankshaft|camshaft/.test(text)) return "engine_rpm_candidate";
   if (/motor[^a-z0-9]*rpm|inverter[^a-z0-9]*rpm|drive[^a-z0-9]*rpm/.test(text)) return "motor_rpm_candidate";
   if (/(wheel[^a-z0-9]*speed|vehicle[^a-z0-9]*speed|road[^a-z0-9]*speed)/.test(text)) return "speed_or_wheel_speed_candidate";
   if (/(accelerator|pedal|brake[^a-z0-9]*(pressure|position)|steering[^a-z0-9]*(angle|torque))/.test(text)) return "pedal_brake_or_steering_candidate";
+  if (cyclicScore >= 0.52 || (unique <= 24 && range > 12 && ["cyclic", "oscillating"].includes(direction))) return "rolling_counter_or_repeating_state_candidate";
   if (range <= 16 && Number(signal.unique_values ?? 0) <= 16) return "gear_flag_or_counter_candidate";
   if (!text && range > 8 && maxValue <= 255 && ["rising", "falling"].includes(direction)) return "compact_input_or_state_candidate";
   if (!text && range >= 250 && ["rising", "falling", "oscillating"].includes(direction)) return "load_or_motion_candidate_unvalidated";
   return "analog_sensor_candidate";
 };
 
-const describeSignalEvidence = (signal: JsonRecord) => `ID ${signal.id} bytes ${signal.byte_start}-${Number(signal.byte_start ?? 0) + 1} ${signal.endianness} ranged ${signal.min_value}-${signal.max_value}, changed ${signal.unique_values} unique values, trended ${signal.direction}, and had ${Number(signal.smoothness ?? 0).toFixed(2)} smooth-step behavior.`;
+const describeSignalEvidence = (signal: JsonRecord) => `ID ${signal.id} bytes ${signal.byte_start}-${Number(signal.byte_start ?? 0) + 1} ${signal.endianness} ranged ${signal.min_value}-${signal.max_value}, changed ${signal.unique_values} unique values, trended ${signal.direction}, net-change ratio ${Number(signal.net_change_ratio ?? 0).toFixed(2)}, cyclic score ${Number(signal.cyclic_score ?? 0).toFixed(2)}, and had ${Number(signal.smoothness ?? 0).toFixed(2)} smooth-step behavior.`;
+
+const behaviorPatternFromLog = ({ totalMessages, idStats, timing, idDeepDive, analogSignals }: { totalMessages: number; idStats: JsonRecord[]; timing: JsonRecord[]; idDeepDive: JsonRecord[]; analogSignals: JsonRecord[] }) => {
+  const duration = Math.max(...idDeepDive.map((item) => Number(item.average_period ?? 0) * Number(item.messages ?? 0)).filter(Number.isFinite), 0);
+  const periodicFastIds = timing.filter((item) => Number(item.average_period ?? 0) > 0 && Number(item.average_period ?? 0) <= 0.025 && Number(item.period_jitter ?? 1) <= Math.max(Number(item.average_period ?? 0) * 0.18, 0.003));
+  const staticIds = idDeepDive.filter((item) => Number(item.payload_change_rate ?? 0) <= 0.05 && Number(item.messages ?? 0) > 50);
+  const dynamicIds = idDeepDive.filter((item) => Number(item.payload_change_rate ?? 0) > 0.35 && Number(item.messages ?? 0) > 50);
+  const cyclicSignals = analogSignals.filter((signal) => /rolling_counter|gear_flag_or_counter/i.test(String(signal.likely_signal_type)) || Number(signal.cyclic_score ?? 0) >= 0.52);
+  const directionalSignals = analogSignals.filter((signal) => /load_or_motion|analog_sensor|compact_input/i.test(String(signal.likely_signal_type)) && !/rolling_counter/i.test(String(signal.likely_signal_type)) && ["rising", "falling", "oscillating"].includes(String(signal.direction)));
+  const dominant = idStats.slice(0, 5).map((item) => `${item.id} (${item.count})`).join(", ");
+  const hasMostlyPeriodicNetwork = periodicFastIds.length >= 4 && totalMessages > 500;
+  const hasCounterDominatedTraffic = cyclicSignals.length >= Math.max(4, directionalSignals.length);
+
+  if (hasMostlyPeriodicNetwork && hasCounterDominatedTraffic && directionalSignals.length <= 3) {
+    return {
+      label: "vehicle/key-on network awake with repeating counters; no driving maneuver proven",
+      confidence: 0.72,
+      evidence: `The capture is dominated by stable 10–25 ms periodic IDs (${dominant}), many byte pairs repeat as counters/state cycles, and no decoded speed, wheel, brake, pedal, steering, gear, torque, engine-RPM, or motor-RPM signal is present.`,
+      advice: "Treat this as an ignition-on or module-awake baseline unless you provide a DBC or controlled captures showing known actions.",
+    };
+  }
+
+  if (hasMostlyPeriodicNetwork && dynamicIds.length > staticIds.length) {
+    return {
+      label: "active module traffic with changing sensor/status bytes; physical vehicle action unknown",
+      confidence: 0.6,
+      evidence: `The bus is alive for roughly ${duration.toFixed(1)}s with ${dynamicIds.length} dynamic IDs and ${staticIds.length} static/status IDs, but the dynamic bytes are not tied to physical units.`,
+      advice: "Use this for reverse engineering and baseline comparison, not a mechanic-style driving conclusion yet.",
+    };
+  }
+
+  return {
+    label: "periodic CAN traffic captured; operating state unresolved",
+    confidence: 0.42,
+    evidence: `The file contains ${totalMessages} frames and ${idStats.length} active IDs, but the available signals do not prove motion, idle, braking, acceleration, charging, or fault state.`,
+    advice: "Add DBC decoding or controlled action labels to turn byte movement into car behavior.",
+  };
+};
 
 const metadataTokens = (value: string) => value.toLowerCase().split(/[^a-z0-9]+/).filter(Boolean);
 const containsAny = (text: string, terms: string[]) => terms.some((term) => text.includes(term));
