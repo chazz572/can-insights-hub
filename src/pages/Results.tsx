@@ -465,6 +465,20 @@ const LogPipelinePanels = ({ data, diagnostics, idStats, anomalies, vehicleBehav
   </div>
 );
 
+const LogDbcPipelinePanels = ({ data, diagnostics, idStats }: { data: AnalysisResult; diagnostics: NonNullable<AnalysisResult["diagnostics"]>; idStats: JsonRecord[] }) => (
+  <div className="grid gap-5">
+    <AnalysisCard title="Full Power LOG + DBC Dashboard" description="Decoded-signal workflow: live log frames are interpreted with matching DBC definitions." icon={<Gauge className="size-5" />}>
+      <JsonTable data={diagnostics.decoded_signals} />
+    </AnalysisCard>
+    <div className="grid gap-5 xl:grid-cols-2">
+      <CollapsiblePanel title="Raw Frames Side" icon={<Binary className="size-5" />} defaultOpen><FrequencyChart data={idStats} /><JsonTable data={idStats} /></CollapsiblePanel>
+      <CollapsiblePanel title="Decoded Signals Side" icon={<FileCode2 className="size-5" />} defaultOpen><JsonTable data={diagnostics.decoded_signals} /></CollapsiblePanel>
+    </div>
+    <CollapsiblePanel title="Driving Timeline & Event Detection" icon={<TimerReset className="size-5" />} defaultOpen><JsonTable data={diagnostics.event_timeline} /></CollapsiblePanel>
+    <CollapsiblePanel title="Signal-Level Reverse Engineering" icon={<Radar className="size-5" />}><JsonTable data={data.reverse_engineering} /><div className="mt-4"><JsonTable data={diagnostics.signals} /></div></CollapsiblePanel>
+  </div>
+);
+
 const Results = () => {
   const { id, file_id } = useParams();
   const fileId = file_id ?? id;
