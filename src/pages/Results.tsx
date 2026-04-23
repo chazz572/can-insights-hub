@@ -1,4 +1,4 @@
-import { AlertTriangle, Activity, BarChart3, Binary, BrainCircuit, Car, ChevronDown, Clock, Cpu, Download, Gauge, GitBranch, Hash, Layers3, Loader2, Map, MessageSquareText, Radar, Save, ScanLine, ShieldCheck, Sparkles, TimerReset, Wrench, Zap } from "lucide-react";
+import { AlertTriangle, Activity, BarChart3, Binary, BrainCircuit, Car, ChevronDown, Clock, Cpu, Download, FileCode2, FileText, Gauge, GitBranch, Hash, Layers3, Loader2, Map, MessageSquareText, Radar, Save, ScanLine, ShieldCheck, Sparkles, TimerReset, Wrench, Zap } from "lucide-react";
 import { useEffect, useState } from "react";
 import type { ReactNode } from "react";
 import { Link, useParams } from "react-router-dom";
