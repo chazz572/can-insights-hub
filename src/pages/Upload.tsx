@@ -23,8 +23,23 @@ const extensionFormat: Record<string, string> = {
   jsonl: "CANedge",
   dbc: "DBC",
 };
+const supportedExtensions = new Set(Object.keys(extensionFormat));
+const supportedFormatsText = supported.join(", ");
+const supportedExtensionsText = [...supportedExtensions].map((item) => `.${item}`).join(", ");
 
 const guessFormat = (file: File) => extensionFormat[file.name.split(".").pop()?.toLowerCase() ?? ""] ?? "Auto-detect";
+const getExtension = (file: File) => file.name.includes(".") ? file.name.split(".").pop()?.toLowerCase() ?? "" : "";
+const validateSelectedFiles = (selectedFiles: File[]) => {
+  const unsupported = selectedFiles.filter((item) => !supportedExtensions.has(getExtension(item)));
+  if (unsupported.length) {
+    return `${unsupported.map((item) => item.name).join(", ")} ${unsupported.length === 1 ? "is" : "are"} not a supported CAN file type. Supported formats: ${supportedFormatsText}. Supported extensions: ${supportedExtensionsText}.`;
+  }
+
+  const oversized = selectedFiles.find((item) => item.size > 20 * 1024 * 1024);
+  if (oversized) return `${oversized.name} is too large. Upload files under 20 MB.`;
+
+  return null;
+};
 
 const Upload = () => {
   const navigate = useNavigate();
@@ -53,9 +68,10 @@ const Upload = () => {
       setFiles([]);
       return;
     }
-    const oversized = nextFiles.find((item) => item.size > 75 * 1024 * 1024);
-    if (oversized) {
-      setError(`${oversized.name} is too large. Upload files under 75 MB.`);
+    const validationError = validateSelectedFiles(nextFiles);
+    if (validationError) {
+      setFiles([]);
+      setError(validationError);
       return;
     }
     setFiles(nextFiles);
@@ -77,6 +93,11 @@ const Upload = () => {
     event.preventDefault();
     if (!files.length) {
       setError("Choose one or more CAN log files before starting conversion.");
+      return;
+    }
+    const validationError = validateSelectedFiles(files);
+    if (validationError) {
+      setError(validationError);
       return;
     }
 
@@ -152,7 +173,7 @@ const Upload = () => {
                 </span>
                 <span className="mt-6 text-xl font-bold text-foreground">{files.length ? `${files.length} File${files.length > 1 ? "s" : ""} Ready` : "Drop Any CAN Log Format Here"}</span>
                 <span className="mt-2 max-w-md text-sm leading-6 text-muted-foreground">Batch upload up to 12 files from Files, iCloud, Drive, or local storage. Each file is detected, validated, converted, stored as normalized CSV, and analyzed independently.</span>
-                <Input id="can-files" className="sr-only" type="file" multiple onChange={handleFileChange} disabled={isLoading} />
+                <Input id="can-files" className="sr-only" type="file" multiple accept={supportedExtensionsText} onChange={handleFileChange} disabled={isLoading} />
               </Label>
             </div>
 
