@@ -489,12 +489,14 @@ const runAnalysis = (csv: string) => {
     candidate_signal: Number(item.count ?? 0) > 1,
   }));
 
-  const dbcMessages = [...metadataById.entries()].map(([id, metadata]) => {
+  const dbcMessageRows = [...metadataById.entries()].flatMap(([id, metadata]) => {
     const signals = extractDbcSignals(metadata);
+    if (!signals.length) return [];
     const messageName = metadata.match(/dbc_message=([^;]+)/)?.[1] ?? `Message_${id}`;
     const transmitter = metadata.match(/transmitter=([^;]+)/)?.[1] ?? "unknown";
-    return { id, message_name: messageName, transmitter, signal_count: signals.length, signals };
+    return [{ id, message_name: messageName, transmitter, signal_count: signals.length, signals }];
   });
+  const dbcMessages = [...new Map(dbcMessageRows.map((message) => [`${message.id}:${message.message_name}`, message])).values()];
   const dbcSignals = dbcMessages.flatMap((message) => message.signals.map((signal) => ({ message_id: message.id, message_name: message.message_name, ...signal })));
 
   if (pipeline === "dbc") {
