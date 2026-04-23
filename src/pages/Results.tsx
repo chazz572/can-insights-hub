@@ -1,6 +1,7 @@
-import { AlertTriangle, BarChart3, Binary, BrainCircuit, Gauge, Hash, MessageSquareText, Radar } from "lucide-react";
+import { AlertTriangle, BarChart3, Binary, BrainCircuit, ChevronDown, Clock, Cpu, Gauge, Hash, Layers3, MessageSquareText, Radar, Wrench } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
+import { Bar, BarChart, CartesianGrid, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 
 import { AnalysisCard } from "@/components/AnalysisCard";
 import { JsonTable } from "@/components/JsonTable";
