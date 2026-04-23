@@ -1,4 +1,4 @@
-import { BarChart3, Home, UploadCloud } from "lucide-react";
+import { BarChart3, Bell, Home, Moon, Settings, Sun, UploadCloud, UserCircle } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Link, NavLink as RouterNavLink, useLocation } from "react-router-dom";
 
@@ -15,6 +15,7 @@ const navClass = ({ isActive }: { isActive: boolean }) =>
 export const AppNav = () => {
   const location = useLocation();
   const [fileId, setFileId] = useState<string | null>(() => localStorage.getItem("can_ai_file_id"));
+  const [theme, setTheme] = useState<"dark" | "light">(() => (localStorage.getItem("can_ai_theme") === "light" ? "light" : "dark"));
 
   useEffect(() => {
     setFileId(localStorage.getItem("can_ai_file_id"));
@@ -29,6 +30,11 @@ export const AppNav = () => {
       window.removeEventListener("focus", syncFileId);
     };
   }, []);
+
+  useEffect(() => {
+    document.documentElement.classList.toggle("light", theme === "light");
+    localStorage.setItem("can_ai_theme", theme);
+  }, [theme]);
 
   const resultsPath = fileId ? `/results/${fileId}` : "/upload";
 
@@ -60,11 +66,43 @@ export const AppNav = () => {
           ))}
         </nav>
 
+        <div className="mt-8 space-y-2 border-t border-glass-border pt-5">
+          {["Diagnostics", "Engineering", "Fleet"].map((section) => (
+            <div key={section} className="rounded-lg px-4 py-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground transition-colors hover:text-primary">
+              {section}
+            </div>
+          ))}
+        </div>
+
         <div className="mt-auto rounded-lg border border-glass-border bg-glass p-4 backdrop-blur">
           <p className="text-xs font-semibold uppercase text-primary">Live analysis</p>
           <p className="mt-2 text-sm leading-6 text-muted-foreground">Upload CAN exports and inspect anomalies, identifiers, and behavior signals.</p>
         </div>
       </aside>
+
+      <header className="fixed inset-x-0 top-0 z-30 border-b border-glass-border bg-background/70 px-4 py-3 shadow-dashboard backdrop-blur-xl md:left-72 md:px-8">
+        <div className="flex items-center justify-between gap-4">
+          <div className="min-w-0">
+            <p className="text-xs font-semibold uppercase text-primary">Automotive intelligence platform</p>
+            <p className="truncate text-sm text-muted-foreground">Cloud CAN analysis · diagnostics · reverse engineering</p>
+          </div>
+          <div className="flex items-center gap-2">
+            <button type="button" aria-label="Toggle theme" onClick={() => setTheme((current) => current === "dark" ? "light" : "dark")} className="grid size-10 place-items-center rounded-lg border border-glass-border bg-glass text-foreground shadow-glow backdrop-blur transition-all duration-300 hover:scale-105 hover:border-primary/40">
+              {theme === "dark" ? <Moon className="size-4" /> : <Sun className="size-4" />}
+            </button>
+            <button type="button" aria-label="Notifications" className="hidden size-10 place-items-center rounded-lg border border-glass-border bg-glass text-foreground backdrop-blur transition-all duration-300 hover:border-primary/40 hover:shadow-glow sm:grid">
+              <Bell className="size-4" />
+            </button>
+            <button type="button" aria-label="Settings" className="hidden size-10 place-items-center rounded-lg border border-glass-border bg-glass text-foreground backdrop-blur transition-all duration-300 hover:border-primary/40 hover:shadow-glow sm:grid">
+              <Settings className="size-4" />
+            </button>
+            <div className="flex items-center gap-2 rounded-lg border border-glass-border bg-glass px-3 py-2 text-sm font-semibold text-foreground backdrop-blur">
+              <UserCircle className="size-4 text-primary" />
+              <span className="hidden sm:inline">Workspace</span>
+            </div>
+          </div>
+        </div>
+      </header>
 
       <header className="fixed inset-x-3 bottom-3 z-40 rounded-lg border border-sidebar-border bg-sidebar/90 p-2 shadow-dashboard backdrop-blur-xl md:hidden">
         <nav className="grid grid-cols-3 gap-2">
