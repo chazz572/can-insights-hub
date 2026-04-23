@@ -125,6 +125,7 @@ const Results = () => {
   const vehicleBehavior = data?.vehicle_behavior ?? {};
   const summary = data?.summary;
   const summaryText = summary && typeof summary === "object" && !Array.isArray(summary) ? summary.text ?? summary : summary;
+  const diagnostics = data?.diagnostics ?? {};
 
   return (
     <main className="mx-auto min-h-screen max-w-7xl px-4 py-8 sm:px-6 lg:px-10">
@@ -204,7 +205,15 @@ const Results = () => {
           </AnalysisCard>
 
           <AnalysisCard title="Advanced Diagnostics" description="Complete diagnostics payload returned by the backend." icon={<BrainCircuit className="size-5" />}>
-            <JsonTable data={data.diagnostics} />
+            <div className="grid gap-4">
+              <DiagnosticBlock field="diagnostics.protocol" value={diagnostics.protocol} />
+              <DiagnosticBlock field="diagnostics.byte_analysis" value={diagnostics.byte_analysis} collapsible />
+              <DiagnosticBlock field="diagnostics.bit_analysis" value={diagnostics.bit_analysis} collapsible />
+              <DiagnosticBlock field="diagnostics.timing" value={diagnostics.timing} />
+              <DiagnosticBlock field="diagnostics.signals" value={diagnostics.signals} />
+              <DiagnosticBlock field="diagnostics.systems" value={diagnostics.systems} />
+              <DiagnosticBlock field="diagnostics.mechanic_summary" value={diagnostics.mechanic_summary} />
+            </div>
           </AnalysisCard>
         </div>
       ) : null}
