@@ -26,6 +26,7 @@ const Engineering = () => {
   const [developerMode, setDeveloperMode] = useState(true);
   const [sensitivity, setSensitivity] = useState(72);
   const [selectedProtocol, setSelectedProtocol] = useState(protocolRows[0][0]);
+  const ActiveToolIcon = activeTool[2];
 
   return (
   <main className="mx-auto min-h-screen max-w-7xl px-4 py-8 sm:px-6 lg:px-10">
@@ -49,7 +50,7 @@ const Engineering = () => {
     </div>
 
     <Card className="mt-6 animate-fade-up overflow-hidden">
-      <CardHeader><CardTitle className="flex items-center gap-2"><activeTool[2] className="text-primary" /> {activeTool[0]}</CardTitle></CardHeader>
+      <CardHeader><CardTitle className="flex items-center gap-2"><ActiveToolIcon className="text-primary" /> {activeTool[0]}</CardTitle></CardHeader>
       <CardContent className="grid gap-5 lg:grid-cols-[1fr_0.8fr]">
         <div className="rounded-lg border border-glass-border bg-glass p-5">
           <p className="text-sm leading-6 text-muted-foreground">{activeTool[1]}</p>
