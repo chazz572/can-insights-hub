@@ -48,9 +48,9 @@ export const AppNav = () => {
     { to: "/workspace", label: "Workspace", icon: LayoutDashboard },
     { to: "/upload", label: "Upload", icon: UploadCloud },
     { to: resultsPath, label: "Results", icon: BarChart3 },
+    { to: "/compare", label: "Compare", icon: GitCompareArrows, highlight: true },
     { to: "/engineering", label: "Engineering", icon: TerminalSquare },
     { to: "/visualize", label: "Visualize", icon: ChartNoAxesCombined },
-    { to: "/compare", label: "Compare", icon: GitCompareArrows },
     { to: "/fleet", label: "Fleet", icon: Car },
     { to: "/reports", label: "Reports", icon: Download },
   ];
