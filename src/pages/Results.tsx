@@ -284,10 +284,10 @@ const InsightCard = ({ title, value, detail, icon: Icon, score }: { title: strin
   <Card className="animate-fade-up overflow-hidden">
     <CardContent className="p-5">
       <div className="flex items-start justify-between gap-4">
-        <div className="min-w-0">
-          <p className="text-xs font-semibold uppercase text-muted-foreground">{title}</p>
-          <p className={cn("mt-3 text-2xl font-extrabold", score === undefined ? "text-primary" : scoreTone(score))}>{value}</p>
-          <p className="mt-2 text-sm leading-6 text-muted-foreground">{detail}</p>
+        <div className="min-w-0 flex-1">
+          <p className="text-fit-tile text-xs font-semibold uppercase text-muted-foreground">{title}</p>
+          <p className={cn("text-fit-tile mt-3 text-2xl font-extrabold", score === undefined ? "text-primary" : scoreTone(score))}>{value}</p>
+          <p className="text-fit-tile mt-2 text-sm leading-6 text-muted-foreground">{detail}</p>
         </div>
         <span className="grid size-11 shrink-0 place-items-center rounded-lg border border-glass-border bg-glass text-primary shadow-glow backdrop-blur"><Icon className="size-5" /></span>
       </div>
@@ -358,9 +358,9 @@ const MetricCard = ({ title, value, icon: Icon }: { title: string; value: unknow
   <Card className="animate-fade-up overflow-hidden">
     <CardContent className="p-6">
       <div className="flex items-start justify-between gap-4">
-        <div>
-          <p className="text-sm font-semibold uppercase text-muted-foreground">{title}</p>
-          <p className="mt-4 text-4xl font-extrabold text-primary">{renderText(value)}</p>
+        <div className="min-w-0 flex-1">
+          <p className="text-fit-tile text-sm font-semibold uppercase text-muted-foreground">{title}</p>
+          <p className="text-fit-tile mt-4 text-3xl font-extrabold text-primary sm:text-4xl">{renderText(value)}</p>
         </div>
         <div className="grid size-12 place-items-center rounded-lg border border-glass-border bg-glass text-primary shadow-glow backdrop-blur">
           <Icon className="size-6" />
@@ -610,10 +610,10 @@ const Results = () => {
               <div className="grid gap-4 lg:grid-cols-3">
                 {[["Category", vehicleIdentification.category], ["Protocol", vehicleIdentification.protocol], ["OEM Style", vehicleIdentification.oemStyle]].map(([label, guess]) => {
                   const item = guess as { label: string; confidence: number };
-                  return <div key={String(label)} className="rounded-lg border border-glass-border bg-glass p-4"><p className="text-xs font-bold uppercase text-muted-foreground">{String(label)}</p><p className="mt-2 font-semibold text-foreground">{item.label}</p><div className="mt-3 h-2 rounded-full bg-secondary"><div className="h-full rounded-full bg-gradient-accent" style={{ width: `${item.confidence}%` }} /></div><p className="mt-2 font-mono text-sm text-primary">{item.confidence}% confidence</p></div>;
+                  return <div key={String(label)} className="min-w-0 overflow-hidden rounded-lg border border-glass-border bg-glass p-4"><p className="text-fit-tile text-xs font-bold uppercase text-muted-foreground">{String(label)}</p><p className="text-fit-tile mt-2 text-sm font-semibold leading-6 text-foreground sm:text-base">{item.label}</p><div className="mt-3 h-2 overflow-hidden rounded-full bg-secondary"><div className="h-full rounded-full bg-gradient-accent" style={{ width: `${item.confidence}%` }} /></div><p className="text-fit-tile mt-2 font-mono text-sm text-primary">{item.confidence}% confidence</p></div>;
                 })}
               </div>
-              <p className="mt-4 rounded-lg border border-glass-border bg-glass p-4 text-sm leading-6 text-muted-foreground">{vehicleIdentification.explanation}</p>
+              <p className="text-fit-tile mt-4 rounded-lg border border-glass-border bg-glass p-4 text-sm leading-6 text-muted-foreground">{vehicleIdentification.explanation}</p>
             </AnalysisCard>
           ) : null}
 

@@ -153,12 +153,28 @@ All colors MUST be HSL.
     background-attachment: fixed;
   }
 
+  main * {
+    min-width: 0;
+  }
+
+  main :where(h1, h2, h3, h4, p, span, a, button, label) {
+    overflow-wrap: anywhere;
+    word-break: break-word;
+  }
+
   ::selection {
     @apply bg-primary text-primary-foreground;
   }
 }
 
 @layer utilities {
+  .text-fit-tile {
+    min-width: 0;
+    max-width: 100%;
+    overflow-wrap: anywhere;
+    word-break: break-word;
+  }
+
   .diagnostic-grid {
     background-image: linear-gradient(hsl(var(--glass-border)) 1px, transparent 1px), linear-gradient(90deg, hsl(var(--glass-border)) 1px, transparent 1px);
     background-size: 28px 28px;
