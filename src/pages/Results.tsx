@@ -1,5 +1,6 @@
 import { AlertTriangle, BarChart3, Binary, BrainCircuit, ChevronDown, Clock, Cpu, Gauge, Hash, Layers3, MessageSquareText, Radar, Wrench } from "lucide-react";
 import { useEffect, useState } from "react";
+import type { ReactNode } from "react";
 import { Link, useParams } from "react-router-dom";
 import { Bar, BarChart, CartesianGrid, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 
@@ -44,7 +45,7 @@ const numericValue = (row: Record<string, unknown>, keys: string[]) => {
   return value === undefined ? 0 : Number(value);
 };
 
-const CollapsiblePanel = ({ title, icon, children, defaultOpen = false }: { title: string; icon: React.ReactNode; children: React.ReactNode; defaultOpen?: boolean }) => (
+const CollapsiblePanel = ({ title, icon, children, defaultOpen = false }: { title: string; icon: ReactNode; children: ReactNode; defaultOpen?: boolean }) => (
   <details open={defaultOpen} className="group overflow-hidden rounded-lg border border-glass-border bg-glass backdrop-blur-xl transition-all duration-300 hover:border-primary/30 hover:shadow-glow">
     <summary className="flex cursor-pointer list-none items-center justify-between gap-4 p-5">
       <span className="flex items-center gap-3 text-lg font-bold text-foreground">
