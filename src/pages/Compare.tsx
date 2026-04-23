@@ -141,6 +141,7 @@ const Compare = () => {
       </CardContent>
     </Card>
     <Card className="mt-6 border-primary/30 bg-gradient-subtle"><CardContent className="flex items-center gap-4 p-5"><ShieldCheck className="size-8 text-primary" /><p className="text-sm leading-6 text-foreground">Saved comparison records are supported by the SaaS data layer and ready for production workflows.</p></CardContent></Card>
+    {result ? <div className="mt-6"><EcuSwapPanel before={result.before} after={result.after} /></div> : null}
   </main>
   );
 };
