@@ -5,7 +5,7 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
-type CanFormat = "CSV" | "J1939 CSV" | "candump" | "CRTD" | "ASC" | "BLF" | "MDF/MF4" | "CANedge" | "DBC" | "key/value" | "generic TXT";
+type CanFormat = "CSV" | "J1939 CSV" | "candump" | "CRTD" | "TRC" | "ASC" | "BLF" | "MDF/MF4" | "CANedge" | "DBC" | "key/value" | "generic TXT";
 type Frame = { timestamp: string; id: string; dlc: number; data: string[] };
 type ConversionResult = { format: CanFormat; csv: string; frameCount: number; warnings: string[] };
 
@@ -17,7 +17,7 @@ const jsonResponse = (body: unknown, status = 200) =>
 
 const cleanId = (value: string) => value.replace(/^0x/i, "").replace(/[^a-fA-F0-9]/g, "").toUpperCase();
 const cleanByte = (value: string) => value.replace(/^0x/i, "").replace(/[^a-fA-F0-9]/g, "").slice(0, 2).padStart(2, "0").toUpperCase();
-const isId = (value: string) => /^[0-9a-fA-F]{1,8}x?$/.test(value.replace(/^0x/i, ""));
+const isId = (value: string) => /^[0-9a-fA-F]{1,8}[xh]?$/.test(value.replace(/^0x/i, ""));
 const isByte = (value: string) => /^(0x)?[0-9a-fA-F]{1,2}$/.test(value);
 const splitBytes = (value: string) => value.replace(/[^a-fA-F0-9]/g, "").match(/.{1,2}/g)?.slice(0, 8).map(cleanByte) ?? [];
 const csvEscape = (value: string | number) => `"${String(value).replace(/"/g, '""')}"`;
@@ -67,6 +67,7 @@ const detectFormat = (name: string, bytes: Uint8Array, text: string): CanFormat 
   if (signature.startsWith("MDF") || lower.endsWith(".mf4") || lower.endsWith(".mdf")) return "MDF/MF4";
   if (lower.endsWith(".dbc") || /(^|\n)\s*BO_\s+\d+\s+\S+\s*:\s*\d+\s+\S+/m.test(text)) return "DBC";
   if (lower.endsWith(".asc") || /date\s+.*base\s+hex|internal events logged|begin triggerblock/i.test(firstLines)) return "ASC";
+  if (lower.endsWith(".trc") || /\$FILEVERSION=|;\s*\$STARTTIME=|\bPCAN-Trace\b/i.test(firstLines)) return "TRC";
   if (lower.endsWith(".crtd") || /^\s*\d+(?:\.\d+)?\s+[0-9a-fA-F]{3,8}\s+\d\s+/m.test(text)) return "CRTD";
   if (/\(\d+\.\d+\)\s+\w+\s+[0-9a-fA-F]+#|\w+\s+[0-9a-fA-F]+\s+\[\d\]/m.test(text) || lower.endsWith(".log")) return "candump";
   if (/pgn|source|destination|priority|j1939/i.test(firstLines) && lower.endsWith(".csv")) return "J1939 CSV";
@@ -114,6 +115,18 @@ const parseCrtd = (text: string) => text.split(/\r?\n/).map((line, index) => {
   const dlc = /^\d+$/.test(parts[idIndex + 1] ?? "") ? Number(parts[idIndex + 1]) : undefined;
   const byteStart = dlc === undefined ? idIndex + 1 : idIndex + 2;
   return normalizeFrame(timestamp, parts[idIndex].replace(/x$/i, ""), parts.slice(byteStart).filter(isByte), dlc);
+}).filter((frame): frame is Frame => Boolean(frame));
+
+const parseTrc = (text: string) => text.split(/\r?\n/).map((line, index) => {
+  const trimmed = line.trim();
+  if (!trimmed || trimmed.startsWith(";") || trimmed.startsWith("$")) return null;
+  const parts = trimmed.split(/[\s,;]+/).filter(Boolean);
+  const idIndex = parts.findIndex((part, partIndex) => partIndex > 0 && isId(part) && cleanId(part).length >= 2);
+  if (idIndex < 0) return null;
+  const timestamp = parts.slice(0, idIndex).reverse().find((part) => /^\d+(?:\.\d+)?$/.test(part)) ?? String(index);
+  const dlcIndex = parts.findIndex((part, partIndex) => partIndex > idIndex && /^\d+$/.test(part) && Number(part) <= 64);
+  const byteStart = dlcIndex >= 0 ? dlcIndex + 1 : idIndex + 1;
+  return normalizeFrame(timestamp, parts[idIndex].replace(/[xh]$/i, ""), parts.slice(byteStart).filter(isByte), dlcIndex >= 0 ? Number(parts[dlcIndex]) : undefined);
 }).filter((frame): frame is Frame => Boolean(frame));
 
 const parseAsc = (text: string) => text.split(/\r?\n/).map((line) => {
@@ -207,6 +220,7 @@ const convertFile = async (file: File): Promise<ConversionResult> => {
   const frames = format === "CSV" || format === "J1939 CSV" ? parseCsv(text, warnings, format)
     : format === "candump" ? parseCandump(text)
     : format === "CRTD" ? parseCrtd(text)
+    : format === "TRC" ? parseTrc(text)
     : format === "ASC" ? parseAsc(text)
     : format === "DBC" ? parseDbc(text, warnings)
     : format === "key/value" ? [...parseKeyValue(text), ...parseGeneric(text)]
@@ -221,7 +235,7 @@ const convertFile = async (file: File): Promise<ConversionResult> => {
     seen.add(key);
     return true;
   });
-  if (!deduped.length) throw new Error(`No valid CAN frames found in ${file.name}. Try ASC, CSV, candump, CRTD, or a text export if this is a proprietary binary log.`);
+  if (!deduped.length) throw new Error(`No valid CAN frames found in ${file.name}. Try ASC, CSV, TRC, candump, CRTD, or a text export if this is a proprietary binary log.`);
   const malformed = text.split(/\r?\n/).filter((line) => line.trim()).length - deduped.length;
   if (malformed > 0 && format !== "CSV" && format !== "BLF" && format !== "MDF/MF4") warnings.push(`${malformed} line(s) were skipped because they did not look like valid CAN frames.`);
   return { format, csv: toCsv(deduped), frameCount: deduped.length, warnings };
