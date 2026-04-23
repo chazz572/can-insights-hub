@@ -17,7 +17,7 @@ const comparisonModes = [
 type Slot = "before" | "after";
 type CompareResult = { before: AnalysisResult; after: AnalysisResult; beforeId: string; afterId: string };
 
-const acceptedTypes = ".csv,.log,.txt,.crtd,.asc,.blf,.mf4,.mdf,.jsonl,text/csv,text/plain";
+const acceptedTypes = ".csv,.log,.txt,.crtd,.asc,.blf,.mf4,.mdf,.jsonl,.dbc,text/csv,text/plain";
 
 const metricDelta = (after = 0, before = 0) => after - before;
 
@@ -47,7 +47,7 @@ const FileDropZone = ({ label, file, dragging, disabled, onFile, onDrag }: { lab
           {file ? <CheckCircle2 className="size-8 text-success" /> : <UploadCloud className="size-8" />}
         </span>
         <span className="mt-5 text-lg font-bold text-foreground">{file ? file.name : `Drop ${label} Log Here`}</span>
-        <span className="mt-2 text-sm leading-6 text-muted-foreground">{file ? `${Math.max(1, Math.round(file.size / 1024))} KB ready for comparison` : "CSV, candump, CRTD, ASC, BLF, MF4/MDF, CANedge, or TXT"}</span>
+        <span className="mt-2 text-sm leading-6 text-muted-foreground">{file ? `${Math.max(1, Math.round(file.size / 1024))} KB ready for comparison` : "CSV, candump, CRTD, ASC, BLF, MF4/MDF, CANedge, DBC, or TXT"}</span>
         <Input id={inputId} className="sr-only" type="file" accept={acceptedTypes} disabled={disabled} onChange={(event: ChangeEvent<HTMLInputElement>) => onFile(event.target.files?.[0] ?? null)} />
       </Label>
     </div>
