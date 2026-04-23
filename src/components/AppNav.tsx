@@ -93,12 +93,9 @@ export const AppNav = () => {
 
         <nav className="flex-1 space-y-0.5 overflow-y-auto px-3 pr-2">
           {links.map((item) => (
-            <RouterNavLink key={item.label} to={item.to} className={({ isActive }) => navClass({ isActive, highlight: item.highlight })} end={item.end}>
+            <RouterNavLink key={item.label} to={item.to} className={({ isActive }) => navClass({ isActive })} end={item.end}>
               <item.icon className="size-4 shrink-0" />
               {item.label}
-              {item.highlight && (
-                <span className="ml-auto rounded-sm bg-primary/20 px-1.5 py-0.5 font-mono text-[9px] text-primary">NEW</span>
-              )}
             </RouterNavLink>
           ))}
         </nav>
