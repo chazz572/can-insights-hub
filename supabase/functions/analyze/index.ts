@@ -505,11 +505,28 @@ const runAnalysis = (csv: string) => {
   const correlationPairs = idDeepDive.flatMap((left, leftIndex) => idDeepDive.slice(leftIndex + 1).map((right) => ({ left: left.id, right: right.id, correlation: Number((1 - Math.min(1, Math.abs(Number(left.average_period) - Number(right.average_period)))).toFixed(4)), relationship: "timing_cadence_similarity" }))).filter((item) => item.correlation >= 0.72).slice(0, 24);
   const enhancedNetworkHealth = { ...networkHealth, bus_health_score: Math.max(0, Math.min(100, 100 - anomalies.length * 4 - Math.round(Number(networkHealth.timing_irregularity_score) * 120))), chatter_classification: idStats.some((item) => item.percentage > 35) ? "dominant_id_chatter" : totalMessages / Math.max(idCounts.size, 1) > 60 ? "busy_periodic_chatter" : "normal_idle_chatter", dropout_events: timing.filter((item) => Number(item.max_period) > Math.max(Number(item.average_period) * 3, 0.1)).map((item) => ({ id: item.id, max_period: item.max_period, average_period: item.average_period, classification: "possible_gap_or_dropout" })).slice(0, 16) };
   const derivedEvents = enhancedNetworkHealth.dropout_events.map((item, index) => ({ event_index: eventTimeline.length + index + 1, id: item.id, timestamp: null, event_type: "possible_module_dropout", description: `Timing gap detected: max period ${item.max_period}s vs average ${item.average_period}s.`, before_after_hint: "Compare nearby frames to confirm wake/sleep or missing traffic." }));
+  const whatDataShows = [
+    `The strongest defensible vehicle-state conclusion is ${behaviorLabel} at ${Math.round(behaviorConfidence * 100)}% confidence.`,
+    behavioralEvidence.length ? `Behavior evidence: ${behavioralEvidence.slice(0, 4).join(" ")}` : "Behavior evidence: no correlated directional speed, wheel, pedal, brake, steering, or gear-shaped byte movement was present, so motion claims are intentionally limited.",
+    `Protocol behavior: ${protocolInsights.likely_protocol}; extended-ID ratio ${(protocolInsights.extended_id_ratio * 100).toFixed(1)}%, diagnostic-shaped IDs ${protocolInsights.diagnostic_id_candidates.join(", ") || "not present"}.`,
+    subtleAbnormalities.length ? `Subtle abnormalities found: ${subtleAbnormalities.slice(0, 5).map((item) => `${item.type} on ${item.id}`).join("; ")}.` : "Subtle abnormality checks did not isolate jitter, drift, sparse-ID, stuck-byte, or entropy-spike evidence above the current thresholds.",
+    ecuClusters.length ? `Likely ECU groups: ${ecuClusters.slice(0, 4).map((cluster) => `${cluster.cluster_id} (${cluster.ids.join(", ")})`).join("; ")}.` : "ECU grouping evidence was weak because timing cadence and payload structures did not form repeated multi-ID clusters.",
+  ];
+  const detailedSummary = [
+    "What the Data Actually Shows",
+    ...whatDataShows.map((item) => `- ${item}`),
+    "",
+    "Interpretation",
+    `The capture is best described as ${behaviorLabel}. The engine/powertrain read is ${driverBehavior.engine_activity_confidence}, movement read is ${driverBehavior.movement_confidence}, and driver-input read is ${driverBehavior.pedal_activity_confidence}.`,
+    `Reverse-engineering priorities are ${analogSignals.slice(0, 8).map((signal) => `${signal.id}:${signal.likely_signal_type}`).join(", ") || "limited because no strong analog signal candidates crossed threshold"}.`,
+    `Health notes: ${subtleAbnormalities.length ? subtleAbnormalities.slice(0, 6).map((item) => `${item.severity} ${item.type} on ${item.id}`).join("; ") : "no threshold-level subtle abnormalities were isolated"}.`,
+  ].join("\n");
 
   return {
     ok: true,
     summary: {
-      text: `Parsed ${totalMessages} messages across ${idCounts.size} unique IDs. Detected ${anomalies.length} anomalies and ${reverseEngineering.length} reverse-engineering candidates.`,
+      text: detailedSummary,
+      what_the_data_actually_shows: whatDataShows,
     },
     total_messages: totalMessages,
     unique_ids: idCounts.size,
@@ -546,9 +563,11 @@ const runAnalysis = (csv: string) => {
         likely_signal_relationships: correlationPairs.map((item) => ({ ...item, explanation: "These IDs share timing cadence and should be reviewed as related ECU/status traffic." })),
       },
       network_health: enhancedNetworkHealth,
+      subtle_abnormalities: subtleAbnormalities,
       driver_behavior: driverBehavior,
       event_timeline: [...eventTimeline, ...derivedEvents],
-      mechanic_summary: `Capture contains ${totalMessages} CAN messages. ${anomalies.length} anomalous payloads were detected. Candidate speed IDs: ${vehicleBehavior.possible_speed_ids.join(", ") || "none"}. Candidate RPM IDs: ${vehicleBehavior.possible_rpm_ids.join(", ") || "none"}.`,
+      what_the_data_actually_shows: whatDataShows,
+      mechanic_summary: detailedSummary,
     },
   };
 };
