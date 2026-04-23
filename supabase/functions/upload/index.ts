@@ -172,7 +172,7 @@ const parseDbc = (text: string, warnings: string[]) => {
     return normalizeFrame(String(index), id, [signalCount, ...Array.from({ length: dlc - 1 }, () => "00")], dlc, messageMetadata.get(id)?.slice(0, 1800));
   }).filter((frame): frame is Frame => Boolean(frame));
 
-  if (frames.length) warnings.push("DBC files contain message definitions, not live traffic. CANAI preserved message and signal names as metadata so EV/OEM/system intelligence can be inferred from the DBC map.");
+  if (frames.length) warnings.push("DBC files contain message definitions, not live traffic. CANAI preserved message and signal names as metadata for message, signal, and likely ECU-structure review only; vehicle type is not inferred from a DBC file alone.");
   return frames;
 };
 

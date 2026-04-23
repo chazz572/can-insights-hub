@@ -246,10 +246,6 @@ const runAnalysis = (csv: string) => {
     meanLength += delta / totalMessages;
     m2Length += delta * (payloadLength - meanLength);
 
-    if (payloadLength === 2) speedIds.add(id);
-    if (payloadLength === 4) rpmIds.add(id);
-    if (payloadLength === 1) pedalIds.add(id);
-
     const bytes = byteValues(data);
 
     bytes.forEach((byte, byteIndex) => {
@@ -487,6 +483,29 @@ const runAnalysis = (csv: string) => {
     ...idDeepDive.filter((item) => Number(item.payload_change_rate) === 0 && Number(item.messages) > 8).map((item) => ({ id: item.id, type: "stuck_payload_or_static_status", severity: "minor", evidence: `Payload did not change across ${item.messages} messages; likely static status, but worth noting if it should be live.` })),
     ...idDeepDive.filter((item) => Number(item.messages) <= 2).map((item) => ({ id: item.id, type: "unusual_id_silence_or_sparse_frame", severity: "minor", evidence: `Only ${item.messages} frame(s) observed; this can indicate one-shot status, wake/sleep traffic, or missing expected repetition.` })),
   ].slice(0, 32);
+  const metadataText = [...metadataById.values()].join(" ").toLowerCase();
+  const explicitEvTerms = ["pack voltage", "hv voltage", "high voltage", "battery current", "pack current", "cell voltage", "cell temp", "inverter torque", "motor rpm", "drive inverter"];
+  const explicitIceTerms = ["engine rpm", "fuel trim", "o2 sensor", "oxygen sensor", "intake manifold", "map sensor", "crankshaft", "camshaft"];
+  const explicitHybridTerms = ["hybrid ecu", "hybrid control", "motor torque", "engine torque"];
+  const hasExplicitEvMetadata = containsAny(metadataText, explicitEvTerms);
+  const hasExplicitIceMetadata = containsAny(metadataText, explicitIceTerms);
+  const hasExplicitHybridMetadata = containsAny(metadataText, explicitHybridTerms);
+  const hasHvAnalogEvidence = analogSignals.some((signal) => Number(signal.max_value ?? 0) >= 200 && Number(signal.max_value ?? 0) <= 900 && Number(signal.range ?? 0) >= 20 && /voltage|hv|pack|battery/i.test(String(metadataById.get(String(signal.id)) ?? "")));
+  const hasEngineRpmEvidence = rpmSignals.some((signal) => /engine|rpm|crank/i.test(String(metadataById.get(String(signal.id)) ?? "")));
+  const hasMotorRpmEvidence = rpmSignals.some((signal) => /motor|inverter|drive/i.test(String(metadataById.get(String(signal.id)) ?? "")));
+  const evEvidence = [hasExplicitEvMetadata || hasHvAnalogEvidence ? `explicit EV/HV signal naming or voltage-range evidence on IDs ${[...metadataById.entries()].filter(([, value]) => containsAny(value.toLowerCase(), explicitEvTerms)).map(([id]) => id).slice(0, 8).join(", ") || analogSignals.filter((signal) => Number(signal.max_value ?? 0) >= 200 && Number(signal.max_value ?? 0) <= 900).map((signal) => String(signal.id)).slice(0, 8).join(", ")}` : null, hasMotorRpmEvidence ? `motor/inverter RPM evidence on IDs ${rpmSignals.filter((signal) => /motor|inverter|drive/i.test(String(metadataById.get(String(signal.id)) ?? ""))).map((signal) => String(signal.id)).join(", ")}` : null].filter(Boolean);
+  const iceEvidence = [hasExplicitIceMetadata || hasEngineRpmEvidence ? `explicit ICE signal naming on IDs ${[...metadataById.entries()].filter(([, value]) => containsAny(value.toLowerCase(), explicitIceTerms)).map(([id]) => id).slice(0, 8).join(", ") || rpmSignals.filter((signal) => /engine|rpm|crank/i.test(String(metadataById.get(String(signal.id)) ?? ""))).map((signal) => String(signal.id)).join(", ")}` : null].filter(Boolean);
+  const hybridEvidence = [hasExplicitHybridMetadata ? `explicit hybrid signal naming on IDs ${[...metadataById.entries()].filter(([, value]) => containsAny(value.toLowerCase(), explicitHybridTerms)).map(([id]) => id).slice(0, 8).join(", ")}` : null, evEvidence.length && iceEvidence.length ? "both HV/motor evidence and engine/ICE evidence are present in live traffic" : null].filter(Boolean);
+  const vehicleType = isDbcReference
+    ? { classification: "Vehicle type cannot be determined from this log.", confidence_score: 0, evidence: [], reasoning: "This upload is a DBC signal definition file, not a vehicle log. Message and signal names can describe network structure, but they do not prove the vehicle type or operating state." }
+    : hybridEvidence.length
+      ? { classification: "hybrid", confidence_score: 0.86, evidence: hybridEvidence, reasoning: "Hybrid classification requires both engine-side and high-voltage/motor-side evidence, or explicit hybrid ECU naming in live decoded traffic." }
+      : evEvidence.length
+        ? { classification: "EV", confidence_score: 0.82, evidence: evEvidence, reasoning: "EV classification is based only on explicit high-voltage, pack/cell, inverter, motor, or drive-unit evidence; missing RPM or fuel signals are ignored." }
+        : iceEvidence.length
+          ? { classification: "ICE", confidence_score: 0.82, evidence: iceEvidence, reasoning: "ICE classification is based only on explicit engine RPM, fuel trim, oxygen sensor, intake manifold, crankshaft, or camshaft evidence; generic ID patterns are ignored." }
+          : { classification: "Vehicle type cannot be determined from this log.", confidence_score: 0, evidence: [], reasoning: "The log lacks explicit EV indicators such as HV pack voltage/current, cell data, inverter torque, or motor RPM, and lacks explicit ICE indicators such as engine RPM, fuel trims, O2 sensors, intake manifold pressure, crankshaft, or camshaft signals." };
+
   const driverBehavior = {
     behavior: isDbcReference ? "DBC definition map / not live driving traffic" : behaviorLabel,
     confidence_score: Number(behaviorConfidence.toFixed(3)),
@@ -495,7 +514,7 @@ const runAnalysis = (csv: string) => {
     pedal_activity_confidence: pedalBrakeSteeringSignals.length ? "supported_by_compact_input_like_bytes" : "not_isolated",
     harsh_event_candidates: anomalies.slice(0, 12),
     evidence: behavioralEvidence.length ? behavioralEvidence : ["No byte pair showed the rising/falling motion shape required to defend speed, pedal, brake, steering, or wheel-speed claims."],
-    interpretation: isDbcReference ? "This upload is a DBC definition file, so the defensible conclusion comes from decoded message and signal names rather than live timing. It strongly identifies an EV/Tesla-style network map but does not prove current vehicle motion." : `${behaviorLabel}. This conclusion is based on byte-level trend direction, smoothness, entropy, timing cadence, and cross-ID relationships rather than message counts alone.`,
+    interpretation: isDbcReference ? "This upload is a DBC definition file, so the defensible conclusion is limited to message definitions, signal names, and likely ECU groups. It must not be treated as live traffic or used by itself to classify vehicle type." : `${behaviorLabel}. This conclusion is based on byte-level trend direction, smoothness, entropy, timing cadence, and cross-ID relationships rather than message counts alone.`,
   };
 
   const eventTimeline = anomalies.slice(0, 24).map((item, index) => ({
@@ -555,8 +574,9 @@ const runAnalysis = (csv: string) => {
   const enhancedNetworkHealth = { ...networkHealth, bus_health_score: Math.max(0, Math.min(100, 100 - anomalies.length * 4 - Math.round(Number(networkHealth.timing_irregularity_score) * 120))), chatter_classification: idStats.some((item) => item.percentage > 35) ? "dominant_id_chatter" : totalMessages / Math.max(idCounts.size, 1) > 60 ? "busy_periodic_chatter" : "normal_idle_chatter", dropout_events: timing.filter((item) => Number(item.max_period) > Math.max(Number(item.average_period) * 3, 0.1)).map((item) => ({ id: item.id, max_period: item.max_period, average_period: item.average_period, classification: "possible_gap_or_dropout" })).slice(0, 16) };
   const derivedEvents = enhancedNetworkHealth.dropout_events.map((item, index) => ({ event_index: eventTimeline.length + index + 1, id: item.id, timestamp: null, event_type: "possible_module_dropout", description: `Timing gap detected: max period ${item.max_period}s vs average ${item.average_period}s.`, before_after_hint: "Compare nearby frames to confirm wake/sleep or missing traffic." }));
   const whatDataShows = [
-    isDbcReference ? `This is a DBC definition map, not live CAN traffic. Its message/signal names strongly indicate ${metadataInsights.likely_oem_or_platform} and an EV architecture at ${Math.round(metadataEvConfidence * 100)}% confidence.` : `The strongest defensible vehicle-state conclusion is ${behaviorLabel} at ${Math.round(behaviorConfidence * 100)}% confidence.`,
-    metadataInsights.has_dbc_metadata ? `DBC/OEM evidence: ${metadataInsights.explanation} EV evidence IDs include ${metadataInsights.ev_evidence_ids.slice(0, 8).join(", ") || "none"}.` : "No DBC metadata was available, so EV/OEM identity relies only on traffic shape.",
+    isDbcReference ? "This is a DBC definition map, not live CAN traffic. It defines message IDs, signal names, transmitters, and likely ECU groups, but it does not prove vehicle type or motion." : `The strongest defensible vehicle-state conclusion is ${behaviorLabel} at ${Math.round(behaviorConfidence * 100)}% confidence.`,
+    `Vehicle type: ${vehicleType.classification} ${vehicleType.confidence_score ? `(${Math.round(vehicleType.confidence_score * 100)}% confidence)` : ""}. ${vehicleType.reasoning}`,
+    metadataInsights.has_dbc_metadata ? `DBC/OEM evidence: ${metadataInsights.explanation} This metadata is used for structure and decoding support only, not vehicle-type classification by itself.` : "No DBC metadata was available; vehicle type remains unclassified unless explicit decoded EV, hybrid, or ICE signals are present.",
     behavioralEvidence.length ? `Behavior evidence: ${behavioralEvidence.slice(0, 4).join(" ")}` : "Behavior evidence: no correlated directional speed, wheel, pedal, brake, steering, or gear-shaped byte movement was present, so motion claims are intentionally limited.",
     `Protocol behavior: ${protocolInsights.likely_protocol}; extended-ID ratio ${(protocolInsights.extended_id_ratio * 100).toFixed(1)}%, diagnostic-shaped IDs ${protocolInsights.diagnostic_id_candidates.join(", ") || "not present"}.`,
     subtleAbnormalities.length ? `Subtle abnormalities found: ${subtleAbnormalities.slice(0, 5).map((item) => `${item.type} on ${item.id}`).join("; ")}.` : "Subtle abnormality checks did not isolate jitter, drift, sparse-ID, stuck-byte, or entropy-spike evidence above the current thresholds.",
@@ -606,6 +626,7 @@ const runAnalysis = (csv: string) => {
       id_classifications: idClassifications,
       module_type_heuristics: systems,
       vehicle_state: vehicleState,
+      vehicle_type: vehicleType,
       missing_physical_signals: missingPhysicalSignals,
       infotainment_security_frames: systems.filter((item) => ["infotainment_or_cluster", "body_control_or_security"].includes(String(item.module_type))),
       correlation_analysis: {

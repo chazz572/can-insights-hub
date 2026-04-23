@@ -184,8 +184,8 @@ const SystemsBadges = ({ data }: { data: unknown }) => {
 };
 
 const MechanicSummary = ({ data }: { data: unknown }) => (
-  <div className="rounded-lg border border-primary/30 bg-gradient-subtle p-5 shadow-glow backdrop-blur">
-    <div className="min-w-0 max-w-full overflow-hidden whitespace-pre-wrap break-words text-sm leading-7 text-foreground [overflow-wrap:anywhere]">
+  <div className="min-w-0 max-w-full overflow-hidden rounded-lg border border-primary/30 bg-gradient-subtle p-3 shadow-glow backdrop-blur sm:p-5">
+    <div className="block min-w-0 max-w-full overflow-hidden whitespace-pre-wrap break-all text-xs leading-6 text-foreground [overflow-wrap:anywhere] sm:break-words sm:text-sm sm:leading-7">
       {renderText(data)}
     </div>
   </div>
@@ -494,8 +494,9 @@ const Results = () => {
   const vehicleIdentification = data ? inferVehicleIdentification(data) : null;
   const partialDbcDraft = data ? buildPartialDbcDraft(generatePartialDbcCandidates(data)) : "";
   const vehicleState = diagnostics.vehicle_state && typeof diagnostics.vehicle_state === "object" ? diagnostics.vehicle_state as JsonRecord : {};
+  const vehicleType = diagnostics.vehicle_type && typeof diagnostics.vehicle_type === "object" ? diagnostics.vehicle_type as JsonRecord : {};
   const shortPlainSummary = data
-    ? `This log contains ${data.total_messages ?? "multiple"} CAN messages across ${data.unique_ids ?? "several"} IDs, and the strongest vehicle-state read is ${renderText(vehicleState.classification ?? "general module activity").replace(/_/g, " ")}. ${anomalies.length ? `${anomalies.length} unusual payload event${anomalies.length === 1 ? "" : "s"} should be reviewed.` : "No major payload abnormalities were detected in this capture."}`
+    ? `Strongest vehicle-state read: ${renderText(vehicleState.classification ?? "general module activity").replace(/_/g, " ")}. Vehicle type: ${renderText(vehicleType.classification ?? "Vehicle type cannot be determined from this log.")}. ${anomalies.length ? `${anomalies.length} unusual payload event${anomalies.length === 1 ? "" : "s"} should be reviewed.` : "No threshold-level payload abnormality was isolated in this capture."}`
     : "";
 
   const saveSnapshot = async () => {
@@ -587,14 +588,14 @@ const Results = () => {
           <div className="grid gap-6 xl:grid-cols-[1.25fr_0.75fr]">
             <AnalysisCard title="Summary" icon={<MessageSquareText className="size-5" />}>
               <div className="grid gap-4">
-                <div className="break-words rounded-lg border border-primary/30 bg-gradient-subtle p-4 text-sm font-medium leading-6 text-foreground shadow-glow backdrop-blur">{shortPlainSummary}</div>
+                <div className="min-w-0 max-w-full overflow-hidden break-all rounded-lg border border-primary/30 bg-gradient-subtle p-3 text-xs font-medium leading-6 text-foreground shadow-glow backdrop-blur [overflow-wrap:anywhere] sm:break-words sm:p-4 sm:text-sm">{shortPlainSummary}</div>
                 <details className="group min-w-0 overflow-hidden rounded-lg border border-glass-border bg-glass backdrop-blur">
                   <summary className="flex cursor-pointer list-none items-center justify-between gap-3 p-4 text-sm font-semibold text-foreground">
                     Detailed evidence
                     <ChevronDown className="size-4 shrink-0 text-muted-foreground transition-transform group-open:rotate-180" />
                   </summary>
-                  <div className="min-w-0 max-w-full overflow-x-hidden overflow-y-auto border-t border-glass-border p-3 text-[11px] leading-5 text-foreground sm:p-4 sm:text-sm sm:leading-7">
-                    <div className="whitespace-pre-wrap break-words font-sans [overflow-wrap:anywhere]">{renderText(summaryText)}</div>
+                  <div className="min-w-0 max-w-full overflow-x-hidden overflow-y-auto border-t border-glass-border p-2 text-[10px] leading-5 text-foreground sm:p-4 sm:text-sm sm:leading-7">
+                    <div className="block min-w-0 max-w-full whitespace-pre-wrap break-all font-sans [overflow-wrap:anywhere] sm:break-words">{renderText(summaryText)}</div>
                   </div>
                 </details>
               </div>
