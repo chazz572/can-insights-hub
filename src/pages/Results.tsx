@@ -465,6 +465,20 @@ const LogPipelinePanels = ({ data, diagnostics, idStats, anomalies, vehicleBehav
   </div>
 );
 
+const LogDbcPipelinePanels = ({ data, diagnostics, idStats }: { data: AnalysisResult; diagnostics: NonNullable<AnalysisResult["diagnostics"]>; idStats: JsonRecord[] }) => (
+  <div className="grid gap-5">
+    <AnalysisCard title="Full Power LOG + DBC Dashboard" description="Decoded-signal workflow: live log frames are interpreted with matching DBC definitions." icon={<Gauge className="size-5" />}>
+      <JsonTable data={diagnostics.decoded_signals} />
+    </AnalysisCard>
+    <div className="grid gap-5 xl:grid-cols-2">
+      <CollapsiblePanel title="Raw Frames Side" icon={<Binary className="size-5" />} defaultOpen><FrequencyChart data={idStats} /><JsonTable data={idStats} /></CollapsiblePanel>
+      <CollapsiblePanel title="Decoded Signals Side" icon={<FileCode2 className="size-5" />} defaultOpen><JsonTable data={diagnostics.decoded_signals} /></CollapsiblePanel>
+    </div>
+    <CollapsiblePanel title="Driving Timeline & Event Detection" icon={<TimerReset className="size-5" />} defaultOpen><JsonTable data={diagnostics.event_timeline} /></CollapsiblePanel>
+    <CollapsiblePanel title="Signal-Level Reverse Engineering" icon={<Radar className="size-5" />}><JsonTable data={data.reverse_engineering} /><div className="mt-4"><JsonTable data={diagnostics.signals} /></div></CollapsiblePanel>
+  </div>
+);
+
 const Results = () => {
   const { id, file_id } = useParams();
   const fileId = file_id ?? id;
@@ -532,7 +546,11 @@ const Results = () => {
   const vehicleState = diagnostics.vehicle_state && typeof diagnostics.vehicle_state === "object" ? diagnostics.vehicle_state as JsonRecord : {};
   const vehicleType = diagnostics.vehicle_type && typeof diagnostics.vehicle_type === "object" ? diagnostics.vehicle_type as JsonRecord : {};
   const shortPlainSummary = data
-    ? `Strongest vehicle-state read: ${renderText(vehicleState.classification ?? "general module activity").replace(/_/g, " ")}. Vehicle type: ${renderText(vehicleType.classification ?? "Vehicle type cannot be determined from this log.")}. ${anomalies.length ? `${anomalies.length} unusual payload event${anomalies.length === 1 ? "" : "s"} should be reviewed.` : "No threshold-level payload abnormality was isolated in this capture."}`
+    ? fileType === "dbc"
+      ? `DBC definition file: ${data.unique_ids ?? 0} message definitions parsed. No charts, behavior, vehicle type, or health conclusions are produced because a DBC has no live traffic.`
+      : fileType === "log_dbc"
+        ? `Full Power LOG + DBC: decoded signal context is available. ${toRecordArray(diagnostics.decoded_signals).length} decoded signal candidate${toRecordArray(diagnostics.decoded_signals).length === 1 ? "" : "s"} matched against DBC metadata.`
+        : `Raw LOG analysis: timing, entropy, ECU activity, anomalies, and reverse-engineering hints only. No physical signal decoding is attempted without a DBC.`
     : "";
 
   const saveSnapshot = async () => {
@@ -642,13 +660,9 @@ const Results = () => {
             </AnalysisCard>
           </div>
 
-          {fileType === "dbc" ? <DbcViewer diagnostics={diagnostics} /> : <>
+          {fileType === "dbc" ? <DbcViewer diagnostics={diagnostics} /> : fileType === "log_dbc" ? <LogDbcPipelinePanels data={data} diagnostics={diagnostics} idStats={idStats} /> : <LogPipelinePanels data={data} diagnostics={diagnostics} idStats={idStats} anomalies={anomalies} vehicleBehavior={vehicleBehavior} partialDbcDraft={partialDbcDraft} />}
 
-          {fileType === "log_dbc" ? (
-            <AnalysisCard title="Decoded Signal Dashboard" description="Full Power Mode: DBC-matched real-value signal candidates and decoded context." icon={<Gauge className="size-5" />}>
-              <JsonTable data={diagnostics.decoded_signals} />
-            </AnalysisCard>
-          ) : null}
+          {fileType !== "dbc" ? <>
 
           {vehicleIdentification ? (
             <AnalysisCard title="Vehicle Identification" description="Heuristic AVI fingerprint from ID ranges, protocol shape, timing, entropy, and diagnostic patterns." icon={<Car className="size-5" />}>
@@ -726,7 +740,7 @@ const Results = () => {
             </div>
           </AnalysisCard>
 
-          <div className="grid gap-5">
+          {fileType === "log" ? <div className="grid gap-5">
             <CollapsiblePanel title="Basic View" icon={<Binary className="size-5" />} defaultOpen>
               <FrequencyChart data={idStats} />
               <div className="mb-4"><IdActivityTimeline data={idStats} /></div>
@@ -751,7 +765,7 @@ const Results = () => {
                 <JsonTable data={vehicleBehavior} />
               </div>
             </CollapsiblePanel>
-          </div>
+          </div> : null}
 
           <AnalysisCard title="Advanced Diagnostics" description="Complete diagnostics payload returned by the backend." icon={<BrainCircuit className="size-5" />}>
             <div className="grid gap-4">
@@ -769,7 +783,7 @@ const Results = () => {
               <CollapsiblePanel title="Mechanic Summary" icon={<Wrench className="size-5" />} defaultOpen><MechanicSummary data={diagnostics.mechanic_summary} /></CollapsiblePanel>
             </div>
           </AnalysisCard>
-          </>}
+          </> : null}
         </div>
       ) : null}
     </main>
