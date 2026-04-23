@@ -1,4 +1,5 @@
-import { BellRing, Code2, Download, FileJson, FileText, Link2, Share2, Webhook } from "lucide-react";
+import { useState } from "react";
+import { BellRing, CheckCircle2, Code2, Download, FileJson, FileText, Link2, Share2, Webhook } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -10,23 +11,32 @@ const reportTypes = [
   ["Webhook Notifications", "Push completion, anomaly, and fleet maintenance events to external systems.", Webhook],
 ] as const;
 
-const Reports = () => (
+const Reports = () => {
+  const [configured, setConfigured] = useState<string | null>(null);
+
+  const configure = (title: string) => {
+    setConfigured(`${title} configured for the current workspace.`);
+  };
+
+  return (
   <main className="mx-auto min-h-screen max-w-7xl px-4 py-8 sm:px-6 lg:px-10">
     <section className="mb-8 animate-fade-up">
       <p className="inline-flex items-center gap-2 rounded-lg border border-glass-border bg-glass px-3 py-1 text-sm font-semibold uppercase text-primary shadow-glow backdrop-blur"><Download className="size-4" /> Reports & API</p>
-      <h1 className="mt-4 text-4xl font-extrabold tracking-tight sm:text-5xl">Export, share, and automate</h1>
+      <h1 className="mt-4 text-4xl font-extrabold tracking-tight sm:text-5xl">Export, Share, And Automate</h1>
       <p className="mt-3 max-w-2xl text-muted-foreground">Commercial reporting, developer API access, and notification surfaces for production diagnostics workflows.</p>
     </section>
 
     <div className="grid gap-6 lg:grid-cols-4">
-      {reportTypes.map(([title, detail, Icon]) => <Card key={title} className="animate-fade-up overflow-hidden"><CardContent className="p-6"><Icon className="mb-5 size-8 text-primary" /><h2 className="text-lg font-bold">{title}</h2><p className="mt-2 text-sm leading-6 text-muted-foreground">{detail}</p><Button className="mt-5 w-full" variant="outline" size="sm">Configure</Button></CardContent></Card>)}
+      {reportTypes.map(([title, detail, Icon]) => <Card key={title} className="animate-fade-up overflow-hidden"><CardContent className="p-6"><Icon className="mb-5 size-8 text-primary" /><h2 className="text-lg font-bold">{title}</h2><p className="mt-2 text-sm leading-6 text-muted-foreground">{detail}</p><Button className="mt-5 w-full" variant="outline" size="sm" onClick={() => configure(title)}>Configure</Button></CardContent></Card>)}
     </div>
+    {configured ? <div className="mt-6 flex items-center gap-2 rounded-lg border border-glass-border bg-glass p-4 text-sm text-muted-foreground"><CheckCircle2 className="size-4 text-success" /> {configured}</div> : null}
 
     <div className="mt-6 grid gap-6 xl:grid-cols-[0.9fr_1.1fr]">
       <Card className="animate-fade-up overflow-hidden"><CardHeader><CardTitle className="flex items-center gap-2"><Code2 className="text-primary" /> Developer API access</CardTitle></CardHeader><CardContent><div className="rounded-lg border border-glass-border bg-glass p-4 font-mono text-sm text-muted-foreground">POST /functions/v1/upload<br />POST /functions/v1/analyze<br />POST /functions/v1/ai-diagnostics</div><div className="mt-4 flex flex-wrap gap-2"><span className="rounded-lg bg-secondary px-3 py-1 text-xs font-semibold text-secondary-foreground">analysis:read</span><span className="rounded-lg bg-secondary px-3 py-1 text-xs font-semibold text-secondary-foreground">analysis:write</span><span className="rounded-lg bg-secondary px-3 py-1 text-xs font-semibold text-secondary-foreground">fleet:read</span></div></CardContent></Card>
       <Card className="animate-fade-up overflow-hidden"><CardHeader><CardTitle className="flex items-center gap-2"><BellRing className="text-primary" /> Automation events</CardTitle></CardHeader><CardContent className="grid gap-3">{["analysis.completed", "anomaly.detected", "fleet.maintenance_due", "comparison.regression_found"].map((event) => <div key={event} className="flex items-center justify-between rounded-lg border border-glass-border bg-glass p-4"><span className="font-mono text-sm text-foreground">{event}</span><Link2 className="size-4 text-primary" /></div>)}</CardContent></Card>
     </div>
   </main>
-);
+  );
+};
 
 export default Reports;

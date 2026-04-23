@@ -34,15 +34,15 @@ const Fleet = () => {
   return (
     <main className="mx-auto min-h-screen max-w-7xl px-4 py-8 sm:px-6 lg:px-10">
       <section className="mb-8 animate-fade-up">
-        <p className="inline-flex items-center gap-2 rounded-lg border border-glass-border bg-glass px-3 py-1 text-sm font-semibold uppercase text-primary shadow-glow backdrop-blur"><Car className="size-4" /> Fleet intelligence</p>
-        <h1 className="mt-4 text-4xl font-extrabold tracking-tight sm:text-5xl">Multi-vehicle health dashboard</h1>
+        <p className="inline-flex items-center gap-2 rounded-lg border border-glass-border bg-glass px-3 py-1 text-sm font-semibold uppercase text-primary shadow-glow backdrop-blur"><Car className="size-4" /> Fleet Intelligence</p>
+        <h1 className="mt-4 text-4xl font-extrabold tracking-tight sm:text-5xl">Multi-Vehicle Health Dashboard</h1>
         <p className="mt-3 max-w-2xl text-muted-foreground">Track health scores, driver behavior signals, and maintenance prediction across commercial vehicles.</p>
       </section>
       <Card className="mb-6 animate-fade-up overflow-hidden">
         <CardContent className="p-5">
           <form className="flex flex-col gap-3 sm:flex-row" onSubmit={submit}>
             <Input value={name} onChange={(event) => setName(event.target.value)} placeholder="Add vehicle name" maxLength={120} />
-            <Button type="submit" variant="analyzer" disabled={isLoading}>{isLoading ? <Loader2 className="animate-spin" /> : null} Add vehicle</Button>
+            <Button type="submit" variant="analyzer" disabled={isLoading}>{isLoading ? <Loader2 className="animate-spin" /> : null} Add Vehicle</Button>
           </form>
           {error ? <p className="mt-3 text-sm text-destructive">{error}</p> : null}
         </CardContent>

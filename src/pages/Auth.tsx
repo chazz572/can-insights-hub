@@ -70,13 +70,13 @@ const Auth = () => {
           <Tabs value={mode} onValueChange={(value) => setMode(value as "signin" | "signup")}>
             <TabsList className="grid w-full grid-cols-2">
               <TabsTrigger value="signin">Login</TabsTrigger>
-              <TabsTrigger value="signup">Sign up</TabsTrigger>
+              <TabsTrigger value="signup">Sign Up</TabsTrigger>
             </TabsList>
             <TabsContent value={mode}>
               <form className="mt-5 space-y-4" onSubmit={submit}>
                 {mode === "signup" ? (
                   <div className="space-y-2">
-                    <Label htmlFor="display-name">Display name</Label>
+                    <Label htmlFor="display-name">Display Name</Label>
                     <Input id="display-name" value={displayName} onChange={(event) => setDisplayName(event.target.value)} placeholder="Alex Rivera" maxLength={100} />
                   </div>
                 ) : null}
@@ -98,13 +98,13 @@ const Auth = () => {
                 {message ? <div className="rounded-lg border border-success/40 bg-success/10 p-3 text-sm text-success">{message}</div> : null}
                 <Button type="submit" variant="analyzer" className="w-full" disabled={isLoading}>
                   {isLoading ? <Loader2 className="animate-spin" /> : null}
-                  {mode === "signup" ? "Create account" : "Login"}
+                  {mode === "signup" ? "Create Account" : "Login"}
                 </Button>
               </form>
             </TabsContent>
           </Tabs>
           <Button type="button" variant="outline" className="mt-4 w-full" onClick={signInWithGoogle}>
-            <Chrome className="size-4" /> Continue with Google
+            <Chrome className="size-4" /> Continue With Google
           </Button>
         </CardContent>
       </Card>

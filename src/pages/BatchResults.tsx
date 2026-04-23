@@ -33,8 +33,8 @@ const BatchResults = () => {
   return (
     <main className="mx-auto min-h-screen max-w-7xl px-4 py-8 sm:px-6 lg:px-10">
       <section className="mb-8 animate-fade-up">
-        <p className="inline-flex items-center gap-2 rounded-lg border border-glass-border bg-glass px-3 py-1 text-sm font-semibold uppercase text-primary shadow-glow backdrop-blur"><Files className="size-4" /> Multi-file analysis</p>
-        <h1 className="mt-4 text-4xl font-extrabold tracking-tight sm:text-5xl">Batch results dashboard</h1>
+        <p className="inline-flex items-center gap-2 rounded-lg border border-glass-border bg-glass px-3 py-1 text-sm font-semibold uppercase text-primary shadow-glow backdrop-blur"><Files className="size-4" /> Multi-File Analysis</p>
+        <h1 className="mt-4 text-4xl font-extrabold tracking-tight sm:text-5xl">Batch Results Dashboard</h1>
         <p className="mt-3 max-w-2xl text-muted-foreground">Every uploaded CAN log was converted to normalized CSV and analyzed independently using the existing engine.</p>
       </section>
 
@@ -50,7 +50,7 @@ const BatchResults = () => {
                     <div className="rounded-lg border border-glass-border bg-glass p-3"><p className="text-2xl font-bold text-primary">{item.analysis.unique_ids ?? 0}</p><p className="text-xs text-muted-foreground">IDs</p></div>
                     <div className="rounded-lg border border-glass-border bg-glass p-3"><p className="text-2xl font-bold text-primary">{item.analysis.anomalies?.length ?? 0}</p><p className="text-xs text-muted-foreground">Anomalies</p></div>
                   </div>
-                  <Button asChild variant="outline"><Link to={`/results/${item.file_id}`}><BarChart3 className="size-4" /> Open full results</Link></Button>
+                  <Button asChild variant="outline"><Link to={`/results/${item.file_id}`}><BarChart3 className="size-4" /> Open Full Results</Link></Button>
                 </div>
               ) : item.error ? <p className="text-sm text-destructive">{item.error}</p> : <p className="inline-flex items-center gap-2 text-sm text-muted-foreground"><Loader2 className="size-4 animate-spin text-primary" /> Running analysis…</p>}
             </CardContent>
