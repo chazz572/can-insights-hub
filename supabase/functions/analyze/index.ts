@@ -18,6 +18,8 @@ type IdProfile = {
   cleanSamples: string[];
 };
 
+type PipelineKind = "log" | "dbc" | "log_dbc" | "batch" | "unsupported";
+
 const jsonResponse = (body: unknown) =>
   new Response(JSON.stringify(body), {
     status: 200,
@@ -178,6 +180,19 @@ const describeSignalEvidence = (signal: JsonRecord) => `ID ${signal.id} bytes ${
 
 const metadataTokens = (value: string) => value.toLowerCase().split(/[^a-z0-9]+/).filter(Boolean);
 const containsAny = (text: string, terms: string[]) => terms.some((term) => text.includes(term));
+const extractDbcSignals = (metadata: string) => [...metadata.matchAll(/signal=([^;|]+)(?:\|multiplex=([^;|]+))?\|start=([^;|]+)\|length=([^;|]+)\|endian=([^;|]+)\|signed=([^;|]+)\|factor=([^;|]+)\|offset=([^;|]+)\|min=([^;|]+)\|max=([^;|]+)\|unit=([^;]+)/g)].map((match) => ({
+  signal_name: match[1],
+  multiplex: match[2] === "none" ? null : match[2] ?? null,
+  start_bit: Number(match[3]),
+  bit_length: Number(match[4]),
+  endianness: match[5],
+  signed: match[6] === "true",
+  factor: Number(match[7]),
+  offset: Number(match[8]),
+  minimum: Number(match[9]),
+  maximum: Number(match[10]),
+  unit: match[11],
+}));
 const summarizeMetadata = (metadataById: Map<string, string>, idCounts: Map<string, number>) => {
   const rows = [...metadataById.entries()].map(([id, metadata]) => ({ id, metadata, text: metadata.toLowerCase(), tokens: metadataTokens(metadata) }));
   const scoreRows = (terms: string[]) => rows.filter((row) => containsAny(row.text, terms));
