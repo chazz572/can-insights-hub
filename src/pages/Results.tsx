@@ -382,8 +382,8 @@ const TroubleTimeline = ({ anomalies, timing }: { anomalies: unknown[]; timing: 
 
 const ModuleActivityMap = ({ systems }: { systems: unknown }) => {
   const rows = toRecordArray(systems).slice(0, 18);
-  const modules = rows.length ? rows : Array.from({ length: 6 }, (_, index) => ({ id: `M${index + 1}`, category: "module", module_type: "active" }));
-  const groups = modules.reduce<Record<string, Array<Record<string, unknown>>>>((acc, row) => {
+  const modules: Array<Record<string, unknown>> = rows.length ? rows : Array.from({ length: 6 }, (_, index) => ({ id: `M${index + 1}`, category: "module", module_type: "active" }));
+  const groups = modules.reduce((acc: Record<string, Array<Record<string, unknown>>>, row) => {
     const group = renderText(row.module_type ?? row.category ?? "active_module").replace(/_/g, " ");
     acc[group] = [...(acc[group] ?? []), row];
     return acc;
