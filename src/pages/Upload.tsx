@@ -173,7 +173,7 @@ const Upload = () => {
                 </span>
                 <span className="mt-6 text-xl font-bold text-foreground">{files.length ? `${files.length} File${files.length > 1 ? "s" : ""} Ready` : "Drop Any CAN Log Format Here"}</span>
                 <span className="mt-2 max-w-md text-sm leading-6 text-muted-foreground">Batch upload up to 12 files from Files, iCloud, Drive, or local storage. Each file is detected, validated, converted, stored as normalized CSV, and analyzed independently.</span>
-                <Input id="can-files" className="sr-only" type="file" multiple accept={supportedExtensionsText} onChange={handleFileChange} disabled={isLoading} />
+                <Input id="can-files" className="sr-only" type="file" multiple onChange={handleFileChange} disabled={isLoading} />
               </Label>
             </div>
 
