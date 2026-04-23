@@ -149,7 +149,7 @@ const runAnalysis = (csv: string) => {
 
     if (cleanHex(id).length > 3) extendedIds += 1;
 
-    const payloadLength = data.length;
+    const payloadLength = byteValues(data).length;
     const delta = payloadLength - meanLength;
     meanLength += delta / totalMessages;
     m2Length += delta * (payloadLength - meanLength);
