@@ -100,18 +100,18 @@ const parseCsv = (text: string, warnings: string[], format: CanFormat): Frame[] 
   return lines.slice(1).map((line, index) => {
     const values = parseCsvLine(line);
     const bytes = dataIndex >= 0 ? splitBytes(values[dataIndex] ?? "") : byteIndexes.map((byteIndex) => values[byteIndex]).filter(Boolean);
-    return normalizeFrame(timestampIndex >= 0 ? values[timestampIndex] : String(index), idIndex >= 0 ? values[idIndex] : "", bytes, dlcIndex >= 0 ? Number(values[dlcIndex]) : undefined);
+    return normalizeFrame(timestampIndex >= 0 ? values[timestampIndex] : String(index), idIndex >= 0 ? values[idIndex] : "", bytes, dlcIndex >= 0 ? Number(values[dlcIndex]) : undefined, undefined, "auto");
   }).filter((frame): frame is Frame => Boolean(frame)).map((frame) => format === "J1939 CSV" ? { ...frame, id: cleanId(frame.id) } : frame);
 };
 
 const parseCandump = (text: string) => text.split(/\r?\n/).map((line, index) => {
   const trimmed = line.trim();
   const hash = trimmed.match(/^\(?([\d.]+)\)?\s+\S+\s+([0-9a-fA-F]+)#([0-9a-fA-F]*)/);
-  if (hash) return normalizeFrame(hash[1], hash[2], splitBytes(hash[3]));
+  if (hash) return normalizeFrame(hash[1], hash[2], splitBytes(hash[3]), undefined, undefined, "auto");
   const bracket = trimmed.match(/^\(?([\d.]+)\)?\s+\S+\s+([0-9a-fA-F]+)\s+\[(\d+)\]\s+(.+)$/);
-  if (bracket) return normalizeFrame(bracket[1], bracket[2], bracket[4].split(/\s+/).filter(isByte), Number(bracket[3]));
+  if (bracket) return normalizeFrame(bracket[1], bracket[2], bracket[4].split(/\s+/).filter(isByte), Number(bracket[3]), undefined, "auto");
   const noTimestamp = trimmed.match(/^\S+\s+([0-9a-fA-F]+)#([0-9a-fA-F]*)/);
-  return noTimestamp ? normalizeFrame(String(index), noTimestamp[1], splitBytes(noTimestamp[2])) : null;
+  return noTimestamp ? normalizeFrame(String(index), noTimestamp[1], splitBytes(noTimestamp[2]), undefined, undefined, "auto") : null;
 }).filter((frame): frame is Frame => Boolean(frame));
 
 const parseCrtd = (text: string) => text.split(/\r?\n/).map((line, index) => {
