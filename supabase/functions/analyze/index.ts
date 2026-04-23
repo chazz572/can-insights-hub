@@ -367,6 +367,8 @@ const runAnalysis = (csv: string) => {
 
   const metadataInsights = summarizeMetadata(metadataById, idCounts);
   const isDbcReference = metadataInsights.has_dbc_metadata && totalMessages === idCounts.size;
+  const pipeline: PipelineKind = isDbcReference ? "dbc" : metadataInsights.has_dbc_metadata ? "log_dbc" : "log";
+  const pipelineLabel = pipeline === "dbc" ? "DBC definition viewer" : pipeline === "log_dbc" ? "Full Power decoded LOG + DBC analysis" : "Raw CAN log intelligence";
   const idStats = [...idCounts.entries()]
     .sort((a, b) => b[1] - a[1])
     .map(([id, count]) => ({ id, count, percentage: totalMessages ? Number(((count / totalMessages) * 100).toFixed(2)) : 0 }));
@@ -377,6 +379,14 @@ const runAnalysis = (csv: string) => {
     cluster: index % 3,
     candidate_signal: Number(item.count ?? 0) > 1,
   }));
+
+  const dbcMessages = [...metadataById.entries()].map(([id, metadata]) => {
+    const signals = extractDbcSignals(metadata);
+    const messageName = metadata.match(/dbc_message=([^;]+)/)?.[1] ?? `Message_${id}`;
+    const transmitter = metadata.match(/transmitter=([^;]+)/)?.[1] ?? "unknown";
+    return { id, message_name: messageName, transmitter, signal_count: signals.length, signals };
+  });
+  const dbcSignals = dbcMessages.flatMap((message) => message.signals.map((signal) => ({ message_id: message.id, message_name: message.message_name, ...signal })));
 
   const byteAnalysis = byteCounts.map((counts, byteIndex) => {
     const values = [...counts.entries()].flatMap(([value, count]) => Array.from({ length: count }, () => value));
