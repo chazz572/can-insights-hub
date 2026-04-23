@@ -128,6 +128,48 @@ const analogCandidateScore = (values: number[]) => {
   return unique >= 12 && range >= 250 ? transitionRate * 0.45 + (smoothSteps / Math.max(values.length - 1, 1)) * 0.35 + Math.min(0.2, unique / values.length) : 0;
 };
 
+const trendStats = (values: number[]) => {
+  if (values.length < 3) return { range: 0, unique: new Set(values).size, rising: 0, falling: 0, flat: 0, reversals: 0, meanAbsDelta: 0, smoothness: 0, direction: "flat" };
+  const deltas = values.slice(1).map((value, index) => value - values[index]);
+  const nonZero = deltas.filter((delta) => delta !== 0);
+  const signs = nonZero.map((delta) => Math.sign(delta));
+  const reversals = signs.slice(1).filter((sign, index) => sign !== signs[index]).length;
+  const range = Math.max(...values) - Math.min(...values);
+  const meanAbsDelta = average(deltas.map(Math.abs));
+  const rising = deltas.filter((delta) => delta > 0).length / deltas.length;
+  const falling = deltas.filter((delta) => delta < 0).length / deltas.length;
+  const flat = deltas.filter((delta) => delta === 0).length / deltas.length;
+  const smoothSteps = deltas.filter((delta) => Math.abs(delta) > 0 && Math.abs(delta) <= Math.max(4, range * 0.22)).length / deltas.length;
+  const direction = rising > 0.55 ? "rising" : falling > 0.55 ? "falling" : reversals >= 2 ? "oscillating" : flat > 0.75 ? "flat" : "mixed";
+  return { range, unique: new Set(values).size, rising, falling, flat, reversals, meanAbsDelta, smoothness: smoothSteps, direction };
+};
+
+const pearson = (left: number[], right: number[]) => {
+  const length = Math.min(left.length, right.length);
+  if (length < 6) return 0;
+  const a = left.slice(0, length);
+  const b = right.slice(0, length);
+  const meanA = average(a);
+  const meanB = average(b);
+  const numerator = a.reduce((sum, value, index) => sum + (value - meanA) * (b[index] - meanB), 0);
+  const denominator = Math.sqrt(a.reduce((sum, value) => sum + (value - meanA) ** 2, 0) * b.reduce((sum, value) => sum + (value - meanB) ** 2, 0));
+  return denominator ? Number((numerator / denominator).toFixed(4)) : 0;
+};
+
+const classifySignal = (signal: JsonRecord) => {
+  const byteStart = Number(signal.byte_start ?? 0);
+  const maxValue = Number(signal.max_value ?? 0);
+  const range = Number(signal.range ?? 0);
+  const direction = String(signal.direction ?? "mixed");
+  if (String(signal.likely_signal_type).includes("rpm") || (maxValue > 900 && maxValue < 9000 && byteStart <= 3)) return "rpm_candidate";
+  if (range > 30 && range < 3500 && maxValue < 5000 && byteStart <= 4 && ["rising", "falling", "oscillating"].includes(direction)) return "speed_or_wheel_speed_candidate";
+  if (range > 8 && range <= 255 && maxValue <= 255) return "pedal_brake_or_steering_candidate";
+  if (range <= 16 && Number(signal.unique_values ?? 0) <= 16) return "gear_flag_or_counter_candidate";
+  return "analog_sensor_candidate";
+};
+
+const describeSignalEvidence = (signal: JsonRecord) => `ID ${signal.id} bytes ${signal.byte_start}-${Number(signal.byte_start ?? 0) + 1} ${signal.endianness} ranged ${signal.min_value}-${signal.max_value}, changed ${signal.unique_values} unique values, trended ${signal.direction}, and had ${Number(signal.smoothness ?? 0).toFixed(2)} smooth-step behavior.`;
+
 const runAnalysis = (csv: string) => {
   let totalMessages = 0;
   let extendedIds = 0;
@@ -320,6 +362,7 @@ const runAnalysis = (csv: string) => {
       const leScore = analogCandidateScore(littleEndian);
       const score = Math.max(beScore, leScore);
       const values = beScore >= leScore ? bigEndian : littleEndian;
+      const trend = trendStats(values);
       return score > 0.48 ? {
         id,
         byte_start,
@@ -328,15 +371,29 @@ const runAnalysis = (csv: string) => {
         endianness: beScore >= leScore ? "big_endian_candidate" : "little_endian_candidate",
         min_value: Math.min(...values),
         max_value: Math.max(...values),
+        range: trend.range,
         unique_values: new Set(values).size,
+        direction: trend.direction,
+        rising_ratio: Number(trend.rising.toFixed(3)),
+        falling_ratio: Number(trend.falling.toFixed(3)),
+        reversals: trend.reversals,
+        mean_abs_delta: Number(trend.meanAbsDelta.toFixed(3)),
+        smoothness: Number(trend.smoothness.toFixed(3)),
         confidence_score: Number(Math.min(0.96, score).toFixed(3)),
         likely_signal_type: byte_start <= 2 && Math.max(...values) > 900 && Math.max(...values) < 9000 ? "rpm_candidate" : "analog_signal_candidate",
-        reasoning: "Smooth changing 16-bit byte pair with enough range and transitions to resemble an analog engine/sensor signal.",
+        reasoning: "Smooth changing 16-bit byte pair with enough range, transitions, and directional structure to resemble a live vehicle signal.",
       } : null;
     }).filter(Boolean);
   }) as JsonRecord[];
 
+  analogSignals.forEach((signal) => {
+    signal.likely_signal_type = classifySignal(signal);
+    signal.evidence = describeSignalEvidence(signal);
+  });
+
+  analogSignals.filter((signal) => String(signal.likely_signal_type).includes("speed") || String(signal.likely_signal_type).includes("wheel")).forEach((signal) => speedIds.add(String(signal.id)));
   analogSignals.filter((signal) => signal.likely_signal_type === "rpm_candidate").forEach((signal) => rpmIds.add(String(signal.id)));
+  analogSignals.filter((signal) => /pedal|brake|steering/i.test(String(signal.likely_signal_type))).forEach((signal) => pedalIds.add(String(signal.id)));
 
   const networkHealth = {
     estimated_bus_load_score: Math.min(100, Math.round((totalMessages / Math.max(idCounts.size, 1)) * 10)),
@@ -355,12 +412,41 @@ const runAnalysis = (csv: string) => {
     diagnostic_id_candidates: [...idCounts.keys()].filter((id) => /^7[0-9A-F]{2}$/i.test(cleanHex(id)) || /^18DA/i.test(cleanHex(id))).slice(0, 16),
   };
 
+  const speedSignals = analogSignals.filter((signal) => /speed|wheel/i.test(String(signal.likely_signal_type))).slice(0, 8);
+  const rpmSignals = analogSignals.filter((signal) => String(signal.likely_signal_type) === "rpm_candidate").slice(0, 8);
+  const pedalBrakeSteeringSignals = analogSignals.filter((signal) => /pedal|brake|steering/i.test(String(signal.likely_signal_type))).slice(0, 8);
+  const loadSignals = analogSignals.filter((signal) => /analog_sensor/i.test(String(signal.likely_signal_type)) && Number(signal.range ?? 0) > 500).slice(0, 8);
+  const risingMotion = speedSignals.some((signal) => signal.direction === "rising") || pedalBrakeSteeringSignals.some((signal) => signal.direction === "rising");
+  const fallingMotion = speedSignals.some((signal) => signal.direction === "falling") || pedalBrakeSteeringSignals.some((signal) => signal.direction === "falling");
+  const oscillatingMotion = speedSignals.some((signal) => signal.direction === "oscillating") || pedalBrakeSteeringSignals.some((signal) => signal.direction === "oscillating");
+  const engineActive = rpmSignals.length > 0 || loadSignals.length > 0;
+  const behaviorLabel = risingMotion && !fallingMotion
+    ? "accelerating or increasing load"
+    : fallingMotion && !risingMotion
+      ? "decelerating, braking, or load dropping"
+      : risingMotion && fallingMotion
+        ? "transient driving with acceleration and deceleration phases"
+        : oscillatingMotion
+          ? "turning, pedal modulation, or low-speed maneuvering"
+          : engineActive && !speedSignals.length
+            ? "stationary engine activity / idle under varying load"
+            : "stationary awake-module state with no defensible motion signal";
+  const behaviorConfidence = Math.min(0.94, 0.42 + speedSignals.length * 0.12 + rpmSignals.length * 0.1 + pedalBrakeSteeringSignals.length * 0.08 + (engineActive ? 0.08 : 0));
+  const behavioralEvidence = [...speedSignals, ...rpmSignals, ...pedalBrakeSteeringSignals, ...loadSignals].slice(0, 12).map(describeSignalEvidence);
+  const subtleAbnormalities = [
+    ...timing.filter((item) => Number(item.period_jitter) > Math.max(Number(item.average_period) * 0.2, 0.003)).map((item) => ({ id: item.id, type: "timing_jitter_or_drift", severity: Number(item.period_jitter) > Math.max(Number(item.average_period) * 0.75, 0.02) ? "moderate" : "minor", evidence: `Average period ${item.average_period}s with jitter ${item.period_jitter}s; max gap ${item.max_period}s.` })),
+    ...idDeepDive.filter((item) => Number(item.payload_change_rate) === 0 && Number(item.messages) > 8).map((item) => ({ id: item.id, type: "stuck_payload_or_static_status", severity: "minor", evidence: `Payload did not change across ${item.messages} messages; likely static status, but worth noting if it should be live.` })),
+    ...idDeepDive.filter((item) => Number(item.messages) <= 2).map((item) => ({ id: item.id, type: "unusual_id_silence_or_sparse_frame", severity: "minor", evidence: `Only ${item.messages} frame(s) observed; this can indicate one-shot status, wake/sleep traffic, or missing expected repetition.` })),
+  ].slice(0, 32);
   const driverBehavior = {
-    movement_confidence: speedIds.size ? "candidate" : "unknown",
-    engine_activity_confidence: rpmIds.size ? "candidate" : "unknown",
-    pedal_activity_confidence: pedalIds.size ? "candidate" : "unknown",
+    behavior: behaviorLabel,
+    confidence_score: Number(behaviorConfidence.toFixed(3)),
+    movement_confidence: speedSignals.length ? "supported_by_signal_shape" : "not_supported_by_motion_bytes",
+    engine_activity_confidence: rpmSignals.length || loadSignals.length ? "supported_by_dynamic_powertrain_like_bytes" : "not_isolated",
+    pedal_activity_confidence: pedalBrakeSteeringSignals.length ? "supported_by_compact_input_like_bytes" : "not_isolated",
     harsh_event_candidates: anomalies.slice(0, 12),
-    interpretation: speedIds.size || pedalIds.size ? "Vehicle activity signals are present, but exact driving behavior requires DBC validation." : "Driving behavior cannot be confirmed from this capture without stronger speed/pedal candidates.",
+    evidence: behavioralEvidence.length ? behavioralEvidence : ["No byte pair showed the rising/falling motion shape required to defend speed, pedal, brake, steering, or wheel-speed claims."],
+    interpretation: `${behaviorLabel}. This conclusion is based on byte-level trend direction, smoothness, entropy, timing cadence, and cross-ID relationships rather than message counts alone.`,
   };
 
   const eventTimeline = anomalies.slice(0, 24).map((item, index) => ({
@@ -410,19 +496,37 @@ const runAnalysis = (csv: string) => {
   ].filter(Boolean);
 
   const vehicleState = {
-    classification: speedIds.size || pedalIds.size ? "possible_low_speed_or_driving" : rpmIds.size ? "engine_running_stationary" : "ignition_on_idle_or_accessory",
-    confidence_score: speedIds.size || pedalIds.size ? 0.62 : 0.86,
-    reasoning: speedIds.size || pedalIds.size ? "Motion-like candidates exist, but full driving state needs validation against controlled movement." : "Motion, wheel-speed, pedal, brake, steering, torque, and gear signals are absent while periodic housekeeping traffic is present.",
+    classification: behaviorLabel.replace(/ /g, "_"),
+    confidence_score: Number(behaviorConfidence.toFixed(3)),
+    reasoning: behavioralEvidence.length ? behavioralEvidence.join(" ") : "The log contains periodic CAN housekeeping traffic, but it lacks correlated, directional byte movement needed to defend motion or driver-input claims.",
+    evidence: behavioralEvidence,
   };
 
   const correlationPairs = idDeepDive.flatMap((left, leftIndex) => idDeepDive.slice(leftIndex + 1).map((right) => ({ left: left.id, right: right.id, correlation: Number((1 - Math.min(1, Math.abs(Number(left.average_period) - Number(right.average_period)))).toFixed(4)), relationship: "timing_cadence_similarity" }))).filter((item) => item.correlation >= 0.72).slice(0, 24);
   const enhancedNetworkHealth = { ...networkHealth, bus_health_score: Math.max(0, Math.min(100, 100 - anomalies.length * 4 - Math.round(Number(networkHealth.timing_irregularity_score) * 120))), chatter_classification: idStats.some((item) => item.percentage > 35) ? "dominant_id_chatter" : totalMessages / Math.max(idCounts.size, 1) > 60 ? "busy_periodic_chatter" : "normal_idle_chatter", dropout_events: timing.filter((item) => Number(item.max_period) > Math.max(Number(item.average_period) * 3, 0.1)).map((item) => ({ id: item.id, max_period: item.max_period, average_period: item.average_period, classification: "possible_gap_or_dropout" })).slice(0, 16) };
   const derivedEvents = enhancedNetworkHealth.dropout_events.map((item, index) => ({ event_index: eventTimeline.length + index + 1, id: item.id, timestamp: null, event_type: "possible_module_dropout", description: `Timing gap detected: max period ${item.max_period}s vs average ${item.average_period}s.`, before_after_hint: "Compare nearby frames to confirm wake/sleep or missing traffic." }));
+  const whatDataShows = [
+    `The strongest defensible vehicle-state conclusion is ${behaviorLabel} at ${Math.round(behaviorConfidence * 100)}% confidence.`,
+    behavioralEvidence.length ? `Behavior evidence: ${behavioralEvidence.slice(0, 4).join(" ")}` : "Behavior evidence: no correlated directional speed, wheel, pedal, brake, steering, or gear-shaped byte movement was present, so motion claims are intentionally limited.",
+    `Protocol behavior: ${protocolInsights.likely_protocol}; extended-ID ratio ${(protocolInsights.extended_id_ratio * 100).toFixed(1)}%, diagnostic-shaped IDs ${protocolInsights.diagnostic_id_candidates.join(", ") || "not present"}.`,
+    subtleAbnormalities.length ? `Subtle abnormalities found: ${subtleAbnormalities.slice(0, 5).map((item) => `${item.type} on ${item.id}`).join("; ")}.` : "Subtle abnormality checks did not isolate jitter, drift, sparse-ID, stuck-byte, or entropy-spike evidence above the current thresholds.",
+    ecuClusters.length ? `Likely ECU groups: ${ecuClusters.slice(0, 4).map((cluster) => `${cluster.cluster_id} (${cluster.ids.join(", ")})`).join("; ")}.` : "ECU grouping evidence was weak because timing cadence and payload structures did not form repeated multi-ID clusters.",
+  ];
+  const detailedSummary = [
+    "What the Data Actually Shows",
+    ...whatDataShows.map((item) => `- ${item}`),
+    "",
+    "Interpretation",
+    `The capture is best described as ${behaviorLabel}. The engine/powertrain read is ${driverBehavior.engine_activity_confidence}, movement read is ${driverBehavior.movement_confidence}, and driver-input read is ${driverBehavior.pedal_activity_confidence}.`,
+    `Reverse-engineering priorities are ${analogSignals.slice(0, 8).map((signal) => `${signal.id}:${signal.likely_signal_type}`).join(", ") || "limited because no strong analog signal candidates crossed threshold"}.`,
+    `Health notes: ${subtleAbnormalities.length ? subtleAbnormalities.slice(0, 6).map((item) => `${item.severity} ${item.type} on ${item.id}`).join("; ") : "no threshold-level subtle abnormalities were isolated"}.`,
+  ].join("\n");
 
   return {
     ok: true,
     summary: {
-      text: `Parsed ${totalMessages} messages across ${idCounts.size} unique IDs. Detected ${anomalies.length} anomalies and ${reverseEngineering.length} reverse-engineering candidates.`,
+      text: detailedSummary,
+      what_the_data_actually_shows: whatDataShows,
     },
     total_messages: totalMessages,
     unique_ids: idCounts.size,
@@ -459,9 +563,11 @@ const runAnalysis = (csv: string) => {
         likely_signal_relationships: correlationPairs.map((item) => ({ ...item, explanation: "These IDs share timing cadence and should be reviewed as related ECU/status traffic." })),
       },
       network_health: enhancedNetworkHealth,
+      subtle_abnormalities: subtleAbnormalities,
       driver_behavior: driverBehavior,
       event_timeline: [...eventTimeline, ...derivedEvents],
-      mechanic_summary: `Capture contains ${totalMessages} CAN messages. ${anomalies.length} anomalous payloads were detected. Candidate speed IDs: ${vehicleBehavior.possible_speed_ids.join(", ") || "none"}. Candidate RPM IDs: ${vehicleBehavior.possible_rpm_ids.join(", ") || "none"}.`,
+      what_the_data_actually_shows: whatDataShows,
+      mechanic_summary: detailedSummary,
     },
   };
 };
