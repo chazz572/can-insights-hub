@@ -295,11 +295,15 @@ Deno.serve(async (req) => {
     if (!serviceRoleKey) throw new Error("SUPABASE_SERVICE_ROLE_KEY is not configured");
 
     const supabase = createClient(supabaseUrl, serviceRoleKey);
+    const convertedFiles = await Promise.all(files.map(async (file) => ({ file, converted: await convertFile(file) })));
+    const dbcReference = convertedFiles.find((item) => item.converted.pipeline === "dbc")?.converted.csv;
     const results = [];
 
-    for (const file of files) {
+    for (const { file, converted: initialConverted } of convertedFiles) {
       try {
-        const converted = await convertFile(file);
+        const converted = dbcReference && initialConverted.pipeline === "log"
+          ? { ...initialConverted, csv: mergeLogWithDbcMetadata(initialConverted.csv, dbcReference), pipeline: "log_dbc" as const, warnings: [...initialConverted.warnings, "A DBC was uploaded in the same batch, so this log is routed through Full Power LOG+DBC analysis."] }
+          : initialConverted;
         const fileId = crypto.randomUUID();
         const storagePath = `${fileId}.csv`;
         const normalizedBytes = new TextEncoder().encode(converted.csv);
@@ -313,8 +317,8 @@ Deno.serve(async (req) => {
           file_size: normalizedBytes.byteLength,
         });
         if (metadataError) throw new Error(`Upload metadata save failed: ${metadataError.message}`);
-        const pipeline = converted.format === "DBC" ? "dbc" : "log";
-        results.push({ file_id: fileId, filename: file.name, detected_format: converted.format, file_type: pipeline, analysis_pipeline: pipeline === "dbc" ? "dbc_definition_viewer" : "raw_log_intelligence", frame_count: converted.frameCount, warnings: converted.warnings });
+        const pipeline = converted.pipeline;
+        results.push({ file_id: fileId, filename: file.name, detected_format: converted.format, file_type: pipeline, analysis_pipeline: pipeline === "dbc" ? "dbc_definition_viewer" : pipeline === "log_dbc" ? "full_power_log_dbc_decoding" : "raw_log_intelligence", frame_count: converted.frameCount, warnings: converted.warnings });
       } catch (error) {
         results.push({ filename: file.name, error: error instanceof Error ? error.message : "Conversion failed" });
       }
