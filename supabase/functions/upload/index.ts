@@ -282,13 +282,18 @@ const dbcMetadataById = (dbcCsv: string) => {
 
 const mergeLogWithDbcMetadata = (logCsv: string, dbcCsv: string) => {
   const metadata = dbcMetadataById(dbcCsv);
+  const dbcIds = [...new Set([...metadata.keys()].map((id) => cleanId(id, 10)))].sort((a, b) => Number(a) - Number(b));
+  const dbcCatalog = `available_dbc_ids_dec=${dbcIds.join("|")};available_dbc_ids_hex=${dbcIds.map(formatCanIdHex).join("|")}`;
   const lines = logCsv.split(/\r?\n/);
   return lines.map((line, index) => {
     if (index === 0 || !line.trim()) return line;
     const values = parseCsvLine(line);
     const existingMetadata = values[4]?.replace(/^"|"$/g, "").replace(/""/g, '"') ?? "";
-    const dbcMeta = canIdAliases(values[1] ?? "", existingMetadata).map((id) => metadata.get(id)).find(Boolean);
-    values[4] = dbcMeta ? ["source_file_type=log_with_dbc", existingMetadata, dbcMeta].filter(Boolean).join(";") : ["source_file_type=log_with_dbc", existingMetadata, "dbc_match=none"].filter(Boolean).join(";");
+    const logAliases = canIdAliases(values[1] ?? "", existingMetadata);
+    const matchedId = logAliases.find((id) => metadata.has(id));
+    const dbcMeta = matchedId ? metadata.get(matchedId) : undefined;
+    const matchMeta = matchedId ? `dbc_match=exact;dbc_match_id=${matchedId};dbc_match_id_hex=${formatCanIdHex(matchedId)}` : "dbc_match=none";
+    values[4] = ["source_file_type=log_with_dbc", existingMetadata, matchMeta, dbcMeta, dbcCatalog].filter(Boolean).join(";");
     return [csvEscape(values[0] ?? ""), csvEscape(values[1] ?? ""), values[2] ?? 0, csvEscape(values[3] ?? ""), csvEscape(values[4])].join(",");
   }).join("\n");
 };
