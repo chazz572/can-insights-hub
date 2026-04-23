@@ -50,15 +50,15 @@ All colors MUST be HSL.
     --chart-cyan: 185 95% 56%;
     --chart-blue: 217 96% 61%;
     --chart-purple: 39 96% 56%;
-    --diagnostic-green: 158 78% 48%;
+    --diagnostic-green: 185 95% 56%;
     --safety-orange: 28 96% 56%;
     --steel: 215 18% 34%;
     --gradient-hero: linear-gradient(135deg, hsl(216 18% 5%) 0%, hsl(220 20% 8%) 48%, hsl(216 18% 5%) 100%);
     --gradient-panel: linear-gradient(145deg, hsl(var(--glass-strong)) 0%, hsl(220 26% 9% / 0.72) 100%);
-    --gradient-accent: linear-gradient(135deg, hsl(var(--primary)) 0%, hsl(var(--diagnostic-green)) 52%, hsl(var(--safety-orange)) 100%);
+    --gradient-accent: linear-gradient(135deg, hsl(var(--primary)) 0%, hsl(var(--chart-cyan)) 58%, hsl(var(--chart-blue)) 100%);
     --gradient-subtle: linear-gradient(180deg, hsl(210 40% 98% / 0.08), hsl(210 40% 98% / 0.02));
-    --shadow-dashboard: 0 24px 80px -36px hsl(199 96% 55% / 0.38), 0 18px 48px -38px hsl(158 78% 48% / 0.35);
-    --shadow-glow: 0 0 28px hsl(199 96% 55% / 0.24), 0 0 44px hsl(158 78% 48% / 0.14);
+    --shadow-dashboard: 0 24px 80px -36px hsl(199 96% 55% / 0.42), 0 18px 48px -38px hsl(217 96% 61% / 0.32);
+    --shadow-glow: 0 0 28px hsl(199 96% 55% / 0.26), 0 0 44px hsl(217 96% 61% / 0.14);
 
     --radius: 1rem;
 
@@ -97,7 +97,7 @@ All colors MUST be HSL.
     --glass: 0 0% 100% / 0.72;
     --glass-strong: 0 0% 100% / 0.9;
     --glass-border: 222 47% 11% / 0.1;
-    --gradient-hero: radial-gradient(circle at 18% 8%, hsl(199 96% 42% / 0.16), transparent 30%), radial-gradient(circle at 85% 0%, hsl(158 78% 42% / 0.12), transparent 34%), linear-gradient(135deg, hsl(210 40% 98%) 0%, hsl(214 32% 94%) 55%, hsl(210 40% 98%) 100%);
+    --gradient-hero: radial-gradient(circle at 18% 8%, hsl(199 96% 42% / 0.16), transparent 30%), radial-gradient(circle at 85% 0%, hsl(217 96% 52% / 0.12), transparent 34%), linear-gradient(135deg, hsl(210 40% 98%) 0%, hsl(214 32% 94%) 55%, hsl(210 40% 98%) 100%);
     --gradient-panel: linear-gradient(145deg, hsl(var(--glass-strong)) 0%, hsl(214 32% 96% / 0.82) 100%);
     --sidebar-background: 222 47% 10%;
     --sidebar-foreground: 214 32% 86%;
