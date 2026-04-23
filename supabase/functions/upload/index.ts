@@ -10,9 +10,9 @@ type Frame = { timestamp: string; id: string; dlc: number; data: string[]; metad
 type PipelineKind = "log" | "dbc" | "log_dbc";
 type ConversionResult = { format: CanFormat; csv: string; frameCount: number; warnings: string[]; pipeline: PipelineKind };
 
-const jsonResponse = (body: unknown, status = 200) =>
+const jsonResponse = (body: unknown) =>
   new Response(JSON.stringify(body), {
-    status,
+    status: 200,
     headers: { ...corsHeaders, "Content-Type": "application/json" },
   });
 
@@ -281,13 +281,13 @@ const convertFile = async (file: File): Promise<ConversionResult> => {
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
-    if (req.method !== "POST") return jsonResponse({ ok: false, error: "Method not allowed" }, 405);
+    if (req.method !== "POST") return jsonResponse({ ok: false, error: "Method not allowed" });
 
   try {
     const formData = await req.formData();
     const files = [...formData.getAll("files"), formData.get("file")].filter((item): item is File => item instanceof File);
-    if (!files.length) return jsonResponse({ ok: false, error: "At least one CAN log file is required" }, 400);
-    if (files.length > 12) return jsonResponse({ ok: false, error: "Batch uploads are limited to 12 files at a time" }, 400);
+    if (!files.length) return jsonResponse({ ok: false, error: "At least one CAN log file is required" });
+    if (files.length > 12) return jsonResponse({ ok: false, error: "Batch uploads are limited to 12 files at a time" });
 
     const supabaseUrl = Deno.env.get("SUPABASE_URL");
     const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
@@ -337,10 +337,10 @@ Deno.serve(async (req) => {
     }
 
     const successful = results.filter((result) => "file_id" in result);
-    if (!successful.length) return jsonResponse({ ok: false, error: "No files could be converted", files: results }, 400);
+    if (!successful.length) return jsonResponse({ ok: false, error: "No files could be converted", files: results });
     return jsonResponse({ ok: true, ...successful[0], files: results });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Upload failed";
-    return jsonResponse({ ok: false, error: message }, 500);
+    return jsonResponse({ ok: false, error: message });
   }
 });
