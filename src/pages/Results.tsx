@@ -656,6 +656,8 @@ const Results = () => {
             </AnalysisCard>
           </div>
 
+          {fileType !== "dbc" ? <IntelligenceSuite analysis={data} /> : null}
+
           {fileType === "dbc" ? <DbcViewer diagnostics={diagnostics} /> : fileType === "log_dbc" ? <LogDbcPipelinePanels data={data} diagnostics={diagnostics} idStats={idStats} /> : <LogPipelinePanels data={data} diagnostics={diagnostics} idStats={idStats} anomalies={anomalies} vehicleBehavior={vehicleBehavior} partialDbcDraft={partialDbcDraft} />}
 
           {fileType !== "dbc" ? <>
