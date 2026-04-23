@@ -11,7 +11,7 @@ type ConversionResult = { format: CanFormat; csv: string; frameCount: number; wa
 
 const jsonResponse = (body: unknown, status = 200) =>
   new Response(JSON.stringify(body), {
-    status,
+    status: 200,
     headers: { ...corsHeaders, "Content-Type": "application/json" },
   });
 
@@ -160,7 +160,13 @@ const convertFile = async (file: File): Promise<ConversionResult> => {
     : format === "BLF" || format === "MDF/MF4" ? parseBinaryBestEffort(bytes, format, warnings)
     : parseGeneric(text);
 
-  const deduped = frames.filter((frame, index, all) => index === all.findIndex((candidate) => candidate.timestamp === frame.timestamp && candidate.id === frame.id && candidate.data.join(" ") === frame.data.join(" ")));
+  const seen = new Set<string>();
+  const deduped = frames.filter((frame) => {
+    const key = `${frame.timestamp}|${frame.id}|${frame.data.join(" ")}`;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
   if (!deduped.length) throw new Error(`No valid CAN frames found in ${file.name}. Try ASC, CSV, candump, CRTD, or a text export if this is a proprietary binary log.`);
   const malformed = text.split(/\r?\n/).filter((line) => line.trim()).length - deduped.length;
   if (malformed > 0 && format !== "CSV" && format !== "BLF" && format !== "MDF/MF4") warnings.push(`${malformed} line(s) were skipped because they did not look like valid CAN frames.`);
@@ -169,13 +175,13 @@ const convertFile = async (file: File): Promise<ConversionResult> => {
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
-  if (req.method !== "POST") return jsonResponse({ error: "Method not allowed" }, 405);
+    if (req.method !== "POST") return jsonResponse({ ok: false, error: "Method not allowed" }, 405);
 
   try {
     const formData = await req.formData();
     const files = [...formData.getAll("files"), formData.get("file")].filter((item): item is File => item instanceof File);
-    if (!files.length) return jsonResponse({ error: "At least one CAN log file is required" }, 400);
-    if (files.length > 12) return jsonResponse({ error: "Batch uploads are limited to 12 files at a time" }, 400);
+    if (!files.length) return jsonResponse({ ok: false, error: "At least one CAN log file is required" }, 400);
+    if (files.length > 12) return jsonResponse({ ok: false, error: "Batch uploads are limited to 12 files at a time" }, 400);
 
     const supabaseUrl = Deno.env.get("SUPABASE_URL");
     const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
@@ -208,10 +214,10 @@ Deno.serve(async (req) => {
     }
 
     const successful = results.filter((result) => "file_id" in result);
-    if (!successful.length) return jsonResponse({ error: "No files could be converted", files: results }, 400);
-    return jsonResponse({ ...successful[0], files: results });
+    if (!successful.length) return jsonResponse({ ok: false, error: "No files could be converted", files: results }, 400);
+    return jsonResponse({ ok: true, ...successful[0], files: results });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Upload failed";
-    return jsonResponse({ error: message }, 500);
+    return jsonResponse({ ok: false, error: message }, 500);
   }
 });

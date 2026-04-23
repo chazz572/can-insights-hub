@@ -48,12 +48,15 @@ export const uploadCanFiles = async (files: File[]): Promise<{ file_id?: string;
   const formData = new FormData();
   files.forEach((file) => formData.append("files", file));
 
-  const { data: payload, error } = await supabase.functions.invoke<{ file_id?: string; files?: UploadResult[]; error?: string }>("upload", {
+  const { data: payload, error } = await supabase.functions.invoke<{ ok?: boolean; file_id?: string; files?: UploadResult[]; error?: string }>("upload", {
     body: formData,
   });
 
   if (error) throw new Error(error.message || "Upload request failed.");
-  if (payload?.error && !payload.files?.length) throw new Error(payload.error);
+  if (payload?.ok === false || payload?.error) {
+    const fileErrors = payload.files?.map((item) => item.error).filter(Boolean).join(" ");
+    throw new Error(fileErrors || payload.error || "No files could be converted.");
+  }
   if (!payload?.files?.length) throw new Error("Upload returned no converted files.");
   return { file_id: payload.file_id, files: payload.files };
 };
