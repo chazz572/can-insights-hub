@@ -7,10 +7,11 @@ const corsHeaders = {
 
 type CsvRow = Record<string, string>;
 type JsonRecord = Record<string, unknown>;
+type PreparedRow = CsvRow & { id: string; __timestamp: number; __bytes: number[]; __data: string };
 
 const jsonResponse = (body: unknown, status = 200) =>
   new Response(JSON.stringify(body), {
-    status,
+    status: 200,
     headers: { ...corsHeaders, "Content-Type": "application/json" },
   });
 
@@ -77,6 +78,17 @@ const timestampValue = (row: CsvRow) => Number(row.Timestamp ?? row.timestamp ??
 const cleanHex = (value: string) => value.replace(/[^a-fA-F0-9]/g, "").toUpperCase();
 const byteValues = (value: string) => cleanHex(value).match(/.{1,2}/g)?.slice(0, 8).map((byte) => Number.parseInt(byte, 16)).filter((byte) => Number.isFinite(byte)) ?? [];
 
+const prepareRows = (rows: CsvRow[]): PreparedRow[] => rows.map((row) => {
+  const normalizedData = dataValue(row);
+  return {
+    ...row,
+    id: row.id ?? "",
+    __data: normalizedData,
+    __timestamp: timestampValue(row),
+    __bytes: byteValues(normalizedData),
+  };
+});
+
 const entropy = (values: number[]) => {
   if (!values.length) return 0;
   const counts = new Map<number, number>();
@@ -99,15 +111,15 @@ const basicView = (rows: CsvRow[]) => {
     .map(([id, count]) => ({ id, count, percentage: rows.length ? Number(((count / rows.length) * 100).toFixed(2)) : 0 }));
 };
 
-const anomaliesView = (rows: CsvRow[]) => {
-  const lengths = rows.map((row) => dataValue(row).length);
+const anomaliesView = (rows: PreparedRow[]) => {
+  const lengths = rows.map((row) => row.__data.length);
   const mean = lengths.reduce((sum, value) => sum + value, 0) / (lengths.length || 1);
   const variance = lengths.reduce((sum, value) => sum + (value - mean) ** 2, 0) / (lengths.length || 1);
   const threshold = mean + 3 * Math.sqrt(variance);
 
   return rows
-    .filter((row) => dataValue(row).length > threshold)
-    .map((row) => ({ id: row.id, data: dataValue(row), reason: "Unusually long data payload" }));
+    .filter((row) => row.__data.length > threshold)
+    .map((row) => ({ id: row.id, data: row.__data, reason: "Unusually long data payload" }));
 };
 
 const reverseEngineeringView = (idStats: JsonRecord[]) =>
@@ -118,12 +130,12 @@ const reverseEngineeringView = (idStats: JsonRecord[]) =>
     candidate_signal: Number(item.count ?? 0) > 1,
   }));
 
-const vehicleBehaviorView = (rows: CsvRow[]) => {
+const vehicleBehaviorView = (rows: PreparedRow[]) => {
   const ids = [...new Set(rows.map((row) => row.id))];
   return {
-    possible_speed_ids: ids.filter((id) => rows.some((row) => row.id === id && dataValue(row).length === 2)),
-    possible_rpm_ids: ids.filter((id) => rows.some((row) => row.id === id && dataValue(row).length === 4)),
-    possible_pedal_ids: ids.filter((id) => rows.some((row) => row.id === id && dataValue(row).length === 1)),
+    possible_speed_ids: ids.filter((id) => rows.some((row) => row.id === id && row.__data.length === 2)),
+    possible_rpm_ids: ids.filter((id) => rows.some((row) => row.id === id && row.__data.length === 4)),
+    possible_pedal_ids: ids.filter((id) => rows.some((row) => row.id === id && row.__data.length === 1)),
   };
 };
 
@@ -137,8 +149,8 @@ const detectProtocol = (rows: CsvRow[]) => {
   };
 };
 
-const analyzeBytes = (rows: CsvRow[]) => Array.from({ length: 8 }, (_, byteIndex) => {
-  const values = rows.map((row) => byteValues(dataValue(row))[byteIndex]).filter((value): value is number => typeof value === "number");
+const analyzeBytes = (rows: PreparedRow[]) => Array.from({ length: 8 }, (_, byteIndex) => {
+  const values = rows.map((row) => row.__bytes[byteIndex]).filter((value): value is number => typeof value === "number");
   const counts = new Map<number, number>();
   values.forEach((value) => counts.set(value, (counts.get(value) ?? 0) + 1));
   const dominant = [...counts.entries()].sort((a, b) => b[1] - a[1])[0]?.[0];
@@ -151,10 +163,10 @@ const analyzeBytes = (rows: CsvRow[]) => Array.from({ length: 8 }, (_, byteIndex
   };
 });
 
-const analyzeBits = (rows: CsvRow[]) => Array.from({ length: 64 }, (_, bit) => {
+const analyzeBits = (rows: PreparedRow[]) => Array.from({ length: 64 }, (_, bit) => {
   const byteIndex = Math.floor(bit / 8);
   const bitIndex = 7 - (bit % 8);
-  const values = rows.map((row) => byteValues(dataValue(row))[byteIndex]).filter((value): value is number => typeof value === "number").map((byte) => (byte >> bitIndex) & 1);
+  const values = rows.map((row) => row.__bytes[byteIndex]).filter((value): value is number => typeof value === "number").map((byte) => (byte >> bitIndex) & 1);
   const ones = values.filter((value) => value === 1).length;
   const transitions = values.slice(1).filter((value, index) => value !== values[index]).length;
   return {
@@ -168,12 +180,14 @@ const analyzeBits = (rows: CsvRow[]) => Array.from({ length: 64 }, (_, bit) => {
   };
 });
 
-const analyzeTiming = (rows: CsvRow[]) => {
+const analyzeTiming = (rows: PreparedRow[]) => {
   const byId = new Map<string, number[]>();
   rows.forEach((row) => {
-    const timestamp = timestampValue(row);
+    const timestamp = row.__timestamp;
     if (!Number.isFinite(timestamp)) return;
-    byId.set(row.id, [...(byId.get(row.id) ?? []), timestamp]);
+    const existing = byId.get(row.id);
+    if (existing) existing.push(timestamp);
+    else byId.set(row.id, [timestamp]);
   });
 
   return [...byId.entries()].map(([id, timestamps]) => {
@@ -197,17 +211,17 @@ const extractSignals = (byteAnalysis: JsonRecord[], bitAnalysis: JsonRecord[]) =
   active_bit_candidates: bitAnalysis.filter((item) => Number(item.activity ?? 0) > 0.05),
 });
 
-const classifySystems = (rows: CsvRow[]) => [...new Set(rows.map((row) => row.id))].map((id) => {
+const classifySystems = (rows: PreparedRow[]) => [...new Set(rows.map((row) => row.id))].map((id) => {
   const numeric = Number.parseInt(cleanHex(id), 16);
   const category = Number.isFinite(numeric) && numeric >= 0x18F00000 ? "powertrain_or_diagnostic" : Number.isFinite(numeric) && numeric >= 0x700 ? "diagnostic" : "body_or_chassis";
   return { id, category, confidence: "heuristic" };
 });
 
-const mechanicSummary = (rows: CsvRow[], anomalies: JsonRecord[], vehicleBehavior: JsonRecord) =>
+const mechanicSummary = (rows: PreparedRow[], anomalies: JsonRecord[], vehicleBehavior: JsonRecord) =>
   `Capture contains ${rows.length} CAN messages. ${anomalies.length} anomalous payloads were detected. Candidate speed IDs: ${(vehicleBehavior.possible_speed_ids as unknown[]).join(", ") || "none"}. Candidate RPM IDs: ${(vehicleBehavior.possible_rpm_ids as unknown[]).join(", ") || "none"}.`;
 
 const runAnalysis = (csv: string) => {
-  const rows = normalizeRows(parseCsv(csv));
+  const rows = prepareRows(normalizeRows(parseCsv(csv)));
   const idStats = basicView(rows);
   const anomalies = anomaliesView(rows);
   const reverseEngineering = reverseEngineeringView(idStats);
@@ -239,12 +253,12 @@ const runAnalysis = (csv: string) => {
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
-  if (req.method !== "POST") return jsonResponse({ error: "Method not allowed" }, 405);
+  if (req.method !== "POST") return jsonResponse({ ok: false, error: "Method not allowed" }, 405);
 
   try {
     const body = await req.json().catch(() => null);
     const fileId = typeof body?.file_id === "string" ? body.file_id : "";
-    if (!/^[0-9a-fA-F-]{36}$/.test(fileId)) return jsonResponse({ error: "Valid file_id is required" }, 400);
+    if (!/^[0-9a-fA-F-]{36}$/.test(fileId)) return jsonResponse({ ok: false, error: "Valid file_id is required" }, 400);
 
     const supabaseUrl = Deno.env.get("SUPABASE_URL");
     const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
@@ -260,7 +274,7 @@ Deno.serve(async (req) => {
       .maybeSingle();
 
     if (metadataError) throw new Error(`Upload metadata lookup failed: ${metadataError.message}`);
-    if (!metadata?.storage_path) return jsonResponse({ error: "File not found" }, 404);
+    if (!metadata?.storage_path) return jsonResponse({ ok: false, error: "File not found" }, 404);
 
     const { data: file, error: downloadError } = await supabase.storage
       .from("can-csv-uploads")
@@ -268,9 +282,9 @@ Deno.serve(async (req) => {
 
     if (downloadError) throw new Error(`Storage download failed: ${downloadError.message}`);
 
-    return jsonResponse(runAnalysis(await file.text()));
+    return jsonResponse({ ok: true, ...(runAnalysis(await file.text())) });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Analysis failed";
-    return jsonResponse({ error: message }, 500);
+    return jsonResponse({ ok: false, error: message }, 500);
   }
 });

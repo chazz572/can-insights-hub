@@ -62,12 +62,16 @@ export const uploadCanFiles = async (files: File[]): Promise<{ file_id?: string;
 };
 
 export const analyzeFile = async (fileId: string): Promise<AnalysisResult> => {
-  const { data, error } = await supabase.functions.invoke<AnalysisResult>("analyze", {
+  const { data, error } = await supabase.functions.invoke<AnalysisResult & { ok?: boolean; error?: string }>("analyze", {
     body: { file_id: fileId },
   });
 
   if (error) {
     throw new Error(error.message || "Analysis request failed.");
+  }
+
+  if (data?.ok === false || data?.error) {
+    throw new Error(data.error || "Analysis request failed.");
   }
 
   if (!data) {
