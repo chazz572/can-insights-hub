@@ -13,8 +13,10 @@ type IdProfile = {
   lengths: Map<number, number>;
   timestamps: number[];
   byteCounts: Array<Map<number, number>>;
+  byteSeries: number[][];
   previousData: string | null;
   changes: number;
+  cleanSamples: string[];
 };
 
 const jsonResponse = (body: unknown) =>
@@ -115,6 +117,45 @@ const entropy = (values: number[]) => {
     const probability = count / values.length;
     return sum - probability * Math.log2(probability);
   }, 0).toFixed(4));
+};
+
+const pearson = (a: number[], b: number[]) => {
+  const length = Math.min(a.length, b.length);
+  if (length < 4) return 0;
+  const x = a.slice(0, length);
+  const y = b.slice(0, length);
+  const ax = average(x);
+  const ay = average(y);
+  const numerator = x.reduce((sum, value, index) => sum + (value - ax) * (y[index] - ay), 0);
+  const dx = Math.sqrt(x.reduce((sum, value) => sum + (value - ax) ** 2, 0));
+  const dy = Math.sqrt(y.reduce((sum, value) => sum + (value - ay) ** 2, 0));
+  return dx && dy ? Number((numerator / (dx * dy)).toFixed(4)) : 0;
+};
+
+const classifyVolatility = (changeRate: number, volatileByteCount: number) => {
+  if (changeRate > 0.75 || volatileByteCount >= 4) return "volatile";
+  if (changeRate > 0.35 || volatileByteCount >= 2) return "dynamic";
+  if (changeRate > 0.05 || volatileByteCount >= 1) return "semi-static";
+  return "static";
+};
+
+const detectByteBehavior = (series: number[]) => {
+  const values = series.filter((value) => Number.isFinite(value));
+  if (values.length < 4) return { counter: false, direction: "none", modulo: null as number | null, checksum_like: false, confidence: 0 };
+  const deltas = values.slice(1).map((value, index) => value - values[index]);
+  const inc = deltas.filter((delta) => delta === 1 || delta < -200).length;
+  const dec = deltas.filter((delta) => delta === -1 || delta > 200).length;
+  const unique = new Set(values).size;
+  const transitions = deltas.filter((delta) => delta !== 0).length;
+  const counterScore = Math.max(inc, dec) / Math.max(deltas.length, 1);
+  const checksumScore = unique / values.length;
+  return {
+    counter: counterScore > 0.55,
+    direction: inc >= dec ? "incrementing" : "decrementing",
+    modulo: counterScore > 0.55 && unique <= 16 ? unique : null,
+    checksum_like: checksumScore > 0.65 && transitions / Math.max(deltas.length, 1) > 0.65,
+    confidence: Number(Math.max(counterScore, checksumScore * 0.75).toFixed(3)),
+  };
 };
 
 const runAnalysis = (csv: string) => {
