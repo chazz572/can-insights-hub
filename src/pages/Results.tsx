@@ -585,8 +585,14 @@ const Results = () => {
           <div className="grid gap-6 xl:grid-cols-[1.25fr_0.75fr]">
             <AnalysisCard title="Summary" icon={<MessageSquareText className="size-5" />}>
               <div className="grid gap-4">
-                <div className="rounded-lg border border-primary/30 bg-gradient-subtle p-4 text-sm font-medium leading-6 text-foreground shadow-glow backdrop-blur">{shortPlainSummary}</div>
-                <pre className="whitespace-pre-wrap rounded-lg border border-glass-border bg-glass p-5 text-sm leading-7 text-foreground backdrop-blur">{renderText(summaryText)}</pre>
+                <div className="break-words rounded-lg border border-primary/30 bg-gradient-subtle p-4 text-sm font-medium leading-6 text-foreground shadow-glow backdrop-blur">{shortPlainSummary}</div>
+                <details className="group overflow-hidden rounded-lg border border-glass-border bg-glass backdrop-blur">
+                  <summary className="flex cursor-pointer list-none items-center justify-between gap-3 p-4 text-sm font-semibold text-foreground">
+                    Detailed evidence
+                    <ChevronDown className="size-4 shrink-0 text-muted-foreground transition-transform group-open:rotate-180" />
+                  </summary>
+                  <pre className="max-h-[22rem] overflow-y-auto whitespace-pre-wrap break-words border-t border-glass-border p-4 text-xs leading-6 text-foreground sm:text-sm sm:leading-7">{renderText(summaryText)}</pre>
+                </details>
               </div>
             </AnalysisCard>
             <AnalysisCard title="Signal Activity" description="Live telemetry intensity preview." icon={<BarChart3 className="size-5" />}>
