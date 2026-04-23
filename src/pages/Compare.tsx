@@ -3,6 +3,7 @@ import { CheckCircle2, FileText, GitCompareArrows, Loader2, Radar, ShieldCheck, 
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { EcuSwapPanel } from "@/components/EcuSwapPanel";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { analyzeFile, uploadCanFiles, type AnalysisResult } from "@/lib/canApi";

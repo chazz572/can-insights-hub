@@ -5,6 +5,7 @@ import { Link, useParams } from "react-router-dom";
 import { Bar, BarChart, CartesianGrid, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 
 import { AnalysisCard } from "@/components/AnalysisCard";
+import { IntelligenceSuite } from "@/components/IntelligenceSuite";
 import { JsonTable } from "@/components/JsonTable";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
