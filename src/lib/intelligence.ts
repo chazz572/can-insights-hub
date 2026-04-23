@@ -4,6 +4,7 @@ const rows = (value: unknown): JsonRecord[] => Array.isArray(value) ? value.filt
 const num = (row: JsonRecord, keys: string[]) => Number(keys.map((key) => row[key]).find((value) => typeof value === "number" || (typeof value === "string" && !Number.isNaN(Number(value)))) ?? 0);
 const clamp = (value: number) => Math.max(5, Math.min(98, Math.round(value)));
 const text = (value: unknown) => value === undefined || value === null || value === "" ? "unknown" : String(value);
+const cleanId = (value: unknown) => text(value).replace(/[^a-fA-F0-9]/g, "").toUpperCase();
 
 export type VehicleIdentification = {
   category: { label: string; confidence: number };
@@ -32,22 +33,38 @@ export const inferVehicleIdentification = (analysis: AnalysisResult): VehicleIde
   const idStats = rows(analysis.id_stats);
   const byteAnalysis = rows(analysis.diagnostics?.byte_analysis);
   const bitAnalysis = rows(analysis.diagnostics?.bit_analysis);
+  const deepDive = rows(analysis.diagnostics?.id_deep_dive);
+  const vehicleState = analysis.diagnostics?.vehicle_state as JsonRecord | undefined;
+  const missingSignals = rows(analysis.diagnostics?.missing_physical_signals);
+  const moduleTypes = rows(analysis.diagnostics?.module_type_heuristics).length ? rows(analysis.diagnostics?.module_type_heuristics) : systems;
   const extendedRatio = Number(protocol?.extended_id_ratio ?? 0);
   const hasJ1939 = Boolean(protocol?.has_j1939_shape) || extendedRatio > 0.55;
   const hasDiagnostics = Boolean(protocol?.has_uds_or_isotp_shape) || idStats.some((row) => /^7|18DA/i.test(text(row.id ?? row.key)));
   const highEntropyBytes = byteAnalysis.filter((row) => num(row, ["entropy", "unique_values"]) > 1.5).length;
   const activeBits = bitAnalysis.filter((row) => num(row, ["activity", "transitions"]) > 0.05).length;
-  const hasPowertrain = systems.some((row) => /powertrain/i.test(text(row.category)));
-  const hasBody = systems.some((row) => /body|chassis/i.test(text(row.category)));
-  const hasEvHints = systems.some((row) => /battery|bms|inverter|ev/i.test(`${text(row.category)} ${text(row.id)}`)) || idStats.some((row) => /18DA|18F/i.test(text(row.id ?? row.key))) && highEntropyBytes >= 4;
+  const ids = idStats.map((row) => Number.parseInt(cleanId(row.id ?? row.key), 16)).filter(Number.isFinite);
+  const standardRatio = ids.length ? ids.filter((id) => id <= 0x7ff).length / ids.length : 1;
+  const lowIdRatio = ids.length ? ids.filter((id) => id < 0x300).length / ids.length : 0;
+  const hasPowertrain = moduleTypes.some((row) => /powertrain/i.test(`${text(row.category)} ${text(row.module_type)}`));
+  const hasBody = moduleTypes.some((row) => /body|chassis/i.test(`${text(row.category)} ${text(row.module_type)}`));
+  const hasClusterSecurity = moduleTypes.some((row) => /cluster|security|immobilizer|body_control/i.test(`${text(row.category)} ${text(row.module_type)}`));
+  const dynamicIds = deepDive.filter((row) => num(row, ["payload_change_rate"]) > 0.15 || (Array.isArray(row.volatile_bytes) && row.volatile_bytes.length > 0)).length;
+  const staticIds = deepDive.filter((row) => num(row, ["payload_change_rate"]) <= 0.05).length;
+  const speedIds = analysis.vehicle_behavior?.possible_speed_ids?.length ?? 0;
+  const rpmIds = analysis.vehicle_behavior?.possible_rpm_ids?.length ?? 0;
+  const pedalIds = analysis.vehicle_behavior?.possible_pedal_ids?.length ?? 0;
+  const hasMotionEvidence = speedIds > 0 || rpmIds > 0 || pedalIds > 0 || dynamicIds >= 4;
+  const hasEvHints = moduleTypes.some((row) => /battery|bms|inverter|ev/i.test(`${text(row.category)} ${text(row.module_type)} ${text(row.id)}`)) || (idStats.some((row) => /18DA|18F/i.test(cleanId(row.id ?? row.key))) && highEntropyBytes >= 4);
 
   const category = hasJ1939
-    ? { label: "heavy-duty / J1939-style vehicle", confidence: clamp(72 + extendedRatio * 25) }
+    ? { label: "heavy-duty / J1939-style vehicle", confidence: clamp(74 + extendedRatio * 22) }
     : hasEvHints
-      ? { label: "EV or hybrid candidate", confidence: clamp(58 + highEntropyBytes * 5) }
-      : hasPowertrain && hasBody
-        ? { label: "passenger car or light truck", confidence: clamp(62 + activeBits / 2) }
-        : { label: "generic CAN-equipped vehicle", confidence: clamp(48 + Math.min(25, Number(analysis.unique_ids ?? 0))) };
+      ? { label: "EV or hybrid candidate", confidence: clamp(56 + highEntropyBytes * 4 + dynamicIds) }
+      : standardRatio > 0.9 && lowIdRatio > 0.45 && hasBody
+        ? { label: "passenger car / light-duty 11-bit CAN", confidence: clamp(68 + dynamicIds + (hasMotionEvidence ? 8 : 0)) }
+        : hasPowertrain && hasBody
+          ? { label: "passenger car or light truck", confidence: clamp(62 + activeBits / 3 + dynamicIds) }
+          : { label: "generic CAN-equipped vehicle", confidence: clamp(45 + Math.min(25, Number(analysis.unique_ids ?? 0)) + dynamicIds) };
 
   const protocolGuess = hasJ1939
     ? { label: "J1939 / CAN 2.0B", confidence: clamp(76 + extendedRatio * 20) }
@@ -55,21 +72,26 @@ export const inferVehicleIdentification = (analysis: AnalysisResult): VehicleIde
       ? { label: "UDS / ISO-TP diagnostic-heavy CAN", confidence: 72 }
       : extendedRatio > 0.25
         ? { label: "mixed standard and extended CAN", confidence: 64 }
-        : { label: "CAN 2.0A standard identifiers", confidence: clamp(70 - extendedRatio * 20) };
+        : { label: "CAN 2.0A standard 11-bit identifiers", confidence: clamp(78 + standardRatio * 15 - extendedRatio * 20) };
 
   const oemStyle = hasEvHints
-    ? { label: "Tesla-like / modern EV-style", confidence: clamp(45 + highEntropyBytes * 6) }
+    ? { label: "modern EV / hybrid-like network", confidence: clamp(44 + highEntropyBytes * 5) }
     : hasJ1939
       ? { label: "heavy-duty OEM-like", confidence: 70 }
-      : hasDiagnostics && hasBody
-        ? { label: "GM/Ford-like diagnostic/body network", confidence: 52 }
-        : { label: "Toyota/Ford/GM-like generic passenger CAN", confidence: 42 };
+      : standardRatio > 0.9 && lowIdRatio > 0.55 && hasClusterSecurity
+        ? { label: "Asian passenger-car style 11-bit body/chassis network", confidence: clamp(54 + dynamicIds + (hasMotionEvidence ? 8 : 0)) }
+        : hasDiagnostics && hasBody
+          ? { label: "North-American-style diagnostic/body network", confidence: 50 }
+          : { label: "generic passenger-car CAN style", confidence: clamp(38 + dynamicIds + (hasMotionEvidence ? 6 : 0)) };
+
+  const missingText = missingSignals.length ? `Missing physical signals reported: ${missingSignals.map((row) => text(row.signal)).slice(0, 6).join(", ")}.` : "No explicit missing-signal list was available.";
+  const stateText = vehicleState ? `Vehicle-state classifier says ${text(vehicleState.classification)} at ${Math.round(num(vehicleState, ["confidence_score"]) * 100)}% confidence.` : "Vehicle-state classifier was not available.";
 
   return {
     category,
     protocol: protocolGuess,
     oemStyle,
-    explanation: `This is a heuristic fingerprint based on ID width, diagnostic-shaped IDs, timing density, active bits, byte entropy, and system categories. It is not OEM-certified; it points analysts toward the most likely vehicle family before DBC validation.`,
+    explanation: `Fingerprint evidence: ${idStats.length} active IDs, ${Math.round(standardRatio * 100)}% standard 11-bit IDs, ${Math.round(extendedRatio * 100)}% extended IDs, ${dynamicIds} dynamic IDs, ${staticIds} static/status IDs, ${highEntropyBytes} high-entropy byte positions, and ${activeBits} active bit candidates. ${stateText} ${missingText} OEM style is intentionally heuristic and should be treated as network-shape guidance, not a certified manufacturer match.`,
   };
 };
 
