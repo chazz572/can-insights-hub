@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { BarChart3, Files, Loader2 } from "lucide-react";
+import { BarChart3, CheckCircle2, Files, Loader2, Route, ShieldCheck } from "lucide-react";
 import { Link } from "react-router-dom";
 
 import { Button } from "@/components/ui/button";
@@ -32,10 +32,17 @@ const BatchResults = () => {
 
   return (
     <main className="mx-auto min-h-screen max-w-7xl px-4 py-8 sm:px-6 lg:px-10">
-      <section className="mb-8 animate-fade-up">
+      <section className="mb-8 animate-fade-up rounded-lg border border-glass-border bg-glass-strong p-5 shadow-dashboard backdrop-blur sm:p-7">
         <p className="inline-flex items-center gap-2 rounded-lg border border-glass-border bg-glass px-3 py-1 text-sm font-semibold uppercase text-primary shadow-glow backdrop-blur"><Files className="size-4" /> Multi-File Analysis</p>
-        <h1 className="mt-4 text-4xl font-extrabold tracking-tight sm:text-5xl">Batch Results Dashboard</h1>
-        <p className="mt-3 max-w-2xl text-muted-foreground">Every uploaded CAN log was converted to normalized CSV and analyzed independently using the existing engine.</p>
+        <div className="mt-5 grid gap-6 lg:grid-cols-[1fr_0.75fr] lg:items-end">
+          <div>
+            <h1 className="text-4xl font-extrabold tracking-tight sm:text-5xl">Batch Results Dashboard</h1>
+            <p className="mt-3 max-w-2xl text-muted-foreground">Every uploaded CAN artifact is routed, converted, and analyzed independently for professional review.</p>
+          </div>
+          <div className="grid gap-3 sm:grid-cols-3 lg:grid-cols-1">
+            {[[Route, "Routed"], [ShieldCheck, "Validated"], [CheckCircle2, "Ready"]].map(([Icon, label]) => <div key={String(label)} className="flex items-center gap-2 rounded-lg border border-glass-border bg-glass px-3 py-2 text-sm font-semibold text-foreground"><Icon className="size-4 text-primary" />{String(label)}</div>)}
+          </div>
+        </div>
       </section>
 
       <div className="grid gap-6 lg:grid-cols-2">
