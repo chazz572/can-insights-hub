@@ -9,6 +9,7 @@ import { JsonTable } from "@/components/JsonTable";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { analyzeFile, AnalysisResult } from "@/lib/canApi";
+import { cn } from "@/lib/utils";
 
 const renderText = (value: unknown) => {
   if (value === null || value === undefined || value === "") return "No summary returned.";
