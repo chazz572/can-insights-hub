@@ -55,7 +55,7 @@ export const inferVehicleIdentification = (analysis: AnalysisResult): VehicleIde
   const speedIds = analysis.vehicle_behavior?.possible_speed_ids?.length ?? 0;
   const rpmIds = analysis.vehicle_behavior?.possible_rpm_ids?.length ?? 0;
   const pedalIds = analysis.vehicle_behavior?.possible_pedal_ids?.length ?? 0;
-  const hasMotionEvidence = speedIds > 0 || rpmIds > 0 || pedalIds > 0 || dynamicIds >= 4;
+  const hasMotionEvidence = speedIds > 0 || rpmIds > 0 || pedalIds > 0;
   const metadataEvConfidence = Number(metadataInsights?.ev_confidence_score ?? 0);
   const explicitVehicleType = text(vehicleType?.classification);
   const hasDefensibleVehicleType = !/cannot be determined|unknown/i.test(explicitVehicleType) && Number(vehicleType?.confidence_score ?? 0) > 0;
@@ -63,14 +63,14 @@ export const inferVehicleIdentification = (analysis: AnalysisResult): VehicleIde
   const category = hasDefensibleVehicleType
     ? { label: `${explicitVehicleType} network`, confidence: clamp(Number(vehicleType?.confidence_score ?? 0) * 100) }
     : hasJ1939
-    ? { label: "heavy-duty / J1939-style vehicle", confidence: clamp(74 + extendedRatio * 22) }
+    ? { label: "J1939-style network — vehicle type not determined", confidence: clamp(74 + extendedRatio * 22) }
     : metadataInsights?.has_dbc_metadata
       ? { label: "DBC definition file — vehicle type not determined", confidence: 95 }
       : standardRatio > 0.9 && lowIdRatio > 0.45 && hasBody
-        ? { label: "passenger car / light-duty 11-bit CAN", confidence: clamp(68 + dynamicIds + (hasMotionEvidence ? 8 : 0)) }
+        ? { label: "standard 11-bit body/chassis CAN network — vehicle type not determined", confidence: clamp(62 + dynamicIds) }
         : hasPowertrain && hasBody
-          ? { label: "passenger car or light truck", confidence: clamp(62 + activeBits / 3 + dynamicIds) }
-          : { label: "generic CAN-equipped vehicle", confidence: clamp(45 + Math.min(25, Number(analysis.unique_ids ?? 0)) + dynamicIds) };
+          ? { label: "mixed body/powertrain CAN network — vehicle type not determined", confidence: clamp(58 + activeBits / 3 + dynamicIds) }
+          : { label: "CAN network fingerprint — vehicle type not determined", confidence: clamp(42 + Math.min(25, Number(analysis.unique_ids ?? 0)) + dynamicIds) };
 
   const protocolGuess = hasJ1939
     ? { label: "J1939 / CAN 2.0B", confidence: clamp(76 + extendedRatio * 20) }
@@ -85,10 +85,10 @@ export const inferVehicleIdentification = (analysis: AnalysisResult): VehicleIde
     : hasJ1939
       ? { label: "heavy-duty OEM-like", confidence: 70 }
       : standardRatio > 0.9 && lowIdRatio > 0.55 && hasClusterSecurity
-        ? { label: "Asian passenger-car style 11-bit body/chassis network", confidence: clamp(54 + dynamicIds + (hasMotionEvidence ? 8 : 0)) }
+        ? { label: "11-bit body/chassis naming style", confidence: clamp(54 + dynamicIds + (hasMotionEvidence ? 8 : 0)) }
         : hasDiagnostics && hasBody
-          ? { label: "North-American-style diagnostic/body network", confidence: 50 }
-          : { label: "generic passenger-car CAN style", confidence: clamp(38 + dynamicIds + (hasMotionEvidence ? 6 : 0)) };
+          ? { label: "diagnostic/body network style", confidence: 50 }
+          : { label: "unclassified CAN naming style", confidence: clamp(38 + dynamicIds + (hasMotionEvidence ? 6 : 0)) };
 
   const missingText = missingSignals.length ? `Missing physical signals reported: ${missingSignals.map((row) => text(row.signal)).slice(0, 6).join(", ")}.` : "No explicit missing-signal list was available.";
   const stateText = vehicleState ? `Vehicle-state classifier says ${text(vehicleState.classification)} at ${Math.round(num(vehicleState, ["confidence_score"]) * 100)}% confidence.` : "Vehicle-state classifier was not available.";
