@@ -15,6 +15,7 @@ type IdProfile = {
   byteCounts: Array<Map<number, number>>;
   previousData: string | null;
   changes: number;
+  cleanSamples: string[];
 };
 
 const jsonResponse = (body: unknown) =>
@@ -149,12 +150,13 @@ const runAnalysis = (csv: string) => {
   forEachCsvRecord(csv, ({ id, data, timestamp }) => {
     totalMessages += 1;
     idCounts.set(id, (idCounts.get(id) ?? 0) + 1);
-    const profile = idProfiles.get(id) ?? { count: 0, lengths: new Map<number, number>(), timestamps: [], byteCounts: Array.from({ length: 8 }, () => new Map<number, number>()), previousData: null, changes: 0 };
+    const profile = idProfiles.get(id) ?? { count: 0, lengths: new Map<number, number>(), timestamps: [], byteCounts: Array.from({ length: 8 }, () => new Map<number, number>()), previousData: null, changes: 0, cleanSamples: [] };
     profile.count += 1;
     profile.lengths.set(data.length, (profile.lengths.get(data.length) ?? 0) + 1);
     if (Number.isFinite(timestamp)) profile.timestamps.push(timestamp);
     if (profile.previousData !== null && profile.previousData !== cleanHex(data)) profile.changes += 1;
     profile.previousData = cleanHex(data);
+    if (profile.cleanSamples.length < 800) profile.cleanSamples.push(cleanHex(data));
     idProfiles.set(id, profile);
 
     if (cleanHex(id).length > 3) extendedIds += 1;
