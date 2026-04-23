@@ -149,7 +149,7 @@ const runAnalysis = (csv: string) => {
 
     if (cleanHex(id).length > 3) extendedIds += 1;
 
-    const payloadLength = data.length;
+    const payloadLength = byteValues(data).length;
     const delta = payloadLength - meanLength;
     meanLength += delta / totalMessages;
     m2Length += delta * (payloadLength - meanLength);
@@ -198,7 +198,7 @@ const runAnalysis = (csv: string) => {
   const anomalies: JsonRecord[] = [];
 
   forEachCsvRecord(csv, ({ id, data }) => {
-    if (data.length > anomalyThreshold) {
+    if (byteValues(data).length > anomalyThreshold) {
       anomalies.push({ id, data, reason: "Unusually long data payload" });
     }
   });
