@@ -392,7 +392,7 @@ const ModuleActivityMap = ({ systems }: { systems: unknown }) => {
   return (
     <div className="grid gap-4">
       <div className="grid gap-3 sm:grid-cols-3">
-        {Object.entries(groups).slice(0, 3).map(([group, items]) => (
+        {(Object.entries(groups) as Array<[string, Array<Record<string, unknown>>]>).slice(0, 3).map(([group, items]) => (
           <div key={group} className="rounded-lg border border-glass-border bg-glass p-4 backdrop-blur">
             <p className="text-xs font-bold uppercase text-muted-foreground">{titleCase(group)}</p>
             <p className="mt-2 text-3xl font-extrabold text-primary">{items.length}</p>
