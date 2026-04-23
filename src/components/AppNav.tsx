@@ -1,4 +1,4 @@
-import { BarChart3, Bell, Car, GitCompareArrows, Home, LayoutDashboard, Moon, Settings, Sun, UploadCloud, UserCircle } from "lucide-react";
+import { BarChart3, Bell, Car, ChartNoAxesCombined, Download, GitCompareArrows, Home, LayoutDashboard, Moon, Settings, Sun, TerminalSquare, UploadCloud, UserCircle } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Link, NavLink as RouterNavLink, useLocation } from "react-router-dom";
 
@@ -43,8 +43,11 @@ export const AppNav = () => {
     { to: "/workspace", label: "Workspace", icon: LayoutDashboard },
     { to: "/upload", label: "Upload", icon: UploadCloud },
     { to: resultsPath, label: "Results", icon: BarChart3 },
+    { to: "/engineering", label: "Engineering", icon: TerminalSquare },
+    { to: "/visualize", label: "Visualize", icon: ChartNoAxesCombined },
     { to: "/compare", label: "Compare", icon: GitCompareArrows },
     { to: "/fleet", label: "Fleet", icon: Car },
+    { to: "/reports", label: "Reports", icon: Download },
   ];
 
   return (
@@ -60,7 +63,7 @@ export const AppNav = () => {
           </span>
         </Link>
 
-        <nav className="space-y-2">
+        <nav className="space-y-1 overflow-y-auto pr-1">
           {links.map((item) => (
             <RouterNavLink key={item.label} to={item.to} className={navClass} end={item.end}>
               <item.icon className="transition-transform duration-300 group-hover:scale-110" />
@@ -69,7 +72,7 @@ export const AppNav = () => {
           ))}
         </nav>
 
-        <div className="mt-8 space-y-2 border-t border-glass-border pt-5">
+        <div className="mt-5 space-y-2 border-t border-glass-border pt-5">
           {["Diagnostics", "Engineering", "Fleet", "AI", "SaaS"].map((section) => (
             <div key={section} className="rounded-lg px-4 py-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground transition-colors hover:text-primary">
               {section}
@@ -78,8 +81,8 @@ export const AppNav = () => {
         </div>
 
         <div className="mt-auto rounded-lg border border-glass-border bg-glass p-4 backdrop-blur">
-          <p className="text-xs font-semibold uppercase text-primary">Live analysis</p>
-          <p className="mt-2 text-sm leading-6 text-muted-foreground">Upload CAN exports and inspect anomalies, identifiers, and behavior signals.</p>
+          <p className="text-xs font-semibold uppercase text-primary">Universal CAN platform</p>
+          <p className="mt-2 text-sm leading-6 text-muted-foreground">Formats · diagnostics · engineering · fleet · AI</p>
         </div>
       </aside>
 
@@ -109,7 +112,7 @@ export const AppNav = () => {
 
       <header className="fixed inset-x-3 bottom-3 z-40 rounded-lg border border-sidebar-border bg-sidebar/90 p-2 shadow-dashboard backdrop-blur-xl md:hidden">
         <nav className="grid grid-cols-5 gap-2">
-          {links.map((item) => (
+          {links.slice(0, 5).map((item) => (
             <RouterNavLink key={item.label} to={item.to} className={({ isActive }) => cn(navClass({ isActive }), "justify-center px-2 py-2")} end={item.end}>
               <item.icon />
               <span className="sr-only sm:not-sr-only">{item.label}</span>
