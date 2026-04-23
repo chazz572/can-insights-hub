@@ -295,12 +295,24 @@ Deno.serve(async (req) => {
     if (!serviceRoleKey) throw new Error("SUPABASE_SERVICE_ROLE_KEY is not configured");
 
     const supabase = createClient(supabaseUrl, serviceRoleKey);
-    const convertedFiles = await Promise.all(files.map(async (file) => ({ file, converted: await convertFile(file) })));
+    const convertedFiles = await Promise.all(files.map(async (file) => {
+      try {
+        return { file, converted: await convertFile(file) };
+      } catch (error) {
+        return { file, error: error instanceof Error ? error.message : "Conversion failed" };
+      }
+    }));
     const dbcReference = convertedFiles.find((item) => item.converted.pipeline === "dbc")?.converted.csv;
     const results = [];
 
-    for (const { file, converted: initialConverted } of convertedFiles) {
+    for (const item of convertedFiles) {
       try {
+        if ("error" in item) {
+          results.push({ filename: item.file.name, file_type: "unsupported", detected_format: "unsupported", analysis_pipeline: "unsupported_file", error: item.error });
+          continue;
+        }
+
+        const { file, converted: initialConverted } = item;
         const converted = dbcReference && initialConverted.pipeline === "log"
           ? { ...initialConverted, csv: mergeLogWithDbcMetadata(initialConverted.csv, dbcReference), pipeline: "log_dbc" as const, warnings: [...initialConverted.warnings, "A DBC was uploaded in the same batch, so this log is routed through Full Power LOG+DBC analysis."] }
           : initialConverted;
