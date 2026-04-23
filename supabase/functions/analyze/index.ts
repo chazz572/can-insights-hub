@@ -304,7 +304,17 @@ const runAnalysis = (csv: string) => {
         ? "diagnostic"
         : "body_or_chassis";
 
-    return { id, category, confidence: "heuristic" };
+    const module_type = category === "diagnostic"
+      ? "diagnostic"
+      : Number.isFinite(numeric) && numeric >= 0x500
+        ? "infotainment_or_cluster"
+        : Number.isFinite(numeric) && numeric >= 0x300
+          ? "body_control_or_security"
+          : Number.isFinite(numeric) && numeric >= 0x180
+            ? "chassis_or_powertrain"
+            : "body_control";
+
+    return { id, category, module_type, confidence_score: category === "diagnostic" ? 0.82 : 0.58, confidence: "heuristic", reasoning: `ID range ${cleanHex(id)} maps heuristically to ${module_type}.` };
   });
 
   const idDeepDive = [...idProfiles.entries()].map(([id, profile]) => {
@@ -330,6 +340,35 @@ const runAnalysis = (csv: string) => {
       likely_role: volatileBytes.length >= 2 ? "multi-byte changing signal candidate" : profile.changes === 0 ? "static/status candidate" : "single-byte/status signal candidate",
     };
   }).sort((a, b) => Number(b.messages) - Number(a.messages));
+
+  const idClassifications = idDeepDive.map((item) => {
+    const volatility_score = Math.min(1, Number(item.payload_change_rate) + (Array.isArray(item.volatile_bytes) ? item.volatile_bytes.length : 0) / 8);
+    const classification = classifyVolatility(Number(item.payload_change_rate), Array.isArray(item.volatile_bytes) ? item.volatile_bytes.length : 0);
+    return { id: item.id, classification, volatility_score: Number(volatility_score.toFixed(4)), reasoning: `${item.id} changed in ${Math.round(Number(item.payload_change_rate) * 100)}% of observed transitions with ${(item.volatile_bytes as number[]).length} volatile byte position(s).` };
+  });
+
+  const counterChecksum = [...idProfiles.entries()].map(([id, profile]) => {
+    const byte_behavior = profile.byteSeries.map((series, byte_index) => ({ byte_index, ...detectByteBehavior(series) }));
+    return {
+      id,
+      counters: byte_behavior.filter((item) => item.counter).map((item) => ({ byte_index: item.byte_index, direction: item.direction, modulo: item.modulo, confidence: item.confidence })),
+      checksums: byte_behavior.filter((item) => item.checksum_like && !item.counter).map((item) => ({ byte_index: item.byte_index, confidence: item.confidence })),
+      byte_behavior,
+    };
+  }).filter((item) => item.counters.length || item.checksums.length);
+
+  const correlationSignals = [...idProfiles.entries()].flatMap(([id, profile]) => profile.byteSeries.map((series, byte_index) => ({ key: `${id}:byte${byte_index}`, id, byte_index, series })));
+  const topCorrelatedPairs = correlationSignals.flatMap((left, leftIndex) => correlationSignals.slice(leftIndex + 1).map((right) => ({ left: left.key, right: right.key, correlation: pearson(left.series, right.series), relationship: "byte_value_correlation" })))
+    .filter((item) => Math.abs(item.correlation) >= 0.72)
+    .sort((a, b) => Math.abs(b.correlation) - Math.abs(a.correlation))
+    .slice(0, 24);
+
+  const ecuClusters = idDeepDive.map((item) => {
+    const timingMatch = timing.filter((row) => Math.abs(Number(row.average_period) - Number(item.average_period)) < 0.002).map((row) => row.id).filter((id) => id !== item.id).slice(0, 8);
+    const structureMatch = idDeepDive.filter((row) => row.id !== item.id && JSON.stringify(row.payload_lengths) === JSON.stringify(item.payload_lengths)).map((row) => row.id).slice(0, 8);
+    const ids = [...new Set([item.id, ...timingMatch, ...structureMatch])];
+    return { cluster_id: `cluster_${item.id}`, ids, confidence: Number(Math.min(0.95, 0.35 + timingMatch.length * 0.08 + structureMatch.length * 0.06).toFixed(3)), behavior: `IDs share ${timingMatch.length ? "timing" : "limited timing"} and ${structureMatch.length ? "payload length" : "limited payload"} similarity; likely related ECU/status group.` };
+  }).filter((cluster) => cluster.ids.length > 1).slice(0, 16);
 
   const networkHealth = {
     estimated_bus_load_score: Math.min(100, Math.round((totalMessages / Math.max(idCounts.size, 1)) * 10)),
