@@ -302,7 +302,7 @@ Deno.serve(async (req) => {
         return { file, error: error instanceof Error ? error.message : "Conversion failed" };
       }
     }));
-    const dbcReference = convertedFiles.find((item) => item.converted.pipeline === "dbc")?.converted.csv;
+    const dbcReference = convertedFiles.find((item): item is { file: File; converted: ConversionResult } => "converted" in item && item.converted.pipeline === "dbc")?.converted.csv;
     const results = [];
 
     for (const item of convertedFiles) {
