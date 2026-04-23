@@ -1,4 +1,4 @@
-import { BarChart3, Bell, Car, ChartNoAxesCombined, CheckCircle2, Download, GitCompareArrows, Home, LayoutDashboard, Moon, Settings, Sun, TerminalSquare, UploadCloud, UserCircle } from "lucide-react";
+import { BarChart3, Bell, Car, ChartNoAxesCombined, CheckCircle2, Download, GitCompareArrows, Home, LayoutDashboard, Moon, Settings, ShieldCheck, Sun, TerminalSquare, UploadCloud, UserCircle } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Link, NavLink as RouterNavLink, useLocation } from "react-router-dom";
 
@@ -57,14 +57,14 @@ export const AppNav = () => {
 
   return (
     <>
-      <aside className="fixed inset-y-0 left-0 z-40 hidden w-72 border-r border-sidebar-border bg-sidebar/80 p-5 shadow-dashboard backdrop-blur-xl md:flex md:flex-col">
+      <aside className="fixed inset-y-0 left-0 z-40 hidden w-72 border-r border-sidebar-border bg-sidebar/88 p-5 shadow-dashboard backdrop-blur-xl md:flex md:flex-col">
         <Link to="/" className="group mb-8 flex items-center gap-3 rounded-lg p-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
           <span className="grid size-11 place-items-center rounded-lg bg-gradient-accent text-sm font-extrabold text-primary-foreground shadow-glow transition-transform duration-300 group-hover:scale-105">
-            CAN
+            CJL
           </span>
           <span>
-            <span className="block text-base font-bold text-foreground">CJL CAN Intelligence Platform</span>
-            <span className="text-xs font-medium text-muted-foreground">AI Analytics Suite</span>
+            <span className="block text-base font-bold leading-tight text-foreground">CJL CAN Intelligence</span>
+            <span className="text-xs font-medium text-muted-foreground">Pro diagnostics workspace</span>
           </span>
         </Link>
 
@@ -77,14 +77,22 @@ export const AppNav = () => {
           ))}
         </nav>
 
-        <div className="mt-auto" />
+        <div className="mt-auto rounded-lg border border-glass-border bg-glass p-4 backdrop-blur">
+          <div className="flex items-center gap-3">
+            <span className="grid size-10 place-items-center rounded-lg bg-secondary text-primary"><ShieldCheck className="size-5" /></span>
+            <div className="min-w-0">
+              <p className="text-sm font-bold text-foreground">Pro workspace</p>
+              <p className="text-xs leading-5 text-muted-foreground">Log, DBC, fleet, and report workflows ready.</p>
+            </div>
+          </div>
+        </div>
       </aside>
 
       <header className="fixed inset-x-0 top-0 z-30 border-b border-glass-border bg-background/70 px-4 py-3 shadow-dashboard backdrop-blur-xl md:left-72 md:px-8">
         <div className="flex items-center justify-between gap-4">
           <div className="min-w-0">
             <p className="text-xs font-semibold uppercase text-primary">CJL CAN Intelligence Platform</p>
-            <p className="truncate text-sm text-muted-foreground">Cloud CAN Analysis · Diagnostics · Reverse Engineering</p>
+            <p className="truncate text-sm text-muted-foreground">Professional CAN diagnostics · DBC decoding · Fleet intelligence</p>
           </div>
           <div className="flex items-center gap-2">
             <button type="button" aria-label="Toggle theme" onClick={() => setTheme((current) => current === "dark" ? "light" : "dark")} className="grid size-10 place-items-center rounded-lg border border-glass-border bg-glass text-foreground shadow-glow backdrop-blur transition-all duration-300 hover:scale-105 hover:border-primary/40">
