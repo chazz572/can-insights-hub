@@ -35,7 +35,6 @@ const Workspace = () => {
     <main className="mx-auto min-h-screen max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
       {/* Service bay command header */}
       <section className="data-panel riveted relative mb-5 overflow-hidden">
-        <div className="hazard-stripe h-2 w-full" />
         <div className="p-5 sm:p-7">
           <div className="flex items-center gap-2">
             <span className="status-led" />
