@@ -43,6 +43,10 @@ const canIdAliases = (storedId: string, metadata = "") => {
   });
   return [...aliases].filter((id) => id !== "NaN");
 };
+const formatCanIdHex = (id: string) => {
+  const numeric = Number(id);
+  return Number.isFinite(numeric) ? `0x${numeric.toString(16).toUpperCase()}` : "0x0";
+};
 const cleanByte = (value: string) => value.replace(/^0x/i, "").replace(/[^a-fA-F0-9]/g, "").slice(0, 2).padStart(2, "0").toUpperCase();
 const isId = (value: string) => /^[0-9a-fA-F]{1,8}[xh]?$/.test(value.replace(/^0x/i, ""));
 const isByte = (value: string) => /^(0x)?[0-9a-fA-F]{1,2}$/.test(value);
@@ -84,7 +88,7 @@ const normalizeFrame = (timestamp: string, id: string, bytes: string[], dlc?: nu
   const normalizedId = cleanId(id, idBase);
   const normalizedBytes = bytes.map(cleanByte).filter((byte) => /^[0-9A-F]{2}$/.test(byte)).slice(0, 8);
   if (!normalizedId || !normalizedBytes.length) return null;
-  const idMetadata = `raw_can_id=${id};normalized_can_id=${normalizedId};id_base=${idBase}`;
+  const idMetadata = `raw_can_id=${id};normalized_can_id=${normalizedId};normalized_can_id_hex=${formatCanIdHex(normalizedId)};id_base=${idBase};id_width=${Number(normalizedId) > 0x7ff ? 29 : 11}`;
   return { timestamp: timestamp || "0", id: normalizedId, dlc: Math.min(Number.isFinite(Number(dlc)) ? Number(dlc) : normalizedBytes.length, 8), data: normalizedBytes, metadata: [metadata, idMetadata].filter(Boolean).join(";") };
 };
 
@@ -117,11 +121,13 @@ const parseCsv = (text: string, warnings: string[], format: CanFormat): Frame[] 
   const dlcIndex = find(["dlc", "length", "len"]);
   const dataIndex = find(["data", "payload", "bytes", "data bytes", "databytes", "data_hex", "payload_hex"]);
   const byteIndexes = normalizedHeaders.map((header, index) => (/^(byte|data)[_ -]?[0-7]$|^b[0-7]$/.test(header) ? index : -1)).filter((index) => index >= 0);
+  const idHeader = idIndex >= 0 ? normalizedHeaders[idIndex] : "";
+  const idBase: 10 | 16 | "auto" = /hex/.test(idHeader) ? 16 : /pgn/.test(idHeader) || /decimal|dec/.test(idHeader) ? 10 : "auto";
   if (idIndex < 0) warnings.push("CSV header is missing a recognized CAN ID column; trying generic frame extraction.");
   return lines.slice(1).map((line, index) => {
     const values = parseCsvLine(line);
     const bytes = dataIndex >= 0 ? splitBytes(values[dataIndex] ?? "") : byteIndexes.map((byteIndex) => values[byteIndex]).filter(Boolean);
-    return normalizeFrame(timestampIndex >= 0 ? values[timestampIndex] : String(index), idIndex >= 0 ? values[idIndex] : "", bytes, dlcIndex >= 0 ? Number(values[dlcIndex]) : undefined, undefined, "auto");
+    return normalizeFrame(timestampIndex >= 0 ? values[timestampIndex] : String(index), idIndex >= 0 ? values[idIndex] : "", bytes, dlcIndex >= 0 ? Number(values[dlcIndex]) : undefined, `id_header=${idHeader || "unknown"}`, idBase);
   }).filter((frame): frame is Frame => Boolean(frame)).map((frame) => format === "J1939 CSV" ? { ...frame, id: cleanId(frame.id) } : frame);
 };
 
@@ -213,7 +219,7 @@ const parseDbc = (text: string, warnings: string[]) => {
     const id = String(Number(message[1]));
     const dlc = Math.max(1, Math.min(Number(message[2]) || 8, 8));
     const signalCount = Math.min(signalCounts.get(id) ?? 0, 255).toString(16).padStart(2, "0");
-    return normalizeFrame(String(index), id, [signalCount, ...Array.from({ length: dlc - 1 }, () => "00")], dlc, messageMetadata.get(id)?.slice(0, 1800));
+    return normalizeFrame(String(index), id, [signalCount, ...Array.from({ length: dlc - 1 }, () => "00")], dlc, messageMetadata.get(id)?.slice(0, 1800), 10);
   }).filter((frame): frame is Frame => Boolean(frame));
 
   if (frames.length) warnings.push("DBC files contain message definitions, not live traffic. CANAI preserved message and signal names as metadata for message, signal, and likely ECU-structure review only; vehicle type is not inferred from a DBC file alone.");
@@ -278,13 +284,18 @@ const dbcMetadataById = (dbcCsv: string) => {
 
 const mergeLogWithDbcMetadata = (logCsv: string, dbcCsv: string) => {
   const metadata = dbcMetadataById(dbcCsv);
+  const dbcIds = [...new Set([...metadata.keys()].map((id) => cleanId(id, 10)))].sort((a, b) => Number(a) - Number(b));
+  const dbcCatalog = `available_dbc_ids_dec=${dbcIds.join("|")};available_dbc_ids_hex=${dbcIds.map(formatCanIdHex).join("|")}`;
   const lines = logCsv.split(/\r?\n/);
   return lines.map((line, index) => {
     if (index === 0 || !line.trim()) return line;
     const values = parseCsvLine(line);
     const existingMetadata = values[4]?.replace(/^"|"$/g, "").replace(/""/g, '"') ?? "";
-    const dbcMeta = canIdAliases(values[1] ?? "", existingMetadata).map((id) => metadata.get(id)).find(Boolean);
-    values[4] = dbcMeta ? ["source_file_type=log_with_dbc", existingMetadata, dbcMeta].filter(Boolean).join(";") : ["source_file_type=log_with_dbc", existingMetadata, "dbc_match=none"].filter(Boolean).join(";");
+    const logAliases = canIdAliases(values[1] ?? "", existingMetadata);
+    const matchedId = logAliases.find((id) => metadata.has(id));
+    const dbcMeta = matchedId ? metadata.get(matchedId) : undefined;
+    const matchMeta = matchedId ? `dbc_match=exact;dbc_match_id=${matchedId};dbc_match_id_hex=${formatCanIdHex(matchedId)}` : "dbc_match=none";
+    values[4] = ["source_file_type=log_with_dbc", existingMetadata, matchMeta, dbcMeta, dbcCatalog].filter(Boolean).join(";");
     return [csvEscape(values[0] ?? ""), csvEscape(values[1] ?? ""), values[2] ?? 0, csvEscape(values[3] ?? ""), csvEscape(values[4])].join(",");
   }).join("\n");
 };
@@ -380,7 +391,7 @@ Deno.serve(async (req) => {
     const rawLogItems = successfulConverted.filter((item) => item.converted.pipeline === "log");
     const dbcItems = successfulConverted.filter((item) => item.converted.pipeline === "dbc");
     const dbcReference = dbcItems[0]?.converted.csv;
-    const results = [...failedResults];
+    const results: Array<Record<string, unknown>> = [...failedResults];
 
     if (rawLogItems.length) {
       const mergedCsv = mergeRawLogCsvs(rawLogItems.map((item) => ({ filename: item.file.name, converted: item.converted })));
