@@ -541,8 +541,8 @@ const Results = () => {
   const networkScore = Math.max(10, Math.min(100, Math.round(numericValue(networkHealth, ["bus_health_score"]) || (busLoad > 90 ? 68 : busLoad > 60 ? 78 : 92))));
   const componentHealth = Math.max(0, Math.min(100, 100 - anomalies.length * 12));
   const suspectIds = toRecordArray(idStats).filter((row) => numericValue(row, ["count", "frequency", "messages", "total", "value"]) > 1).length;
-  const vehicleIdentification = data ? inferVehicleIdentification(data) : null;
-  const partialDbcDraft = data ? buildPartialDbcDraft(generatePartialDbcCandidates(data)) : "";
+  const vehicleIdentification = data && fileType !== "log" && fileType !== "dbc" ? inferVehicleIdentification(data) : null;
+  const partialDbcDraft = data && fileType === "log" ? buildPartialDbcDraft(generatePartialDbcCandidates(data)) : "";
   const vehicleState = diagnostics.vehicle_state && typeof diagnostics.vehicle_state === "object" ? diagnostics.vehicle_state as JsonRecord : {};
   const vehicleType = diagnostics.vehicle_type && typeof diagnostics.vehicle_type === "object" ? diagnostics.vehicle_type as JsonRecord : {};
   const shortPlainSummary = data
@@ -644,19 +644,11 @@ const Results = () => {
               <div className="grid gap-4">
                 <PipelineBadge type={fileType} label={pipelineLabel} />
                 <div className="min-w-0 max-w-full overflow-hidden break-all rounded-lg border border-primary/30 bg-gradient-subtle p-3 text-xs font-medium leading-6 text-foreground shadow-glow backdrop-blur [overflow-wrap:anywhere] sm:break-words sm:p-4 sm:text-sm">{shortPlainSummary}</div>
-                <details className="group min-w-0 overflow-hidden rounded-lg border border-glass-border bg-glass backdrop-blur">
-                  <summary className="flex cursor-pointer list-none items-center justify-between gap-3 p-4 text-sm font-semibold text-foreground">
-                    Detailed evidence
-                    <ChevronDown className="size-4 shrink-0 text-muted-foreground transition-transform group-open:rotate-180" />
-                  </summary>
-                  <div className="min-w-0 max-w-full overflow-x-hidden overflow-y-auto border-t border-glass-border p-2 text-[10px] leading-5 text-foreground sm:p-4 sm:text-sm sm:leading-7">
-                    <div className="block min-w-0 max-w-full whitespace-pre-wrap break-all font-sans [overflow-wrap:anywhere] sm:break-words">{renderText(summaryText)}</div>
-                  </div>
-                </details>
+                <div className="min-w-0 max-w-full overflow-hidden rounded-lg border border-glass-border bg-glass p-4 text-sm leading-7 text-foreground backdrop-blur whitespace-pre-wrap [overflow-wrap:anywhere]">{renderText(summaryText)}</div>
               </div>
             </AnalysisCard>
-            <AnalysisCard title="Signal Activity" description="Live telemetry intensity preview." icon={<BarChart3 className="size-5" />}>
-              {fileType === "dbc" ? <p className="text-sm leading-6 text-muted-foreground">DBC files define signals and scaling only, so activity charts are intentionally disabled.</p> : <MiniChart />}
+            <AnalysisCard title={fileType === "dbc" ? "DBC Structure" : fileType === "log_dbc" ? "Decoded Signal Activity" : "Raw Bus Activity"} description={fileType === "dbc" ? "Message and signal definitions only." : fileType === "log_dbc" ? "Physical units from DBC-backed decoding." : "Timing and frame intensity without physical decoding."} icon={<BarChart3 className="size-5" />}>
+              {fileType === "dbc" ? <JsonTable data={diagnostics.dbc && typeof diagnostics.dbc === "object" ? (diagnostics.dbc as JsonRecord).signals : []} /> : fileType === "log_dbc" ? <JsonTable data={diagnostics.decoded_signals} /> : <MiniChart />}
             </AnalysisCard>
           </div>
 
