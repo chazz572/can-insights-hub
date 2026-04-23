@@ -4,12 +4,13 @@ import { Link, NavLink as RouterNavLink, useLocation } from "react-router-dom";
 
 import { cn } from "@/lib/utils";
 
-const navClass = ({ isActive }: { isActive: boolean }) =>
+const navClass = ({ isActive, highlight }: { isActive: boolean; highlight?: boolean }) =>
   cn(
     "group flex items-center gap-3 rounded-lg px-4 py-3 text-sm font-semibold transition-all duration-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
     isActive
       ? "bg-gradient-accent text-primary-foreground shadow-glow"
       : "text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground hover:shadow-glow",
+    highlight && !isActive && "border border-primary/30 bg-primary/5 text-primary",
   );
 
 export const AppNav = () => {
@@ -48,9 +49,9 @@ export const AppNav = () => {
     { to: "/workspace", label: "Workspace", icon: LayoutDashboard },
     { to: "/upload", label: "Upload", icon: UploadCloud },
     { to: resultsPath, label: "Results", icon: BarChart3 },
+    { to: "/compare", label: "Compare", icon: GitCompareArrows, highlight: true },
     { to: "/engineering", label: "Engineering", icon: TerminalSquare },
     { to: "/visualize", label: "Visualize", icon: ChartNoAxesCombined },
-    { to: "/compare", label: "Compare", icon: GitCompareArrows },
     { to: "/fleet", label: "Fleet", icon: Car },
     { to: "/reports", label: "Reports", icon: Download },
   ];
@@ -70,7 +71,7 @@ export const AppNav = () => {
 
         <nav className="space-y-1 overflow-y-auto pr-1">
           {links.map((item) => (
-            <RouterNavLink key={item.label} to={item.to} className={navClass} end={item.end}>
+            <RouterNavLink key={item.label} to={item.to} className={({ isActive }) => navClass({ isActive, highlight: item.highlight })} end={item.end}>
               <item.icon className="transition-transform duration-300 group-hover:scale-110" />
               {item.label}
             </RouterNavLink>
@@ -115,8 +116,14 @@ export const AppNav = () => {
 
       <header className="fixed inset-x-3 bottom-3 z-40 rounded-lg border border-sidebar-border bg-sidebar/90 p-2 shadow-dashboard backdrop-blur-xl md:hidden">
         <nav className="grid grid-cols-5 gap-2">
-          {links.slice(0, 5).map((item) => (
-            <RouterNavLink key={item.label} to={item.to} className={({ isActive }) => cn(navClass({ isActive }), "justify-center px-2 py-2")} end={item.end}>
+          {[
+            links[0],  // Home
+            links[2],  // Upload
+            { ...links[4], highlight: true }, // Compare (highlighted)
+            links[3],  // Results
+            links[7],  // Fleet
+          ].map((item) => (
+            <RouterNavLink key={item.label} to={item.to} className={({ isActive }) => cn(navClass({ isActive, highlight: item.highlight }), "justify-center px-2 py-2")} end={item.end}>
               <item.icon />
               <span className="sr-only sm:not-sr-only">{item.label}</span>
             </RouterNavLink>
