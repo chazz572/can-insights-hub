@@ -520,12 +520,12 @@ const runAnalysis = (csv: string) => {
   const driverBehavior = {
     behavior: isDbcReference ? "DBC definition map / not live driving traffic" : behaviorLabel,
     confidence_score: Number(behaviorConfidence.toFixed(3)),
-    movement_confidence: speedSignals.length ? "supported_by_signal_shape" : "not_supported_by_motion_bytes",
-    engine_activity_confidence: rpmSignals.length || loadSignals.length ? "supported_by_dynamic_powertrain_like_bytes" : "not_isolated",
+    movement_confidence: speedSignals.length ? "supported_by_decoded_or_named_motion_signal" : unvalidatedBehaviorSignals.length ? "candidate_only_from_undecoded_byte_shape" : "not_supported_by_motion_bytes",
+    engine_activity_confidence: rpmSignals.length ? "supported_by_named_rpm_signal" : loadSignals.length ? "candidate_only_from_dynamic_load_bytes" : "not_isolated",
     pedal_activity_confidence: pedalBrakeSteeringSignals.length ? "supported_by_compact_input_like_bytes" : "not_isolated",
     harsh_event_candidates: anomalies.slice(0, 12),
     evidence: behavioralEvidence.length ? behavioralEvidence : ["No byte pair showed the rising/falling motion shape required to defend speed, pedal, brake, steering, or wheel-speed claims."],
-    interpretation: isDbcReference ? "This upload is a DBC definition file, so the defensible conclusion is limited to message definitions, signal names, and likely ECU groups. It must not be treated as live traffic or used by itself to classify vehicle type." : hasDefensibleMotion ? `${behaviorLabel}. This conclusion is based on decoded/metadata-supported motion or driver-input candidates plus byte-level trend direction, smoothness, entropy, timing cadence, and cross-ID relationships.` : "The log has many dynamic bytes and stable 10–20 ms periodic traffic, but no decoded or metadata-supported speed, wheel-speed, pedal, brake, steering, gear, torque, engine-RPM, or motor-RPM signal was isolated. Motion, acceleration, idle, and vehicle type should remain unclassified.",
+    interpretation: isDbcReference ? "This upload is a DBC definition file, so the defensible conclusion is limited to message definitions, signal names, and likely ECU groups. It must not be treated as live traffic or used by itself to classify vehicle type." : hasDefensibleMotion ? `${behaviorLabel}. This conclusion is based on decoded/metadata-supported motion or driver-input candidates plus byte-level trend direction, smoothness, entropy, timing cadence, and cross-ID relationships.` : hasBehaviorCandidateEvidence ? `${behaviorLabel}. This is a behavioral candidate, not a decoded physical signal claim: the IDs show directional byte movement and stable periodic timing, but no DBC/metadata validates the physical meaning.` : "The log has periodic traffic, but no decoded or metadata-supported speed, wheel-speed, pedal, brake, steering, gear, torque, engine-RPM, or motor-RPM signal was isolated. Motion, acceleration, idle, and vehicle type should remain unclassified.",
   };
 
   const eventTimeline = anomalies.slice(0, 24).map((item, index) => ({
@@ -577,7 +577,7 @@ const runAnalysis = (csv: string) => {
   const vehicleState = {
     classification: behaviorLabel.replace(/ /g, "_"),
     confidence_score: Number(behaviorConfidence.toFixed(3)),
-    reasoning: hasDefensibleMotion && behavioralEvidence.length ? behavioralEvidence.join(" ") : "The log contains periodic CAN traffic and changing bytes, but without decoded/metadata-supported physical signals those bytes cannot defensibly prove acceleration, speed, pedal, brake, steering, idle, or RPM.",
+    reasoning: hasBehaviorCandidateEvidence && behavioralEvidence.length ? `${behavioralEvidence.join(" ")} ${hasDefensibleMotion ? "Physical meaning is supported by decoded/metadata signal labels." : "Physical meaning remains unvalidated because no DBC/metadata names these bytes as speed, pedal, brake, steering, torque, gear, engine RPM, or motor RPM."}` : "The log contains periodic CAN traffic, but without decoded/metadata-supported physical signals those bytes cannot defensibly prove acceleration, speed, pedal, brake, steering, idle, or RPM.",
     evidence: behavioralEvidence,
   };
 
