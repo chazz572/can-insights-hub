@@ -133,7 +133,7 @@ const analogCandidateScore = (values: number[]) => {
 };
 
 const trendStats = (values: number[]) => {
-  if (values.length < 3) return { range: 0, unique: new Set(values).size, rising: 0, falling: 0, flat: 0, reversals: 0, meanAbsDelta: 0, smoothness: 0, direction: "flat" };
+  if (values.length < 3) return { range: 0, unique: new Set(values).size, rising: 0, falling: 0, flat: 0, reversals: 0, meanAbsDelta: 0, smoothness: 0, direction: "flat", net_change_ratio: 0, cyclic_score: 0 };
   const deltas = values.slice(1).map((value, index) => value - values[index]);
   const nonZero = deltas.filter((delta) => delta !== 0);
   const signs = nonZero.map((delta) => Math.sign(delta));
@@ -144,8 +144,12 @@ const trendStats = (values: number[]) => {
   const falling = deltas.filter((delta) => delta < 0).length / deltas.length;
   const flat = deltas.filter((delta) => delta === 0).length / deltas.length;
   const smoothSteps = deltas.filter((delta) => Math.abs(delta) > 0 && Math.abs(delta) <= Math.max(4, range * 0.22)).length / deltas.length;
-  const direction = rising > 0.55 ? "rising" : falling > 0.55 ? "falling" : reversals >= 2 ? "oscillating" : flat > 0.75 ? "flat" : "mixed";
-  return { range, unique: new Set(values).size, rising, falling, flat, reversals, meanAbsDelta, smoothness: smoothSteps, direction };
+  const unique = new Set(values).size;
+  const netChangeRatio = range ? Math.abs(values[values.length - 1] - values[0]) / range : 0;
+  const largeWraps = range ? deltas.filter((delta) => Math.abs(delta) > range * 0.45).length / deltas.length : 0;
+  const cyclicScore = Math.min(1, (unique <= 48 ? 0.28 : 0) + (netChangeRatio < 0.18 ? 0.26 : 0) + Math.min(0.26, largeWraps * 1.2) + Math.min(0.2, reversals / Math.max(unique * 2, 1)));
+  const direction = cyclicScore >= 0.52 ? "cyclic" : rising > 0.55 ? "rising" : falling > 0.55 ? "falling" : reversals >= 2 ? "oscillating" : flat > 0.75 ? "flat" : "mixed";
+  return { range, unique, rising, falling, flat, reversals, meanAbsDelta, smoothness: smoothSteps, direction, net_change_ratio: Number(netChangeRatio.toFixed(3)), cyclic_score: Number(cyclicScore.toFixed(3)) };
 };
 
 const pearson = (left: number[], right: number[]) => {
