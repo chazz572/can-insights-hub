@@ -57,7 +57,7 @@ const Fleet = () => {
           { id: "demo-3", vehicle_name: "Prototype ECU", health_score: 88, status: "monitoring" },
         ]).map((vehicle) => (
           <Card key={String(vehicle.id)} className="animate-fade-up overflow-hidden">
-            <CardHeader><CardTitle className="flex items-center justify-between gap-3"><span className="truncate">{String(vehicle.vehicle_name)}</span><Gauge className="text-primary" /></CardTitle></CardHeader>
+            <CardHeader><CardTitle className="flex items-center justify-between gap-3"><span className="break-words">{String(vehicle.vehicle_name)}</span><Gauge className="shrink-0 text-primary" /></CardTitle></CardHeader>
             <CardContent>
               <p className="text-4xl font-extrabold text-primary">{String(vehicle.health_score ?? 100)}/100</p>
               <p className="mt-2 text-sm uppercase text-muted-foreground">{String(vehicle.status ?? "monitoring").replace(/_/g, " ")}</p>
