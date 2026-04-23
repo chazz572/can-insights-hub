@@ -21,7 +21,7 @@ const Home = () => (
           </div>
           <h1 className="max-w-4xl text-5xl font-extrabold leading-tight text-foreground sm:text-6xl lg:text-7xl">CAN Intelligence Workstation</h1>
           <p className="mt-6 max-w-2xl text-lg leading-8 text-muted-foreground">
-            Upload CSV, candump, ASC, BLF, MF4, CRTD, J1939, or TXT logs and turn raw CAN traffic into structured anomaly reports, signal candidates, and vehicle behavior insights.
+            Upload CSV, candump, ASC, BLF, MF4, CRTD, DBC, J1939, or TXT logs and turn raw CAN traffic into structured anomaly reports, signal candidates, and vehicle behavior insights.
           </p>
           <div className="mt-8 flex flex-col gap-3 sm:flex-row">
             <Button asChild variant="analyzer" size="lg">
