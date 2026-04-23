@@ -158,15 +158,18 @@ const pearson = (left: number[], right: number[]) => {
   return denominator ? Number((numerator / denominator).toFixed(4)) : 0;
 };
 
-const classifySignal = (signal: JsonRecord) => {
+const classifySignal = (signal: JsonRecord, metadata = "") => {
   const byteStart = Number(signal.byte_start ?? 0);
   const maxValue = Number(signal.max_value ?? 0);
   const range = Number(signal.range ?? 0);
   const direction = String(signal.direction ?? "mixed");
-  if (String(signal.likely_signal_type).includes("rpm") || (maxValue > 900 && maxValue < 9000 && byteStart <= 3)) return "rpm_candidate";
-  if (range > 30 && range < 3500 && maxValue < 5000 && byteStart <= 4 && ["rising", "falling", "oscillating"].includes(direction)) return "speed_or_wheel_speed_candidate";
-  if (range > 8 && range <= 255 && maxValue <= 255) return "pedal_brake_or_steering_candidate";
+  const text = metadata.toLowerCase();
+  if (/engine[^a-z0-9]*rpm|crankshaft|camshaft/.test(text)) return "engine_rpm_candidate";
+  if (/motor[^a-z0-9]*rpm|inverter[^a-z0-9]*rpm|drive[^a-z0-9]*rpm/.test(text)) return "motor_rpm_candidate";
+  if (/(wheel[^a-z0-9]*speed|vehicle[^a-z0-9]*speed|road[^a-z0-9]*speed)/.test(text)) return "speed_or_wheel_speed_candidate";
+  if (/(accelerator|pedal|brake[^a-z0-9]*(pressure|position)|steering[^a-z0-9]*(angle|torque))/.test(text)) return "pedal_brake_or_steering_candidate";
   if (range <= 16 && Number(signal.unique_values ?? 0) <= 16) return "gear_flag_or_counter_candidate";
+  if (!text && range > 8 && maxValue <= 255 && ["rising", "falling"].includes(direction)) return "compact_changing_byte_candidate";
   return "analog_sensor_candidate";
 };
 
