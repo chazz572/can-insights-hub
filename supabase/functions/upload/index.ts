@@ -11,7 +11,7 @@ type ConversionResult = { format: CanFormat; csv: string; frameCount: number; wa
 
 const jsonResponse = (body: unknown, status = 200) =>
   new Response(JSON.stringify(body), {
-    status: 200,
+    status,
     headers: { ...corsHeaders, "Content-Type": "application/json" },
   });
 
