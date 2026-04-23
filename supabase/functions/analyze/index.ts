@@ -180,7 +180,7 @@ const runAnalysis = (csv: string) => {
   forEachCsvRecord(csv, ({ id, data, timestamp }) => {
     totalMessages += 1;
     idCounts.set(id, (idCounts.get(id) ?? 0) + 1);
-    const profile = idProfiles.get(id) ?? { count: 0, lengths: new Map<number, number>(), timestamps: [], byteCounts: Array.from({ length: 8 }, () => new Map<number, number>()), previousData: null, changes: 0 };
+    const profile = idProfiles.get(id) ?? { count: 0, lengths: new Map<number, number>(), timestamps: [], byteCounts: Array.from({ length: 8 }, () => new Map<number, number>()), byteSeries: Array.from({ length: 8 }, () => []), previousData: null, changes: 0, cleanSamples: [] };
     profile.count += 1;
     profile.lengths.set(data.length, (profile.lengths.get(data.length) ?? 0) + 1);
     if (Number.isFinite(timestamp)) profile.timestamps.push(timestamp);
@@ -203,7 +203,9 @@ const runAnalysis = (csv: string) => {
 
     bytes.forEach((byte, byteIndex) => {
       profile.byteCounts[byteIndex].set(byte, (profile.byteCounts[byteIndex].get(byte) ?? 0) + 1);
+      if (profile.byteSeries[byteIndex].length < 400) profile.byteSeries[byteIndex].push(byte);
     });
+    if (profile.cleanSamples.length < 400) profile.cleanSamples.push(cleanHex(data));
 
     for (let byteIndex = 0; byteIndex < bytes.length; byteIndex += 1) {
       const byte = bytes[byteIndex];
