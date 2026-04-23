@@ -133,7 +133,7 @@ const analogCandidateScore = (values: number[]) => {
 };
 
 const trendStats = (values: number[]) => {
-  if (values.length < 3) return { range: 0, unique: new Set(values).size, rising: 0, falling: 0, flat: 0, reversals: 0, meanAbsDelta: 0, smoothness: 0, direction: "flat" };
+  if (values.length < 3) return { range: 0, unique: new Set(values).size, rising: 0, falling: 0, flat: 0, reversals: 0, meanAbsDelta: 0, smoothness: 0, direction: "flat", net_change_ratio: 0, cyclic_score: 0 };
   const deltas = values.slice(1).map((value, index) => value - values[index]);
   const nonZero = deltas.filter((delta) => delta !== 0);
   const signs = nonZero.map((delta) => Math.sign(delta));
@@ -144,8 +144,12 @@ const trendStats = (values: number[]) => {
   const falling = deltas.filter((delta) => delta < 0).length / deltas.length;
   const flat = deltas.filter((delta) => delta === 0).length / deltas.length;
   const smoothSteps = deltas.filter((delta) => Math.abs(delta) > 0 && Math.abs(delta) <= Math.max(4, range * 0.22)).length / deltas.length;
-  const direction = rising > 0.55 ? "rising" : falling > 0.55 ? "falling" : reversals >= 2 ? "oscillating" : flat > 0.75 ? "flat" : "mixed";
-  return { range, unique: new Set(values).size, rising, falling, flat, reversals, meanAbsDelta, smoothness: smoothSteps, direction };
+  const unique = new Set(values).size;
+  const netChangeRatio = range ? Math.abs(values[values.length - 1] - values[0]) / range : 0;
+  const largeWraps = range ? deltas.filter((delta) => Math.abs(delta) > range * 0.45).length / deltas.length : 0;
+  const cyclicScore = Math.min(1, (unique <= 48 ? 0.28 : 0) + (netChangeRatio < 0.18 ? 0.26 : 0) + Math.min(0.26, largeWraps * 1.2) + Math.min(0.2, reversals / Math.max(unique * 2, 1)));
+  const direction = cyclicScore >= 0.52 ? "cyclic" : rising > 0.55 ? "rising" : falling > 0.55 ? "falling" : reversals >= 2 ? "oscillating" : flat > 0.75 ? "flat" : "mixed";
+  return { range, unique, rising, falling, flat, reversals, meanAbsDelta, smoothness: smoothSteps, direction, net_change_ratio: Number(netChangeRatio.toFixed(3)), cyclic_score: Number(cyclicScore.toFixed(3)) };
 };
 
 const pearson = (left: number[], right: number[]) => {
@@ -165,18 +169,58 @@ const classifySignal = (signal: JsonRecord, metadata = "") => {
   const maxValue = Number(signal.max_value ?? 0);
   const range = Number(signal.range ?? 0);
   const direction = String(signal.direction ?? "mixed");
+  const unique = Number(signal.unique_values ?? 0);
+  const cyclicScore = Number(signal.cyclic_score ?? 0);
   const text = metadata.toLowerCase();
   if (/engine[^a-z0-9]*rpm|crankshaft|camshaft/.test(text)) return "engine_rpm_candidate";
   if (/motor[^a-z0-9]*rpm|inverter[^a-z0-9]*rpm|drive[^a-z0-9]*rpm/.test(text)) return "motor_rpm_candidate";
   if (/(wheel[^a-z0-9]*speed|vehicle[^a-z0-9]*speed|road[^a-z0-9]*speed)/.test(text)) return "speed_or_wheel_speed_candidate";
   if (/(accelerator|pedal|brake[^a-z0-9]*(pressure|position)|steering[^a-z0-9]*(angle|torque))/.test(text)) return "pedal_brake_or_steering_candidate";
+  if (cyclicScore >= 0.52 || (unique <= 24 && range > 12 && ["cyclic", "oscillating"].includes(direction))) return "rolling_counter_or_repeating_state_candidate";
   if (range <= 16 && Number(signal.unique_values ?? 0) <= 16) return "gear_flag_or_counter_candidate";
   if (!text && range > 8 && maxValue <= 255 && ["rising", "falling"].includes(direction)) return "compact_input_or_state_candidate";
   if (!text && range >= 250 && ["rising", "falling", "oscillating"].includes(direction)) return "load_or_motion_candidate_unvalidated";
   return "analog_sensor_candidate";
 };
 
-const describeSignalEvidence = (signal: JsonRecord) => `ID ${signal.id} bytes ${signal.byte_start}-${Number(signal.byte_start ?? 0) + 1} ${signal.endianness} ranged ${signal.min_value}-${signal.max_value}, changed ${signal.unique_values} unique values, trended ${signal.direction}, and had ${Number(signal.smoothness ?? 0).toFixed(2)} smooth-step behavior.`;
+const describeSignalEvidence = (signal: JsonRecord) => `ID ${signal.id} bytes ${signal.byte_start}-${Number(signal.byte_start ?? 0) + 1} ${signal.endianness} ranged ${signal.min_value}-${signal.max_value}, changed ${signal.unique_values} unique values, trended ${signal.direction}, net-change ratio ${Number(signal.net_change_ratio ?? 0).toFixed(2)}, cyclic score ${Number(signal.cyclic_score ?? 0).toFixed(2)}, and had ${Number(signal.smoothness ?? 0).toFixed(2)} smooth-step behavior.`;
+
+const behaviorPatternFromLog = ({ totalMessages, idStats, timing, idDeepDive, analogSignals }: { totalMessages: number; idStats: JsonRecord[]; timing: JsonRecord[]; idDeepDive: JsonRecord[]; analogSignals: JsonRecord[] }) => {
+  const duration = Math.max(...idDeepDive.map((item) => Number(item.average_period ?? 0) * Number(item.messages ?? 0)).filter(Number.isFinite), 0);
+  const periodicFastIds = timing.filter((item) => Number(item.average_period ?? 0) > 0 && Number(item.average_period ?? 0) <= 0.025 && Number(item.period_jitter ?? 1) <= Math.max(Number(item.average_period ?? 0) * 0.18, 0.003));
+  const staticIds = idDeepDive.filter((item) => Number(item.payload_change_rate ?? 0) <= 0.05 && Number(item.messages ?? 0) > 50);
+  const dynamicIds = idDeepDive.filter((item) => Number(item.payload_change_rate ?? 0) > 0.35 && Number(item.messages ?? 0) > 50);
+  const cyclicSignals = analogSignals.filter((signal) => /rolling_counter|gear_flag_or_counter/i.test(String(signal.likely_signal_type)) || Number(signal.cyclic_score ?? 0) >= 0.52);
+  const directionalSignals = analogSignals.filter((signal) => /load_or_motion|analog_sensor|compact_input/i.test(String(signal.likely_signal_type)) && !/rolling_counter/i.test(String(signal.likely_signal_type)) && ["rising", "falling", "oscillating"].includes(String(signal.direction)));
+  const dominant = idStats.slice(0, 5).map((item) => `${item.id} (${item.count})`).join(", ");
+  const hasMostlyPeriodicNetwork = periodicFastIds.length >= 4 && totalMessages > 500;
+  const hasCounterDominatedTraffic = cyclicSignals.length >= Math.max(4, directionalSignals.length);
+
+  if (hasMostlyPeriodicNetwork && hasCounterDominatedTraffic && directionalSignals.length <= 3) {
+    return {
+      label: "vehicle/key-on network awake with repeating counters; no driving maneuver proven",
+      confidence: 0.72,
+      evidence: `The capture is dominated by stable 10–25 ms periodic IDs (${dominant}), many byte pairs repeat as counters/state cycles, and no decoded speed, wheel, brake, pedal, steering, gear, torque, engine-RPM, or motor-RPM signal is present.`,
+      advice: "Treat this as an ignition-on or module-awake baseline unless you provide a DBC or controlled captures showing known actions.",
+    };
+  }
+
+  if (hasMostlyPeriodicNetwork && dynamicIds.length > staticIds.length) {
+    return {
+      label: "active module traffic with changing sensor/status bytes; physical vehicle action unknown",
+      confidence: 0.6,
+      evidence: `The bus is alive for roughly ${duration.toFixed(1)}s with ${dynamicIds.length} dynamic IDs and ${staticIds.length} static/status IDs, but the dynamic bytes are not tied to physical units.`,
+      advice: "Use this for reverse engineering and baseline comparison, not a mechanic-style driving conclusion yet.",
+    };
+  }
+
+  return {
+    label: "periodic CAN traffic captured; operating state unresolved",
+    confidence: 0.42,
+    evidence: `The file contains ${totalMessages} frames and ${idStats.length} active IDs, but the available signals do not prove motion, idle, braking, acceleration, charging, or fault state.`,
+    advice: "Add DBC decoding or controlled action labels to turn byte movement into car behavior.",
+  };
+};
 
 const metadataTokens = (value: string) => value.toLowerCase().split(/[^a-z0-9]+/).filter(Boolean);
 const containsAny = (text: string, terms: string[]) => terms.some((term) => text.includes(term));
@@ -526,6 +570,8 @@ const runAnalysis = (csv: string) => {
         reversals: trend.reversals,
         mean_abs_delta: Number(trend.meanAbsDelta.toFixed(3)),
         smoothness: Number(trend.smoothness.toFixed(3)),
+        net_change_ratio: trend.net_change_ratio,
+        cyclic_score: trend.cyclic_score,
         confidence_score: Number(Math.min(0.96, score).toFixed(3)),
         likely_signal_type: byte_start <= 2 && Math.max(...values) > 900 && Math.max(...values) < 9000 ? "rpm_candidate" : "analog_signal_candidate",
         reasoning: "Smooth changing 16-bit byte pair with enough range, transitions, and directional structure to resemble a live vehicle signal.",
@@ -564,6 +610,7 @@ const runAnalysis = (csv: string) => {
   const pedalBrakeSteeringSignals = analogSignals.filter((signal) => /pedal|brake|steering/i.test(String(signal.likely_signal_type))).slice(0, 8);
   const loadSignals = analogSignals.filter((signal) => /(analog_sensor|load_or_motion)/i.test(String(signal.likely_signal_type)) && Number(signal.range ?? 0) > 500).slice(0, 8);
   const unvalidatedBehaviorSignals = analogSignals.filter((signal) => /load_or_motion|compact_input_or_state/i.test(String(signal.likely_signal_type))).slice(0, 8);
+  const baselinePattern = behaviorPatternFromLog({ totalMessages, idStats, timing, idDeepDive, analogSignals });
   const metadataEvConfidence = Number(metadataInsights.ev_confidence_score ?? 0);
   const risingMotion = speedSignals.some((signal) => signal.direction === "rising") || pedalBrakeSteeringSignals.some((signal) => signal.direction === "rising");
   const fallingMotion = speedSignals.some((signal) => signal.direction === "falling") || pedalBrakeSteeringSignals.some((signal) => signal.direction === "falling");
@@ -572,7 +619,7 @@ const runAnalysis = (csv: string) => {
   const hasDefensibleMotion = speedSignals.length > 0 || pedalBrakeSteeringSignals.length > 0;
   const hasBehaviorCandidateEvidence = hasDefensibleMotion || unvalidatedBehaviorSignals.length > 0 || loadSignals.length > 0;
   const behaviorLabel = !hasBehaviorCandidateEvidence
-    ? "awake periodic CAN traffic with no defensible vehicle-motion conclusion"
+    ? baselinePattern.label
     : risingMotion && !fallingMotion
     ? "accelerating or increasing load"
     : fallingMotion && !risingMotion
@@ -581,12 +628,14 @@ const runAnalysis = (csv: string) => {
         ? "transient driving with acceleration and deceleration phases"
         : oscillatingMotion
           ? "turning, pedal modulation, or low-speed maneuvering"
-            : unvalidatedBehaviorSignals.some((signal) => signal.direction === "rising")
+            : baselinePattern.confidence >= 0.7
+              ? baselinePattern.label
+              : unvalidatedBehaviorSignals.some((signal) => signal.direction === "rising")
               ? "acceleration/load increase candidate from undecoded dynamic bytes"
               : unvalidatedBehaviorSignals.some((signal) => signal.direction === "falling")
                 ? "deceleration/load decrease candidate from undecoded dynamic bytes"
                 : "dynamic operating-state candidate from undecoded bytes";
-  const behaviorConfidence = isDbcReference ? 0 : hasDefensibleMotion ? Math.min(0.86, 0.42 + speedSignals.length * 0.12 + pedalBrakeSteeringSignals.length * 0.08) : hasBehaviorCandidateEvidence ? 0.58 : 0.22;
+  const behaviorConfidence = isDbcReference ? 0 : hasDefensibleMotion ? Math.min(0.86, 0.42 + speedSignals.length * 0.12 + pedalBrakeSteeringSignals.length * 0.08) : hasBehaviorCandidateEvidence && baselinePattern.confidence < 0.7 ? 0.58 : baselinePattern.confidence;
   const behavioralEvidence = [...speedSignals, ...rpmSignals, ...pedalBrakeSteeringSignals, ...loadSignals, ...unvalidatedBehaviorSignals].slice(0, 12).map(describeSignalEvidence);
   const subtleAbnormalities = [
     ...timing.filter((item) => Number(item.period_jitter) > Math.max(Number(item.average_period) * 0.2, 0.003)).map((item) => ({ id: item.id, type: "timing_jitter_or_drift", severity: Number(item.period_jitter) > Math.max(Number(item.average_period) * 0.75, 0.02) ? "moderate" : "minor", evidence: `Average period ${item.average_period}s with jitter ${item.period_jitter}s; max gap ${item.max_period}s.` })),
@@ -624,7 +673,7 @@ const runAnalysis = (csv: string) => {
     pedal_activity_confidence: pedalBrakeSteeringSignals.length ? "supported_by_compact_input_like_bytes" : "not_isolated",
     harsh_event_candidates: anomalies.slice(0, 12),
     evidence: behavioralEvidence.length ? behavioralEvidence : ["No byte pair showed the rising/falling motion shape required to defend speed, pedal, brake, steering, or wheel-speed claims."],
-    interpretation: isDbcReference ? "This upload is a DBC definition file, so the defensible conclusion is limited to message definitions, signal names, and likely ECU groups. It must not be treated as live traffic or used by itself to classify vehicle type." : hasDefensibleMotion ? `${behaviorLabel}. This conclusion is based on decoded/metadata-supported motion or driver-input candidates plus byte-level trend direction, smoothness, entropy, timing cadence, and cross-ID relationships.` : hasBehaviorCandidateEvidence ? `${behaviorLabel}. This is a behavioral candidate, not a decoded physical signal claim: the IDs show directional byte movement and stable periodic timing, but no DBC/metadata validates the physical meaning.` : "The log has periodic traffic, but no decoded or metadata-supported speed, wheel-speed, pedal, brake, steering, gear, torque, engine-RPM, or motor-RPM signal was isolated. Motion, acceleration, idle, and vehicle type should remain unclassified.",
+    interpretation: isDbcReference ? "This upload is a DBC definition file, so the defensible conclusion is limited to message definitions, signal names, and likely ECU groups. It must not be treated as live traffic or used by itself to classify vehicle type." : hasDefensibleMotion ? `${behaviorLabel}. This conclusion is based on decoded/metadata-supported motion or driver-input candidates plus byte-level trend direction, smoothness, entropy, timing cadence, and cross-ID relationships.` : baselinePattern.confidence >= 0.7 ? `${baselinePattern.label}. ${baselinePattern.evidence} ${baselinePattern.advice}` : hasBehaviorCandidateEvidence ? `${behaviorLabel}. This is a behavioral candidate, not a decoded physical signal claim: the IDs show directional byte movement and stable periodic timing, but no DBC/metadata validates the physical meaning.` : `${baselinePattern.label}. ${baselinePattern.evidence} ${baselinePattern.advice}`,
   };
 
   const eventTimeline = anomalies.slice(0, 24).map((item, index) => ({
@@ -690,15 +739,15 @@ const runAnalysis = (csv: string) => {
   const enhancedNetworkHealth = { ...networkHealth, bus_health_score: Math.max(0, Math.min(100, 100 - anomalies.length * 4 - Math.round(Number(networkHealth.timing_irregularity_score) * 120))), chatter_classification: idStats.some((item) => item.percentage > 35) ? "dominant_id_chatter" : totalMessages / Math.max(idCounts.size, 1) > 60 ? "busy_periodic_chatter" : "normal_idle_chatter", dropout_events: timing.filter((item) => Number(item.max_period) > Math.max(Number(item.average_period) * 3, 0.1)).map((item) => ({ id: item.id, max_period: item.max_period, average_period: item.average_period, classification: "possible_gap_or_dropout" })).slice(0, 16) };
   const derivedEvents = enhancedNetworkHealth.dropout_events.map((item, index) => ({ event_index: eventTimeline.length + index + 1, id: item.id, timestamp: null, event_type: "possible_module_dropout", description: `Timing gap detected: max period ${item.max_period}s vs average ${item.average_period}s.`, before_after_hint: "Compare nearby frames to confirm wake/sleep or missing traffic." }));
   const whatDataShows = [
-    pipeline === "dbc" ? "DBC Summary: this file contains message and signal definitions only. No behavior, motion, health state, or vehicle type can be inferred from a DBC alone." : pipeline === "log_dbc" ? `Decoded LOG + DBC Summary: ${decodedSignals.length} decoded signal candidates were matched against DBC metadata; strongest state is ${behaviorLabel} at ${Math.round(behaviorConfidence * 100)}% confidence when decoded/named evidence supports it.` : hasDefensibleMotion ? `Vehicle State Summary: strongest defensible state is ${behaviorLabel} at ${Math.round(behaviorConfidence * 100)}% confidence.` : hasBehaviorCandidateEvidence ? `Vehicle State Summary: ${behaviorLabel} at ${Math.round(behaviorConfidence * 100)}% candidate confidence. This is based on byte dynamics, not decoded physical units.` : "Vehicle State Summary: motion cannot be determined from this log because no validated speed, wheel-speed, pedal, brake, steering, gear, torque, engine-RPM, or motor-RPM signal was isolated.",
+    pipeline === "dbc" ? "DBC Summary: this file contains message and signal definitions only. No behavior, motion, health state, or vehicle type can be inferred from a DBC alone." : pipeline === "log_dbc" ? `Decoded LOG + DBC Summary: ${decodedSignals.length} decoded signal candidates were matched against DBC metadata; strongest state is ${behaviorLabel} at ${Math.round(behaviorConfidence * 100)}% confidence when decoded/named evidence supports it.` : hasDefensibleMotion ? `Vehicle State Summary: strongest defensible state is ${behaviorLabel} at ${Math.round(behaviorConfidence * 100)}% confidence.` : baselinePattern.confidence >= 0.7 ? `Vehicle State Summary: ${baselinePattern.label} at ${Math.round(behaviorConfidence * 100)}% confidence. ${baselinePattern.evidence}` : hasBehaviorCandidateEvidence ? `Vehicle State Summary: ${behaviorLabel} at ${Math.round(behaviorConfidence * 100)}% candidate confidence. This is based on byte dynamics, not decoded physical units.` : "Vehicle State Summary: motion cannot be determined from this log because no validated speed, wheel-speed, pedal, brake, steering, gear, torque, engine-RPM, or motor-RPM signal was isolated.",
     `Vehicle type: ${vehicleType.classification} ${vehicleType.confidence_score ? `(${Math.round(vehicleType.confidence_score * 100)}% confidence)` : ""}. ${vehicleType.reasoning}`,
     metadataInsights.has_dbc_metadata ? `DBC/OEM evidence: ${metadataInsights.explanation} This metadata is used for structure and decoding support only, not vehicle-type classification by itself.` : "No DBC metadata was available; vehicle type remains unclassified unless explicit decoded EV, hybrid, or ICE signals are present.",
-    behavioralEvidence.length ? `Evidence: ${behavioralEvidence.slice(0, 6).join(" ")}${hasDefensibleMotion ? "" : " These remain unvalidated behavior candidates until decoded with a DBC or controlled captures."}` : "Evidence: no correlated directional speed, wheel, pedal, brake, steering, gear, torque, RPM, or sensor-like byte movement crossed threshold.",
+    baselinePattern.confidence >= 0.7 && !hasDefensibleMotion ? `Evidence: ${baselinePattern.evidence} Counter/state-like byte movement is not reported as acceleration unless a DBC or controlled capture validates it.` : behavioralEvidence.length ? `Evidence: ${behavioralEvidence.slice(0, 6).join(" ")}${hasDefensibleMotion ? "" : " These remain unvalidated behavior candidates until decoded with a DBC or controlled captures."}` : "Evidence: no correlated directional speed, wheel, pedal, brake, steering, gear, torque, RPM, or sensor-like byte movement crossed threshold.",
     `Protocol behavior: ${protocolInsights.likely_protocol}; extended-ID ratio ${(protocolInsights.extended_id_ratio * 100).toFixed(1)}%, diagnostic-shaped IDs ${protocolInsights.diagnostic_id_candidates.join(", ") || "not present"}.`,
     `Reverse Engineering Insights: ${analogSignals.slice(0, 8).map((signal) => `${signal.id}:${signal.likely_signal_type} bytes ${signal.byte_start}-${Number(signal.byte_start ?? 0) + 1}`).join("; ") || "no strong analog candidate crossed threshold"}.`,
     subtleAbnormalities.length ? `Anomalies & Health Indicators: ${subtleAbnormalities.slice(0, 6).map((item) => `${item.type} on ${item.id} (${item.evidence})`).join("; ")}.` : "Anomalies & Health Indicators: no threshold-level jitter, drift, sparse-ID, stuck-byte, or entropy-spike evidence was isolated.",
     ecuClusters.length ? `ECU clusters: ${ecuClusters.slice(0, 4).map((cluster) => `${cluster.cluster_id} (${cluster.ids.join(", ")})`).join("; ")}.` : "ECU clusters: grouping evidence was weak because timing cadence and payload structures did not form repeated multi-ID clusters.",
-    `What Cannot Be Determined: vehicle type remains unclassified without explicit EV/hybrid/ICE signals; physical meaning of undecoded dynamic bytes remains unconfirmed without DBC decoding or controlled validation captures.`,
+    `What Cannot Be Determined: vehicle type remains unclassified without explicit EV/hybrid/ICE signals; driving action remains unproven without decoded speed/pedal/brake/steering/RPM/torque signals, a matching DBC, or controlled validation captures.`,
   ];
   const detailedSummary = [
     "Vehicle State Summary",
@@ -771,6 +820,7 @@ const runAnalysis = (csv: string) => {
       module_type_heuristics: systems,
       vehicle_state: vehicleState,
       vehicle_type: vehicleType,
+      behavior_pattern: baselinePattern,
       missing_physical_signals: missingPhysicalSignals,
       infotainment_security_frames: systems.filter((item) => ["infotainment_or_cluster", "body_control_or_security"].includes(String(item.module_type))),
       correlation_analysis: {
