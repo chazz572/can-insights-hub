@@ -107,11 +107,11 @@ const parseCsv = (text: string, warnings: string[], format: CanFormat): Frame[] 
 const parseCandump = (text: string) => text.split(/\r?\n/).map((line, index) => {
   const trimmed = line.trim();
   const hash = trimmed.match(/^\(?([\d.]+)\)?\s+\S+\s+([0-9a-fA-F]+)#([0-9a-fA-F]*)/);
-  if (hash) return normalizeFrame(hash[1], hash[2], splitBytes(hash[3]), undefined, undefined, "auto");
+  if (hash) return normalizeFrame(hash[1], hash[2], splitBytes(hash[3]), undefined, undefined, "16");
   const bracket = trimmed.match(/^\(?([\d.]+)\)?\s+\S+\s+([0-9a-fA-F]+)\s+\[(\d+)\]\s+(.+)$/);
-  if (bracket) return normalizeFrame(bracket[1], bracket[2], bracket[4].split(/\s+/).filter(isByte), Number(bracket[3]), undefined, "auto");
+  if (bracket) return normalizeFrame(bracket[1], bracket[2], bracket[4].split(/\s+/).filter(isByte), Number(bracket[3]), undefined, "16");
   const noTimestamp = trimmed.match(/^\S+\s+([0-9a-fA-F]+)#([0-9a-fA-F]*)/);
-  return noTimestamp ? normalizeFrame(String(index), noTimestamp[1], splitBytes(noTimestamp[2]), undefined, undefined, "auto") : null;
+  return noTimestamp ? normalizeFrame(String(index), noTimestamp[1], splitBytes(noTimestamp[2]), undefined, undefined, "16") : null;
 }).filter((frame): frame is Frame => Boolean(frame));
 
 const parseCrtd = (text: string) => text.split(/\r?\n/).map((line, index) => {
