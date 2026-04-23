@@ -1,9 +1,11 @@
 import { useState } from "react";
-import { Binary, BrainCircuit, Cpu, DatabaseZap, GitBranch, Layers3, Radar, SlidersHorizontal, TerminalSquare } from "lucide-react";
+import { Binary, BrainCircuit, Cpu, DatabaseZap, Download, GitBranch, Layers3, Loader2, Radar, SlidersHorizontal, TerminalSquare } from "lucide-react";
 import { Link } from "react-router-dom";
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { analyzeFile } from "@/lib/canApi";
+import { buildPartialDbcDraft, generatePartialDbcCandidates, type DbcCandidateSignal } from "@/lib/intelligence";
 
 const tools = [
   ["Signal Extraction Wizard", "Guided candidate selection for byte/bit signals, scaling hypotheses, and validation notes.", Radar],
@@ -28,7 +30,42 @@ const Engineering = () => {
   const [developerMode, setDeveloperMode] = useState(true);
   const [sensitivity, setSensitivity] = useState(72);
   const [selectedProtocol, setSelectedProtocol] = useState(protocolRows[0][0]);
+  const [dbcSignals, setDbcSignals] = useState<DbcCandidateSignal[]>([]);
+  const [dbcDraft, setDbcDraft] = useState("");
+  const [dbcMessage, setDbcMessage] = useState<string | null>(null);
+  const [isGeneratingDbc, setIsGeneratingDbc] = useState(false);
   const ActiveToolIcon = activeTool[2];
+
+  const generateDbc = async () => {
+    const fileId = localStorage.getItem("can_ai_file_id");
+    if (!fileId) {
+      setDbcMessage("Upload and analyze a CAN log first, then return here to generate a partial DBC draft.");
+      return;
+    }
+    setIsGeneratingDbc(true);
+    setDbcMessage(null);
+    try {
+      const analysis = await analyzeFile(fileId);
+      const signals = generatePartialDbcCandidates(analysis);
+      setDbcSignals(signals);
+      setDbcDraft(buildPartialDbcDraft(signals));
+      setDbcMessage(`Generated ${signals.length} candidate signal definition${signals.length === 1 ? "" : "s"} from the current log.`);
+    } catch (error) {
+      setDbcMessage(error instanceof Error ? error.message : "Unable to generate partial DBC draft.");
+    } finally {
+      setIsGeneratingDbc(false);
+    }
+  };
+
+  const downloadDbcDraft = () => {
+    if (!dbcDraft) return;
+    const url = URL.createObjectURL(new Blob([dbcDraft], { type: "text/plain" }));
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = "partial-dbc-draft.txt";
+    link.click();
+    URL.revokeObjectURL(url);
+  };
 
   return (
   <main className="mx-auto min-h-screen max-w-7xl px-4 py-8 sm:px-6 lg:px-10">
@@ -81,6 +118,20 @@ const Engineering = () => {
           <thead className="border-b border-glass-border text-xs uppercase text-muted-foreground"><tr><th className="py-3">Protocol</th><th>Detection Signals</th><th>Status</th></tr></thead>
           <tbody>{protocolRows.map(([name, signals, status]) => <tr key={name} onClick={() => setSelectedProtocol(name)} className="cursor-pointer border-b border-glass-border/60 transition-colors hover:bg-secondary/60"><td className="py-4 font-bold text-foreground">{name}</td><td className="text-muted-foreground">{signals}</td><td><span className="rounded-lg bg-secondary px-3 py-1 text-xs font-semibold text-secondary-foreground">{selectedProtocol === name ? "Selected" : status}</span></td></tr>)}</tbody>
         </table>
+      </CardContent>
+    </Card>
+
+    <Card className="scanline-panel mt-6 animate-fade-up overflow-hidden">
+      <CardHeader><CardTitle className="flex items-center gap-2"><Layers3 className="text-primary" /> AI DBC Builder</CardTitle></CardHeader>
+      <CardContent className="grid gap-5">
+        <div className="flex flex-wrap gap-3">
+          <Button type="button" variant="analyzer" onClick={generateDbc} disabled={isGeneratingDbc}>{isGeneratingDbc ? <Loader2 className="animate-spin" /> : <BrainCircuit className="size-4" />} Generate Partial DBC</Button>
+          <Button asChild type="button" variant="outline"><Link to={localStorage.getItem("can_ai_file_id") ? `/results/${localStorage.getItem("can_ai_file_id")}` : "/upload"}>Run On Current Log</Link></Button>
+          <Button type="button" variant="outline" onClick={downloadDbcDraft} disabled={!dbcDraft}><Download className="size-4" /> Download Draft</Button>
+        </div>
+        {dbcMessage ? <div className="rounded-lg border border-glass-border bg-glass p-3 text-sm text-muted-foreground">{dbcMessage}</div> : null}
+        {dbcSignals.length ? <div className="overflow-x-auto rounded-lg border border-glass-border bg-glass"><table className="w-full min-w-[860px] text-left text-sm"><thead className="border-b border-glass-border text-xs uppercase text-muted-foreground"><tr><th className="p-3">ID</th><th>Signal</th><th>Start</th><th>Length</th><th>Endian</th><th>Factor</th><th>Unit</th><th>Type</th><th>Confidence</th></tr></thead><tbody>{dbcSignals.map((signal) => <tr key={`${signal.id}-${signal.name}`} className="border-b border-glass-border/60"><td className="p-3 font-mono text-primary">{signal.id}</td><td className="font-semibold text-foreground">{signal.name}</td><td>{signal.bitStart}</td><td>{signal.bitLength}</td><td>{signal.endianness}</td><td>{signal.factor}</td><td>{signal.unit}</td><td>{signal.type}</td><td><div className="h-2 w-24 rounded-full bg-secondary"><div className="h-full rounded-full bg-gradient-accent" style={{ width: `${signal.confidence}%` }} /></div><span className="font-mono text-xs text-primary">{signal.confidence}%</span></td></tr>)}</tbody></table></div> : null}
+        {dbcDraft ? <pre className="max-h-80 overflow-auto whitespace-pre-wrap rounded-lg border border-glass-border bg-background/40 p-4 text-sm text-foreground">{dbcDraft}</pre> : null}
       </CardContent>
     </Card>
   </main>
