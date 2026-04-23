@@ -695,15 +695,7 @@ const runAnalysis = (csv: string) => {
   const evEvidence = [hasExplicitEvMetadata || hasHvAnalogEvidence ? `explicit EV/HV signal naming or voltage-range evidence on IDs ${[...metadataById.entries()].filter(([, value]) => containsAny(value.toLowerCase(), explicitEvTerms)).map(([id]) => id).slice(0, 8).join(", ") || analogSignals.filter((signal) => Number(signal.max_value ?? 0) >= 200 && Number(signal.max_value ?? 0) <= 900).map((signal) => String(signal.id)).slice(0, 8).join(", ")}` : null, hasMotorRpmEvidence ? `motor/inverter RPM evidence on IDs ${rpmSignals.filter((signal) => /motor|inverter|drive/i.test(String(metadataById.get(String(signal.id)) ?? ""))).map((signal) => String(signal.id)).join(", ")}` : null].filter(Boolean);
   const iceEvidence = [hasExplicitIceMetadata || hasEngineRpmEvidence ? `explicit ICE signal naming on IDs ${[...metadataById.entries()].filter(([, value]) => containsAny(value.toLowerCase(), explicitIceTerms)).map(([id]) => id).slice(0, 8).join(", ") || rpmSignals.filter((signal) => /engine|rpm|crank/i.test(String(metadataById.get(String(signal.id)) ?? ""))).map((signal) => String(signal.id)).join(", ")}` : null].filter(Boolean);
   const hybridEvidence = [hasExplicitHybridMetadata ? `explicit hybrid signal naming on IDs ${[...metadataById.entries()].filter(([, value]) => containsAny(value.toLowerCase(), explicitHybridTerms)).map(([id]) => id).slice(0, 8).join(", ")}` : null, evEvidence.length && iceEvidence.length ? "both HV/motor evidence and engine/ICE evidence are present in live traffic" : null].filter(Boolean);
-  const vehicleType = isDbcReference
-    ? { classification: "Vehicle type cannot be determined from this log.", confidence_score: 0, evidence: [], reasoning: "This upload is a DBC signal definition file, not a vehicle log. Message and signal names can describe network structure, but they do not prove the vehicle type or operating state." }
-    : hybridEvidence.length
-      ? { classification: "hybrid", confidence_score: 0.86, evidence: hybridEvidence, reasoning: "Hybrid classification requires both engine-side and high-voltage/motor-side evidence, or explicit hybrid ECU naming in live decoded traffic." }
-      : evEvidence.length
-        ? { classification: "EV", confidence_score: 0.82, evidence: evEvidence, reasoning: "EV classification is based only on explicit high-voltage, pack/cell, inverter, motor, or drive-unit evidence; missing RPM or fuel signals are ignored." }
-        : iceEvidence.length
-          ? { classification: "ICE", confidence_score: 0.82, evidence: iceEvidence, reasoning: "ICE classification is based only on explicit engine RPM, fuel trim, oxygen sensor, intake manifold, crankshaft, or camshaft evidence; generic ID patterns are ignored." }
-          : { classification: "Vehicle type cannot be determined from this log.", confidence_score: 0, evidence: [], reasoning: "The log lacks explicit EV indicators such as HV pack voltage/current, cell data, inverter torque, or motor RPM, and lacks explicit ICE indicators such as engine RPM, fuel trims, O2 sensors, intake manifold pressure, crankshaft, or camshaft signals." };
+  const vehicleType = { classification: "Vehicle type is not inferred.", confidence_score: 0, evidence: [], reasoning: "CJL CAN Intelligence Platform reports CAN behavior and decoded signal evidence without guessing EV, ICE, hybrid, make, model, or vehicle type." };
 
   const driverBehavior = {
     behavior: isDbcReference ? "DBC definition map / not live driving traffic" : behaviorLabel,
@@ -723,12 +715,6 @@ const runAnalysis = (csv: string) => {
     description: item.reason,
     before_after_hint: "Compare this ID against nearby frames for timing or payload changes.",
   }));
-
-  const vehicleBehavior = {
-    possible_speed_ids: [...speedIds],
-    possible_rpm_ids: [...rpmIds],
-    possible_pedal_ids: [...pedalIds],
-  };
 
   const decodedSignals = pipeline === "log_dbc" ? dbcSignals.flatMap((dbcSignal) => {
     const messageId = normalizeCanId(String(dbcSignal.message_id));
