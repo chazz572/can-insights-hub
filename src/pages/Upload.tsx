@@ -154,7 +154,7 @@ const Upload = () => {
                     <div className="flex min-w-0 items-center gap-3">
                       {guessFormat(item).match(/BLF|MF4|MDF/) ? <FileArchive className="size-5 text-primary" /> : <FileCode2 className="size-5 text-primary" />}
                       <div className="min-w-0">
-                        <p className="truncate font-semibold text-foreground">{item.name}</p>
+                        <p className="break-words font-semibold text-foreground">{item.name}</p>
                         <p className="text-xs text-muted-foreground">{Math.max(1, Math.round(item.size / 1024))} KB · initial guess: {guessFormat(item)}</p>
                       </div>
                     </div>
