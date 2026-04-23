@@ -9,7 +9,7 @@ import { JsonTable } from "@/components/JsonTable";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Tooltip as UiTooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import { analyzeFile, AnalysisResult } from "@/lib/canApi";
+import { analyzeFile, AnalysisResult, type JsonRecord } from "@/lib/canApi";
 import { requestAiInsight, saveAnalysisSnapshot, type AiInsightKind } from "@/lib/saasApi";
 import { cn } from "@/lib/utils";
 
@@ -377,7 +377,7 @@ const Results = () => {
 
   const downloadReport = () => {
     if (!data) return;
-    const report = `CANAI Vehicle Health Report\n\nFile ID: ${fileId}\nTotal messages: ${data.total_messages ?? "—"}\nUnique IDs: ${data.unique_ids ?? "—"}\nAnomalies: ${anomalies.length}\nComponent health: ${componentHealth}/100\nCAN bus load: ${busLoad}%\n\nMechanic Summary:\n${renderText(diagnostics.mechanic_summary ?? summaryText)}`;
+    const report = buildDetailedReport({ data, fileId, anomalies, diagnostics, summaryText, componentHealth, busLoad, suspectIds });
     const url = URL.createObjectURL(new Blob([report], { type: "text/plain" }));
     const link = document.createElement("a");
     link.href = url;
