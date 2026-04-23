@@ -23,6 +23,19 @@ const cleanId = (value: string, base: 10 | 16 | "auto" = "auto") => {
   const parsed = Number.parseInt(cleaned, radix);
   return Number.isFinite(parsed) ? String(parsed) : "0";
 };
+const metadataValue = (metadata: string, key: string) => metadata.match(new RegExp(`${key}=([^;]+)`, "i"))?.[1] ?? "";
+const canIdAliases = (storedId: string, metadata = "") => {
+  const aliases = new Set<string>([cleanId(storedId, 10)]);
+  const raw = metadataValue(metadata, "raw_can_id") || storedId;
+  aliases.add(cleanId(raw, 10));
+  if (/^0x|[a-f]|[xh]$/i.test(raw)) aliases.add(cleanId(raw, 16));
+  if (/^\d+$/.test(raw)) aliases.add(cleanId(raw, 16));
+  [...aliases].forEach((id) => {
+    const numeric = Number(id);
+    if (Number.isFinite(numeric) && numeric > 0x1fffffff) aliases.add(String(numeric & 0x1fffffff));
+  });
+  return [...aliases].filter((id) => id !== "0");
+};
 const cleanByte = (value: string) => value.replace(/^0x/i, "").replace(/[^a-fA-F0-9]/g, "").slice(0, 2).padStart(2, "0").toUpperCase();
 const isId = (value: string) => /^[0-9a-fA-F]{1,8}[xh]?$/.test(value.replace(/^0x/i, ""));
 const isByte = (value: string) => /^(0x)?[0-9a-fA-F]{1,2}$/.test(value);
@@ -64,7 +77,8 @@ const normalizeFrame = (timestamp: string, id: string, bytes: string[], dlc?: nu
   const normalizedId = cleanId(id, idBase);
   const normalizedBytes = bytes.map(cleanByte).filter((byte) => /^[0-9A-F]{2}$/.test(byte)).slice(0, 8);
   if (!normalizedId || !normalizedBytes.length) return null;
-  return { timestamp: timestamp || "0", id: normalizedId, dlc: Math.min(Number.isFinite(Number(dlc)) ? Number(dlc) : normalizedBytes.length, 8), data: normalizedBytes, metadata };
+  const idMetadata = `raw_can_id=${id};normalized_can_id=${normalizedId};id_base=${idBase}`;
+  return { timestamp: timestamp || "0", id: normalizedId, dlc: Math.min(Number.isFinite(Number(dlc)) ? Number(dlc) : normalizedBytes.length, 8), data: normalizedBytes, metadata: [metadata, idMetadata].filter(Boolean).join(";") };
 };
 
 const detectFormat = (name: string, bytes: Uint8Array, text: string): CanFormat => {
@@ -231,8 +245,11 @@ const dbcMetadataById = (dbcCsv: string) => {
   const metadata = new Map<string, string>();
   dbcCsv.split(/\r?\n/).slice(1).forEach((line) => {
     const values = parseCsvLine(line);
-    const id = cleanId(values[1] ?? "");
-    if (id && values[4]) metadata.set(id, values[4].replace(/^"|"$/g, "").replace(/""/g, '"'));
+    const storedId = values[1] ?? "";
+    const rowMetadata = values[4]?.replace(/^"|"$/g, "").replace(/""/g, '"') ?? "";
+    canIdAliases(storedId, rowMetadata).forEach((id) => {
+      if (id && rowMetadata) metadata.set(id, rowMetadata);
+    });
   });
   return metadata;
 };
@@ -243,8 +260,8 @@ const mergeLogWithDbcMetadata = (logCsv: string, dbcCsv: string) => {
   return lines.map((line, index) => {
     if (index === 0 || !line.trim()) return line;
     const values = parseCsvLine(line);
-    const id = cleanId(values[1] ?? "");
-    const dbcMeta = metadata.get(id);
+    const existingMetadata = values[4]?.replace(/^"|"$/g, "").replace(/""/g, '"') ?? "";
+    const dbcMeta = canIdAliases(values[1] ?? "", existingMetadata).map((id) => metadata.get(id)).find(Boolean);
     values[4] = dbcMeta ? `source_file_type=log_with_dbc;${dbcMeta}` : "source_file_type=log_with_dbc;dbc_match=none";
     return [csvEscape(values[0] ?? ""), csvEscape(values[1] ?? ""), values[2] ?? 0, csvEscape(values[3] ?? ""), csvEscape(values[4])].join(",");
   }).join("\n");
