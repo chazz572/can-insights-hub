@@ -8,6 +8,7 @@ import Home from "./pages/Home.tsx";
 import Upload from "./pages/Upload.tsx";
 import Results from "./pages/Results.tsx";
 import Auth from "./pages/Auth.tsx";
+import BatchResults from "./pages/BatchResults.tsx";
 import Compare from "./pages/Compare.tsx";
 import Fleet from "./pages/Fleet.tsx";
 import Workspace from "./pages/Workspace.tsx";
@@ -29,6 +30,7 @@ const App = () => {
               <Route path="/auth" element={<Auth />} />
               <Route path="/workspace" element={<Workspace />} />
               <Route path="/upload" element={<Upload />} />
+              <Route path="/batch-results" element={<BatchResults />} />
               <Route path="/compare" element={<Compare />} />
               <Route path="/fleet" element={<Fleet />} />
               <Route path="/results/:file_id" element={<Results />} />
