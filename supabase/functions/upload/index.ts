@@ -5,7 +5,7 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
-type CanFormat = "CSV" | "J1939 CSV" | "candump" | "CRTD" | "ASC" | "BLF" | "MDF/MF4" | "CANedge" | "key/value" | "generic TXT";
+type CanFormat = "CSV" | "J1939 CSV" | "candump" | "CRTD" | "ASC" | "BLF" | "MDF/MF4" | "CANedge" | "DBC" | "key/value" | "generic TXT";
 type Frame = { timestamp: string; id: string; dlc: number; data: string[] };
 type ConversionResult = { format: CanFormat; csv: string; frameCount: number; warnings: string[] };
 
@@ -65,6 +65,7 @@ const detectFormat = (name: string, bytes: Uint8Array, text: string): CanFormat 
   const signature = new TextDecoder().decode(bytes.slice(0, 8));
   if (signature.startsWith("LOGG") || lower.endsWith(".blf")) return "BLF";
   if (signature.startsWith("MDF") || lower.endsWith(".mf4") || lower.endsWith(".mdf")) return "MDF/MF4";
+  if (lower.endsWith(".dbc") || /(^|\n)\s*BO_\s+\d+\s+\S+\s*:\s*\d+\s+\S+/m.test(text)) return "DBC";
   if (lower.endsWith(".asc") || /date\s+.*base\s+hex|internal events logged|begin triggerblock/i.test(firstLines)) return "ASC";
   if (lower.endsWith(".crtd") || /^\s*\d+(?:\.\d+)?\s+[0-9a-fA-F]{3,8}\s+\d\s+/m.test(text)) return "CRTD";
   if (/\(\d+\.\d+\)\s+\w+\s+[0-9a-fA-F]+#|\w+\s+[0-9a-fA-F]+\s+\[\d\]/m.test(text) || lower.endsWith(".log")) return "candump";
@@ -125,6 +126,36 @@ const parseAsc = (text: string) => text.split(/\r?\n/).map((line) => {
   return normalizeFrame(parts[0], parts[idIndex].replace(/x$/i, ""), parts.slice(dlcIndex + 1).filter(isByte), Number(parts[dlcIndex]));
 }).filter((frame): frame is Frame => Boolean(frame));
 
+const parseDbc = (text: string, warnings: string[]) => {
+  const signalCounts = new Map<string, number>();
+  let currentMessageId = "";
+
+  for (const line of text.split(/\r?\n/)) {
+    const message = line.match(/^\s*BO_\s+(\d+)\s+\S+\s*:\s*(\d+)\s+\S+/);
+    if (message) {
+      currentMessageId = Number(message[1]).toString(16).toUpperCase();
+      signalCounts.set(currentMessageId, 0);
+      continue;
+    }
+
+    if (currentMessageId && /^\s*SG_\s+\S+\s*:/.test(line)) {
+      signalCounts.set(currentMessageId, (signalCounts.get(currentMessageId) ?? 0) + 1);
+    }
+  }
+
+  const frames = text.split(/\r?\n/).map((line, index) => {
+    const message = line.match(/^\s*BO_\s+(\d+)\s+\S+\s*:\s*(\d+)\s+\S+/);
+    if (!message) return null;
+    const id = Number(message[1]).toString(16).toUpperCase();
+    const dlc = Math.max(1, Math.min(Number(message[2]) || 8, 8));
+    const signalCount = Math.min(signalCounts.get(id) ?? 0, 255).toString(16).padStart(2, "0");
+    return normalizeFrame(String(index), id, [signalCount, ...Array.from({ length: dlc - 1 }, () => "00")], dlc);
+  }).filter((frame): frame is Frame => Boolean(frame));
+
+  if (frames.length) warnings.push("DBC files contain message definitions, not live traffic. CANAI created one reference row per DBC message so the IDs and signal map can be reviewed.");
+  return frames;
+};
+
 const parseKeyValue = (text: string) => text.split(/\r?\n/).map((line, index) => {
   const get = (keys: string[]) => keys.map((key) => line.match(new RegExp(`${key}\\s*[:=]\\s*([0-9a-fA-Fx .:-]+)`, "i"))?.[1]?.trim()).find(Boolean);
   const id = get(["id", "can_id", "arbitration_id", "pgn"]);
@@ -156,6 +187,7 @@ const convertFile = async (file: File): Promise<ConversionResult> => {
     : format === "candump" ? parseCandump(text)
     : format === "CRTD" ? parseCrtd(text)
     : format === "ASC" ? parseAsc(text)
+    : format === "DBC" ? parseDbc(text, warnings)
     : format === "key/value" || format === "CANedge" ? [...parseKeyValue(text), ...parseGeneric(text)]
     : format === "BLF" || format === "MDF/MF4" ? parseBinaryBestEffort(bytes, format, warnings)
     : parseGeneric(text);
