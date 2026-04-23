@@ -76,6 +76,54 @@ const FrequencyChart = ({ data }: { data: unknown }) => {
   );
 };
 
+const ByteEntropyHeatmap = ({ data }: { data: unknown }) => {
+  const rows = toRecordArray(data).slice(0, 64);
+  if (!rows.length) return <JsonTable data={data} />;
+  return (
+    <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 xl:grid-cols-8">
+      {rows.map((row, index) => {
+        const entropy = Math.max(0, Math.min(1, numericValue(row, ["entropy", "score", "value", "variance"]) / 8 || numericValue(row, ["entropy", "score", "value", "variance"])));
+        return (
+          <div key={`${String(row.key ?? index)}-${index}`} className="rounded-lg border border-glass-border bg-glass p-3 shadow-glow backdrop-blur" style={{ opacity: 0.42 + entropy * 0.58 }}>
+            <p className="font-mono text-xs text-muted-foreground">{String(row.byte ?? row.key ?? `byte_${index}`)}</p>
+            <p className="mt-2 text-lg font-bold text-primary">{renderText(row.entropy ?? row.score ?? row.value ?? "—")}</p>
+          </div>
+        );
+      })}
+    </div>
+  );
+};
+
+const TimingLineChart = ({ data }: { data: unknown }) => {
+  const rows = toRecordArray(data).map((row, index) => ({ name: String(row.key ?? row.timestamp ?? index + 1), jitter: numericValue(row, ["jitter", "period_jitter", "period", "delta", "value"]) }));
+  if (!rows.length) return <JsonTable data={data} />;
+  return (
+    <div className="mb-4 h-56 rounded-lg border border-glass-border bg-glass p-4 backdrop-blur">
+      <ResponsiveContainer width="100%" height="100%">
+        <LineChart data={rows.slice(0, 48)}>
+          <CartesianGrid stroke="hsl(var(--glass-border))" vertical={false} />
+          <XAxis dataKey="name" stroke="hsl(var(--muted-foreground))" tick={{ fontSize: 11 }} />
+          <YAxis stroke="hsl(var(--muted-foreground))" tick={{ fontSize: 11 }} />
+          <Tooltip contentStyle={{ background: "hsl(var(--card))", border: "1px solid hsl(var(--glass-border))", borderRadius: "12px" }} />
+          <Line type="monotone" dataKey="jitter" stroke="hsl(var(--chart-cyan))" strokeWidth={3} dot={false} />
+        </LineChart>
+      </ResponsiveContainer>
+    </div>
+  );
+};
+
+const SystemsBadges = ({ data }: { data: unknown }) => {
+  const rows = toRecordArray(data);
+  if (!rows.length) return <JsonTable data={data} />;
+  return <div className="flex flex-wrap gap-2">{rows.map((row, index) => <span key={index} className="rounded-lg border border-glass-border bg-secondary px-3 py-2 text-sm font-semibold text-secondary-foreground shadow-glow">{renderText(row.category ?? row.key ?? row.system ?? row.value)}</span>)}</div>;
+};
+
+const MechanicSummary = ({ data }: { data: unknown }) => (
+  <div className="rounded-lg border border-primary/30 bg-gradient-subtle p-5 shadow-glow backdrop-blur">
+    <p className="whitespace-pre-wrap text-sm leading-7 text-foreground">{renderText(data)}</p>
+  </div>
+);
+
 const MiniChart = () => (
   <div className="flex h-24 items-end gap-2 rounded-lg border border-glass-border bg-glass p-4 backdrop-blur">
     {[42, 64, 38, 78, 52, 88, 68, 96, 58, 74].map((height, index) => (
