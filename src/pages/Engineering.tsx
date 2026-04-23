@@ -21,8 +21,10 @@ const protocolRows = [
   ["Tesla / EV", "High-rate inverter, regen, BMS-style signals", "Pattern"],
 ];
 
+type EngineeringTool = (typeof tools)[number];
+
 const Engineering = () => {
-  const [activeTool, setActiveTool] = useState(tools[0]);
+  const [activeTool, setActiveTool] = useState<EngineeringTool>(tools[0]);
   const [developerMode, setDeveloperMode] = useState(true);
   const [sensitivity, setSensitivity] = useState(72);
   const [selectedProtocol, setSelectedProtocol] = useState(protocolRows[0][0]);
