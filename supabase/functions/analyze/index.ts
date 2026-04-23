@@ -308,8 +308,8 @@ const summarizeMetadata = (metadataById: Map<string, string>, idCounts: Map<stri
 };
 
 const classifyModuleFromEvidence = ({ id, metadata, profile, timingRow }: { id: string; metadata: string; profile?: IdProfile; timingRow?: JsonRecord }) => {
-  const cleanIdValue = cleanHex(id);
-  const numeric = Number.parseInt(cleanIdValue, 16);
+  const numeric = Number(id);
+  const cleanIdValue = Number.isFinite(numeric) ? numeric.toString(16).toUpperCase() : cleanHex(id);
   const text = metadata.toLowerCase();
   const changeRate = profile ? profile.changes / Math.max(profile.count - 1, 1) : 0;
   const averagePeriod = Number(timingRow?.average_period ?? 0);
@@ -337,11 +337,11 @@ const classifyModuleFromEvidence = ({ id, metadata, profile, timingRow }: { id: 
   }
 
   if (/^7[0-9A-F]{2}$/i.test(cleanIdValue) || /^18DA/i.test(cleanIdValue)) {
-    return { category: "diagnostics_gateway", module_type: "uds_isotp_diagnostic_endpoint", confidence_score: 0.86, confidence: "protocol_shape", reasoning: `Identifier ${cleanIdValue} matches common UDS/ISO-TP diagnostic request/response ranges.` };
+    return { category: "diagnostics_gateway", module_type: "uds_isotp_diagnostic_endpoint", confidence_score: 0.86, confidence: "protocol_shape", reasoning: `Identifier ${id} (${cleanIdValue}h) matches common UDS/ISO-TP diagnostic request/response ranges.` };
   }
 
   if (cleanIdValue.length >= 8 && numeric >= 0x18F00000) {
-    return { category: "j1939_or_extended_network", module_type: "extended_pgn_periodic_status", confidence_score: 0.78, confidence: "extended_id_shape", reasoning: `Extended identifier ${cleanIdValue} has J1939/29-bit PGN-like shape; module role needs PGN decoding for certainty.` };
+    return { category: "j1939_or_extended_network", module_type: "extended_pgn_periodic_status", confidence_score: 0.78, confidence: "extended_id_shape", reasoning: `Extended identifier ${id} (${cleanIdValue}h) has J1939/29-bit PGN-like shape; module role needs PGN decoding for certainty.` };
   }
 
   const stableFast = averagePeriod > 0 && averagePeriod <= 0.025 && periodJitter <= Math.max(averagePeriod * 0.3, 0.003);
