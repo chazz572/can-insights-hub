@@ -48,7 +48,7 @@ const Fleet = () => {
         </CardContent>
       </Card>
       <div className="mb-6 grid gap-6 lg:grid-cols-3">
-        {[["Driver behavior", "Harsh braking, idle time, acceleration variance", Route], ["Maintenance prediction", "Health trend, mileage, recurring anomaly risk", Wrench], ["Fleet risk", "Critical vehicles and safety-orange alerts", AlertTriangle]].map(([title, detail, Icon]) => <Card key={String(title)} className="animate-fade-up"><CardContent className="p-5"><Icon className="mb-4 size-7 text-primary" /><p className="font-bold">{String(title)}</p><p className="mt-2 text-sm text-muted-foreground">{String(detail)}</p></CardContent></Card>)}
+        {[["Driver Behavior", "Harsh braking, idle time, acceleration variance", Route], ["Maintenance Prediction", "Health trend, mileage, recurring anomaly risk", Wrench], ["Fleet Risk", "Critical vehicles and safety-orange alerts", AlertTriangle]].map(([title, detail, Icon]) => <Card key={String(title)} className="animate-fade-up"><CardContent className="p-5"><Icon className="mb-4 size-7 text-primary" /><p className="font-bold">{String(title)}</p><p className="mt-2 text-sm text-muted-foreground">{String(detail)}</p></CardContent></Card>)}
       </div>
       <div className="grid gap-6 lg:grid-cols-3">
         {(vehicles.length ? vehicles : [
@@ -62,8 +62,8 @@ const Fleet = () => {
               <p className="text-4xl font-extrabold text-primary">{String(vehicle.health_score ?? 100)}/100</p>
               <p className="mt-2 text-sm uppercase text-muted-foreground">{String(vehicle.status ?? "monitoring").replace(/_/g, " ")}</p>
               <div className="mt-5 grid grid-cols-3 gap-3 text-sm">
-                <div className="rounded-lg border border-glass-border bg-glass p-3"><MapPinned className="mb-2 size-4 text-primary" /> Driver behavior</div>
-                <div className="rounded-lg border border-glass-border bg-glass p-3"><Wrench className="mb-2 size-4 text-primary" /> Service window</div><div className="rounded-lg border border-glass-border bg-glass p-3"><ShieldCheck className="mb-2 size-4 text-primary" /> Safety state</div>
+                <div className="rounded-lg border border-glass-border bg-glass p-3"><MapPinned className="mb-2 size-4 text-primary" /> Driver Behavior</div>
+                <div className="rounded-lg border border-glass-border bg-glass p-3"><Wrench className="mb-2 size-4 text-primary" /> Service Window</div><div className="rounded-lg border border-glass-border bg-glass p-3"><ShieldCheck className="mb-2 size-4 text-primary" /> Safety State</div>
               </div>
             </CardContent>
           </Card>

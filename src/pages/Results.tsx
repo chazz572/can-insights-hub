@@ -441,7 +441,7 @@ const Results = () => {
           </div>
 
           <div className="grid gap-6 lg:grid-cols-4">
-            <InsightCard title="Fault Prediction" value={anomalies.length ? "Watch" : "Low risk"} detail="Derived from anomaly density and ID activity." icon={ShieldCheck} />
+            <InsightCard title="Fault Prediction" value={anomalies.length ? "Watch" : "Low Risk"} detail="Derived from anomaly density and ID activity." icon={ShieldCheck} />
             <InsightCard title="Component Health" value={`${componentHealth}/100`} detail="Heuristic score from detected anomalies." icon={Gauge} score={componentHealth} />
             <InsightCard title="Suspect IDs" value={String(suspectIds)} detail="High-activity candidates for review." icon={Radar} />
             <InsightCard title="CAN Bus Load" value={`${busLoad}%`} detail="Estimated from message volume per identifier." icon={Zap} score={100 - busLoad} />
@@ -494,7 +494,7 @@ const Results = () => {
               ))}
             </div>
             <div className="mt-4 rounded-lg border border-glass-border bg-glass p-5 text-sm leading-7 text-foreground backdrop-blur">
-              <pre className="whitespace-pre-wrap font-sans">{aiInsight ?? "Choose An AI Mode To Generate Professional Diagnostic Guidance From This Analysis."}</pre>
+              <pre className="whitespace-pre-wrap font-sans">{aiInsight ?? "Choose an AI Mode to Generate Professional Diagnostic Guidance from This Analysis."}</pre>
             </div>
           </AnalysisCard>
 
