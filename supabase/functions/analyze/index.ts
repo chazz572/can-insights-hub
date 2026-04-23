@@ -158,15 +158,18 @@ const pearson = (left: number[], right: number[]) => {
   return denominator ? Number((numerator / denominator).toFixed(4)) : 0;
 };
 
-const classifySignal = (signal: JsonRecord) => {
+const classifySignal = (signal: JsonRecord, metadata = "") => {
   const byteStart = Number(signal.byte_start ?? 0);
   const maxValue = Number(signal.max_value ?? 0);
   const range = Number(signal.range ?? 0);
   const direction = String(signal.direction ?? "mixed");
-  if (String(signal.likely_signal_type).includes("rpm") || (maxValue > 900 && maxValue < 9000 && byteStart <= 3)) return "rpm_candidate";
-  if (range > 30 && range < 3500 && maxValue < 5000 && byteStart <= 4 && ["rising", "falling", "oscillating"].includes(direction)) return "speed_or_wheel_speed_candidate";
-  if (range > 8 && range <= 255 && maxValue <= 255) return "pedal_brake_or_steering_candidate";
+  const text = metadata.toLowerCase();
+  if (/engine[^a-z0-9]*rpm|crankshaft|camshaft/.test(text)) return "engine_rpm_candidate";
+  if (/motor[^a-z0-9]*rpm|inverter[^a-z0-9]*rpm|drive[^a-z0-9]*rpm/.test(text)) return "motor_rpm_candidate";
+  if (/(wheel[^a-z0-9]*speed|vehicle[^a-z0-9]*speed|road[^a-z0-9]*speed)/.test(text)) return "speed_or_wheel_speed_candidate";
+  if (/(accelerator|pedal|brake[^a-z0-9]*(pressure|position)|steering[^a-z0-9]*(angle|torque))/.test(text)) return "pedal_brake_or_steering_candidate";
   if (range <= 16 && Number(signal.unique_values ?? 0) <= 16) return "gear_flag_or_counter_candidate";
+  if (!text && range > 8 && maxValue <= 255 && ["rising", "falling"].includes(direction)) return "compact_changing_byte_candidate";
   return "analog_sensor_candidate";
 };
 
@@ -431,12 +434,12 @@ const runAnalysis = (csv: string) => {
   }) as JsonRecord[];
 
   analogSignals.forEach((signal) => {
-    signal.likely_signal_type = classifySignal(signal);
+    signal.likely_signal_type = classifySignal(signal, String(metadataById.get(String(signal.id)) ?? ""));
     signal.evidence = describeSignalEvidence(signal);
   });
 
   analogSignals.filter((signal) => String(signal.likely_signal_type).includes("speed") || String(signal.likely_signal_type).includes("wheel")).forEach((signal) => speedIds.add(String(signal.id)));
-  analogSignals.filter((signal) => signal.likely_signal_type === "rpm_candidate").forEach((signal) => rpmIds.add(String(signal.id)));
+  analogSignals.filter((signal) => /rpm_candidate/.test(String(signal.likely_signal_type))).forEach((signal) => rpmIds.add(String(signal.id)));
   analogSignals.filter((signal) => /pedal|brake|steering/i.test(String(signal.likely_signal_type))).forEach((signal) => pedalIds.add(String(signal.id)));
 
   const networkHealth = {
@@ -465,7 +468,10 @@ const runAnalysis = (csv: string) => {
   const fallingMotion = speedSignals.some((signal) => signal.direction === "falling") || pedalBrakeSteeringSignals.some((signal) => signal.direction === "falling");
   const oscillatingMotion = speedSignals.some((signal) => signal.direction === "oscillating") || pedalBrakeSteeringSignals.some((signal) => signal.direction === "oscillating");
   const engineActive = rpmSignals.length > 0 || loadSignals.length > 0;
-  const behaviorLabel = risingMotion && !fallingMotion
+  const hasDefensibleMotion = speedSignals.length > 0 || pedalBrakeSteeringSignals.length > 0;
+  const behaviorLabel = !hasDefensibleMotion
+    ? "awake periodic CAN traffic with no defensible vehicle-motion conclusion"
+    : risingMotion && !fallingMotion
     ? "accelerating or increasing load"
     : fallingMotion && !risingMotion
       ? "decelerating, braking, or load dropping"
@@ -473,10 +479,8 @@ const runAnalysis = (csv: string) => {
         ? "transient driving with acceleration and deceleration phases"
         : oscillatingMotion
           ? "turning, pedal modulation, or low-speed maneuvering"
-          : engineActive && !speedSignals.length
-            ? "stationary engine activity / idle under varying load"
-            : "stationary awake-module state with no defensible motion signal";
-  const behaviorConfidence = isDbcReference ? Math.max(0.82, metadataEvConfidence) : Math.min(0.94, 0.42 + speedSignals.length * 0.12 + rpmSignals.length * 0.1 + pedalBrakeSteeringSignals.length * 0.08 + (engineActive ? 0.08 : 0));
+            : "awake periodic CAN traffic with no defensible vehicle-motion conclusion";
+  const behaviorConfidence = isDbcReference ? 0 : !hasDefensibleMotion ? 0.22 : Math.min(0.86, 0.42 + speedSignals.length * 0.12 + pedalBrakeSteeringSignals.length * 0.08);
   const behavioralEvidence = [...speedSignals, ...rpmSignals, ...pedalBrakeSteeringSignals, ...loadSignals].slice(0, 12).map(describeSignalEvidence);
   const subtleAbnormalities = [
     ...timing.filter((item) => Number(item.period_jitter) > Math.max(Number(item.average_period) * 0.2, 0.003)).map((item) => ({ id: item.id, type: "timing_jitter_or_drift", severity: Number(item.period_jitter) > Math.max(Number(item.average_period) * 0.75, 0.02) ? "moderate" : "minor", evidence: `Average period ${item.average_period}s with jitter ${item.period_jitter}s; max gap ${item.max_period}s.` })),
@@ -514,7 +518,7 @@ const runAnalysis = (csv: string) => {
     pedal_activity_confidence: pedalBrakeSteeringSignals.length ? "supported_by_compact_input_like_bytes" : "not_isolated",
     harsh_event_candidates: anomalies.slice(0, 12),
     evidence: behavioralEvidence.length ? behavioralEvidence : ["No byte pair showed the rising/falling motion shape required to defend speed, pedal, brake, steering, or wheel-speed claims."],
-    interpretation: isDbcReference ? "This upload is a DBC definition file, so the defensible conclusion is limited to message definitions, signal names, and likely ECU groups. It must not be treated as live traffic or used by itself to classify vehicle type." : `${behaviorLabel}. This conclusion is based on byte-level trend direction, smoothness, entropy, timing cadence, and cross-ID relationships rather than message counts alone.`,
+    interpretation: isDbcReference ? "This upload is a DBC definition file, so the defensible conclusion is limited to message definitions, signal names, and likely ECU groups. It must not be treated as live traffic or used by itself to classify vehicle type." : hasDefensibleMotion ? `${behaviorLabel}. This conclusion is based on decoded/metadata-supported motion or driver-input candidates plus byte-level trend direction, smoothness, entropy, timing cadence, and cross-ID relationships.` : "The log has many dynamic bytes and stable 10–20 ms periodic traffic, but no decoded or metadata-supported speed, wheel-speed, pedal, brake, steering, gear, torque, engine-RPM, or motor-RPM signal was isolated. Motion, acceleration, idle, and vehicle type should remain unclassified.",
   };
 
   const eventTimeline = anomalies.slice(0, 24).map((item, index) => ({
@@ -566,7 +570,7 @@ const runAnalysis = (csv: string) => {
   const vehicleState = {
     classification: behaviorLabel.replace(/ /g, "_"),
     confidence_score: Number(behaviorConfidence.toFixed(3)),
-    reasoning: behavioralEvidence.length ? behavioralEvidence.join(" ") : "The log contains periodic CAN housekeeping traffic, but it lacks correlated, directional byte movement needed to defend motion or driver-input claims.",
+    reasoning: hasDefensibleMotion && behavioralEvidence.length ? behavioralEvidence.join(" ") : "The log contains periodic CAN traffic and changing bytes, but without decoded/metadata-supported physical signals those bytes cannot defensibly prove acceleration, speed, pedal, brake, steering, idle, or RPM.",
     evidence: behavioralEvidence,
   };
 
@@ -574,10 +578,10 @@ const runAnalysis = (csv: string) => {
   const enhancedNetworkHealth = { ...networkHealth, bus_health_score: Math.max(0, Math.min(100, 100 - anomalies.length * 4 - Math.round(Number(networkHealth.timing_irregularity_score) * 120))), chatter_classification: idStats.some((item) => item.percentage > 35) ? "dominant_id_chatter" : totalMessages / Math.max(idCounts.size, 1) > 60 ? "busy_periodic_chatter" : "normal_idle_chatter", dropout_events: timing.filter((item) => Number(item.max_period) > Math.max(Number(item.average_period) * 3, 0.1)).map((item) => ({ id: item.id, max_period: item.max_period, average_period: item.average_period, classification: "possible_gap_or_dropout" })).slice(0, 16) };
   const derivedEvents = enhancedNetworkHealth.dropout_events.map((item, index) => ({ event_index: eventTimeline.length + index + 1, id: item.id, timestamp: null, event_type: "possible_module_dropout", description: `Timing gap detected: max period ${item.max_period}s vs average ${item.average_period}s.`, before_after_hint: "Compare nearby frames to confirm wake/sleep or missing traffic." }));
   const whatDataShows = [
-    isDbcReference ? "This is a DBC definition map, not live CAN traffic. It defines message IDs, signal names, transmitters, and likely ECU groups, but it does not prove vehicle type or motion." : `The strongest defensible vehicle-state conclusion is ${behaviorLabel} at ${Math.round(behaviorConfidence * 100)}% confidence.`,
+    isDbcReference ? "This is a DBC definition map, not live CAN traffic. It defines message IDs, signal names, transmitters, and likely ECU groups, but it does not prove vehicle type or motion." : hasDefensibleMotion ? `The strongest defensible vehicle-state conclusion is ${behaviorLabel} at ${Math.round(behaviorConfidence * 100)}% confidence.` : "Vehicle motion cannot be determined from this log. It contains periodic traffic and changing bytes, but no validated speed, wheel-speed, pedal, brake, steering, gear, torque, engine-RPM, or motor-RPM signal was isolated.",
     `Vehicle type: ${vehicleType.classification} ${vehicleType.confidence_score ? `(${Math.round(vehicleType.confidence_score * 100)}% confidence)` : ""}. ${vehicleType.reasoning}`,
     metadataInsights.has_dbc_metadata ? `DBC/OEM evidence: ${metadataInsights.explanation} This metadata is used for structure and decoding support only, not vehicle-type classification by itself.` : "No DBC metadata was available; vehicle type remains unclassified unless explicit decoded EV, hybrid, or ICE signals are present.",
-    behavioralEvidence.length ? `Behavior evidence: ${behavioralEvidence.slice(0, 4).join(" ")}` : "Behavior evidence: no correlated directional speed, wheel, pedal, brake, steering, or gear-shaped byte movement was present, so motion claims are intentionally limited.",
+    hasDefensibleMotion && behavioralEvidence.length ? `Behavior evidence: ${behavioralEvidence.slice(0, 4).join(" ")}` : "Behavior evidence: dynamic byte pairs were found, but they are reported only as reverse-engineering candidates because the capture lacks decoded physical signals or metadata needed to label them as acceleration, RPM, pedal, brake, steering, or wheel speed.",
     `Protocol behavior: ${protocolInsights.likely_protocol}; extended-ID ratio ${(protocolInsights.extended_id_ratio * 100).toFixed(1)}%, diagnostic-shaped IDs ${protocolInsights.diagnostic_id_candidates.join(", ") || "not present"}.`,
     subtleAbnormalities.length ? `Subtle abnormalities found: ${subtleAbnormalities.slice(0, 5).map((item) => `${item.type} on ${item.id}`).join("; ")}.` : "Subtle abnormality checks did not isolate jitter, drift, sparse-ID, stuck-byte, or entropy-spike evidence above the current thresholds.",
     ecuClusters.length ? `Likely ECU groups: ${ecuClusters.slice(0, 4).map((cluster) => `${cluster.cluster_id} (${cluster.ids.join(", ")})`).join("; ")}.` : "ECU grouping evidence was weak because timing cadence and payload structures did not form repeated multi-ID clusters.",
@@ -587,7 +591,7 @@ const runAnalysis = (csv: string) => {
     ...whatDataShows.map((item) => `- ${item}`),
     "",
     "Interpretation",
-    `The capture is best described as ${behaviorLabel}. The engine/powertrain read is ${driverBehavior.engine_activity_confidence}, movement read is ${driverBehavior.movement_confidence}, and driver-input read is ${driverBehavior.pedal_activity_confidence}.`,
+    hasDefensibleMotion ? `The capture is best described as ${behaviorLabel}. The engine/powertrain read is ${driverBehavior.engine_activity_confidence}, movement read is ${driverBehavior.movement_confidence}, and driver-input read is ${driverBehavior.pedal_activity_confidence}.` : "The capture is best described as awake periodic CAN traffic. It is useful for reverse engineering, but it does not prove acceleration, idle, vehicle motion, EV/ICE/hybrid type, or driver input by itself.",
     `Reverse-engineering priorities are ${analogSignals.slice(0, 8).map((signal) => `${signal.id}:${signal.likely_signal_type}`).join(", ") || "limited because no strong analog signal candidates crossed threshold"}.`,
     `Health notes: ${subtleAbnormalities.length ? subtleAbnormalities.slice(0, 6).map((item) => `${item.severity} ${item.type} on ${item.id}`).join("; ") : "no threshold-level subtle abnormalities were isolated"}.`,
   ].join("\n");
@@ -616,7 +620,7 @@ const runAnalysis = (csv: string) => {
         byte_signal_candidates: byteAnalysis.filter((item) => Number(item.entropy ?? 0) > 0.5),
         active_bit_candidates: bitAnalysis.filter((item) => Number(item.activity ?? 0) > 0.05),
         analog_signal_candidates: analogSignals,
-        rpm_signal_candidates: analogSignals.filter((item) => item.likely_signal_type === "rpm_candidate"),
+        rpm_signal_candidates: analogSignals.filter((item) => /rpm_candidate/.test(String(item.likely_signal_type))),
       },
       systems,
       metadata_insights: metadataInsights,
