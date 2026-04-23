@@ -71,8 +71,8 @@ const detectFormat = (name: string, bytes: Uint8Array, text: string): CanFormat 
   if (/\(\d+\.\d+\)\s+\w+\s+[0-9a-fA-F]+#|\w+\s+[0-9a-fA-F]+\s+\[\d\]/m.test(text) || lower.endsWith(".log")) return "candump";
   if (/pgn|source|destination|priority|j1939/i.test(firstLines) && lower.endsWith(".csv")) return "J1939 CSV";
   if (lower.endsWith(".csv")) return "CSV";
+  if (/canedge|\.jsonl|channel.*can/i.test(firstLines) || lower.endsWith(".jsonl") || lower.includes("canedge")) return "CANedge";
   if (/\b(timestamp|time|id|can_id|arbitration_id|data|payload)\s*[:=]/i.test(firstLines)) return "key/value";
-  if (/canedge|\.jsonl|channel.*can/i.test(firstLines) || lower.includes("canedge")) return "CANedge";
   return "generic TXT";
 };
 
@@ -82,10 +82,10 @@ const parseCsv = (text: string, warnings: string[], format: CanFormat): Frame[] 
   const headers = parseCsvLine(lines[0]);
   const normalizedHeaders = headers.map((header) => header.trim().toLowerCase());
   const find = (names: string[]) => normalizedHeaders.findIndex((header) => names.includes(header));
-  const timestampIndex = find(["timestamp", "time", "ts", "date time", "datetime"]);
-  const idIndex = find(["id", "can_id", "arbitration_id", "identifier", "message_id", "canid", "pgn"]);
+  const timestampIndex = find(["timestamp", "time", "ts", "date time", "datetime", "time_seconds", "t"]);
+  const idIndex = find(["id", "can_id", "can id", "arbitration_id", "arbitration id", "identifier", "message_id", "message id", "canid", "pgn"]);
   const dlcIndex = find(["dlc", "length", "len"]);
-  const dataIndex = find(["data", "payload", "bytes", "data bytes"]);
+  const dataIndex = find(["data", "payload", "bytes", "data bytes", "databytes", "data_hex", "payload_hex"]);
   const byteIndexes = normalizedHeaders.map((header, index) => (/^(byte|data)[_ -]?[0-7]$|^b[0-7]$/.test(header) ? index : -1)).filter((index) => index >= 0);
   if (idIndex < 0) warnings.push("CSV header is missing a recognized CAN ID column; trying generic frame extraction.");
   return lines.slice(1).map((line, index) => {
@@ -164,6 +164,27 @@ const parseKeyValue = (text: string) => text.split(/\r?\n/).map((line, index) =>
   return id && data ? normalizeFrame(timestamp, id, splitBytes(data)) : null;
 }).filter((frame): frame is Frame => Boolean(frame));
 
+const parseCanedge = (text: string) => text.split(/\r?\n/).flatMap((line, index) => {
+  const trimmed = line.trim().replace(/^,|,$/g, "");
+  if (!trimmed) return [];
+  try {
+    const value = JSON.parse(trimmed);
+    const rows = Array.isArray(value) ? value : [value];
+    return rows.map((row, rowIndex) => {
+      if (!row || typeof row !== "object") return null;
+      const record = row as Record<string, unknown>;
+      const id = record.id ?? record.can_id ?? record.arbitration_id ?? record.message_id ?? record.pgn;
+      const data = record.data ?? record.payload ?? record.bytes ?? record.data_hex;
+      const timestamp = record.timestamp ?? record.time ?? record.ts ?? `${index}.${rowIndex}`;
+      if (id === undefined || data === undefined) return null;
+      const byteArray = Array.isArray(data) ? data.map(String) : splitBytes(String(data));
+      return normalizeFrame(String(timestamp), String(id), byteArray);
+    }).filter((frame): frame is Frame => Boolean(frame));
+  } catch {
+    return [];
+  }
+});
+
 const parseGeneric = (text: string) => text.split(/\r?\n/).map((line, index) => {
   const tokens = line.trim().replace(/[#,;|]/g, " ").split(/\s+/).filter(Boolean);
   const idIndex = tokens.findIndex((token) => isId(token) && cleanId(token).length >= 2);
@@ -188,7 +209,8 @@ const convertFile = async (file: File): Promise<ConversionResult> => {
     : format === "CRTD" ? parseCrtd(text)
     : format === "ASC" ? parseAsc(text)
     : format === "DBC" ? parseDbc(text, warnings)
-    : format === "key/value" || format === "CANedge" ? [...parseKeyValue(text), ...parseGeneric(text)]
+    : format === "key/value" ? [...parseKeyValue(text), ...parseGeneric(text)]
+    : format === "CANedge" ? [...parseCanedge(text), ...parseKeyValue(text), ...parseGeneric(text)]
     : format === "BLF" || format === "MDF/MF4" ? parseBinaryBestEffort(bytes, format, warnings)
     : parseGeneric(text);
 
