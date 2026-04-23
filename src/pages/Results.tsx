@@ -216,16 +216,7 @@ const describeVehicleState = ({ speedCandidates, rpmCandidates, pedalCandidates,
   return "I cannot confidently tell whether the car was driving or parked from this log alone; the recording has some activity, but not enough clear speed/RPM/pedal evidence to call it one way.";
 };
 
-const NarrativeBlock = ({ title, items }: { title: string; items: string[] }) => (
-  <section className="rounded-lg border border-glass-border bg-glass p-4 backdrop-blur">
-    <h4 className="mb-3 text-sm font-bold uppercase text-primary">{title}</h4>
-    <ul className="space-y-2 text-sm leading-6 text-muted-foreground">
-      {items.map((item) => <li key={item} className="flex gap-2"><span className="mt-2 size-1.5 shrink-0 rounded-full bg-primary" /> <span>{item}</span></li>)}
-    </ul>
-  </section>
-);
-
-const PlainEnglishSummary = ({ data, anomalies, suspectIds, componentHealth }: { data: AnalysisResult; anomalies: number; suspectIds: number; componentHealth: number }) => {
+const buildPlainEnglishSummaryReport = ({ data, fileId, anomalies, suspectIds, componentHealth }: { data: AnalysisResult; fileId?: string; anomalies: number; suspectIds: number; componentHealth: number }) => {
   const vehicleBehavior = data.vehicle_behavior ?? {};
   const speedCandidates = vehicleBehavior.possible_speed_ids ?? [];
   const rpmCandidates = vehicleBehavior.possible_rpm_ids ?? [];
@@ -242,34 +233,23 @@ const PlainEnglishSummary = ({ data, anomalies, suspectIds, componentHealth }: {
   const activeBits = bitRows.filter((row) => numericValue(row, ["activity", "transitions", "value"]) > 0.05).length;
   const stuckBits = bitRows.filter((row) => numericValue(row, ["ones"]) === 0 || numericValue(row, ["zeros"]) === 0).length;
   const noisyIds = idRows.filter((row) => numericValue(row, ["percentage"]) > 25 || numericValue(row, ["count", "messages", "total"]) > totalMessages * 0.25).map((row) => renderText(row.id ?? row.key)).slice(0, 4);
-  const quietSystems = systems.filter((row) => String(row.category ?? "").includes("body") || numericValue(row, ["confidence", "count"]) === 0).length;
   const diagnosticPresent = systems.some((row) => String(row.category ?? "").includes("diagnostic")) || idRows.some((row) => /^7|18DA/i.test(renderText(row.id ?? row.key)));
   const avgJitter = averageNumeric(timingRows, ["period_jitter", "jitter"]);
   const busLoad = Math.min(100, Math.round((totalMessages / Math.max(uniqueIds || 1, 1)) * 10));
   const movementSummary = describeVehicleState({ speedCandidates, rpmCandidates, pedalCandidates, byteRows, bitRows, timingRows, totalMessages });
   const condition = anomalies > 5 || componentHealth < 55 ? "the capture has multiple warning signs and should be reviewed closely" : anomalies > 0 || componentHealth < 80 ? "the capture has a few unusual spots, but it is not automatically pointing to a failed part" : "the capture looks fairly steady based on the checks available here";
-  const speedBehavior = speedCandidates.length && activeBits > 8 ? "speed-related traffic appears to be changing, which can indicate rolling, accelerating, cruising, or stopping depending on the exact decoded signal" : speedCandidates.length ? "speed-like IDs exist, but the current payload does not prove a specific speed trend" : "no reliable speed signal was identified, so exact speed behavior cannot be called from this log";
-  const pedalBehavior = pedalCandidates.length ? "pedal-sized signals were present, so accelerator or brake-style inputs may be in the capture, but they still need validation against the vehicle" : "accelerator and brake use are not confirmed from the current decoded candidates";
-  const engineBehavior = rpmCandidates.length && activeBits > 8 ? "RPM-style signals changed, suggesting the engine or drivetrain was awake and possibly under changing load" : rpmCandidates.length ? "RPM-style IDs were present, which may indicate idle or engine-on activity" : "engine idle or load cannot be confirmed because no strong RPM candidate was found";
-  const timelineRows = (anomalies ? toRecordArray(data.anomalies) : []).slice(0, 3);
+  const timelineRows = toRecordArray(data.anomalies).slice(0, 3);
 
-  return (
-    <div className="rounded-lg border border-primary/30 bg-gradient-subtle p-5 shadow-glow backdrop-blur">
-      <div className="mb-5">
-        <p className="text-xs font-bold uppercase text-primary">Plain English Summary</p>
-        <h3 className="mt-2 text-2xl font-extrabold text-foreground">What This CAN Log Appears To Show</h3>
-        <p className="mt-3 text-sm leading-7 text-muted-foreground">This is an interpretation layer on top of the raw CAN data. It does not replace a confirmed DBC decode, but it turns message timing, ID activity, byte changes, and bit behavior into practical clues for a mechanic, engineer, or fleet manager.</p>
-      </div>
-      <div className="grid gap-4 lg:grid-cols-2">
-        <NarrativeBlock title="Vehicle Activity" items={[movementSummary, speedBehavior, pedalBehavior, "Steering wheel movement is not confirmed unless a steering-like ID is later validated; any steering correction here should be treated as a candidate, not proof.", engineBehavior]} />
-        <NarrativeBlock title="Systems Active" items={[`Powertrain or diagnostic-style traffic ${systems.some((row) => String(row.category ?? "").includes("powertrain")) ? "appears present" : "is not clearly dominant"}.`, `ABS/traction and steering activity are not directly decoded yet, but high-activity IDs may belong to chassis modules.`, `Body control traffic ${systems.some((row) => String(row.category ?? "").includes("body")) ? "appears present" : "is limited or unclear"}.`, `EV battery management is ${String(protocol.likely_protocol ?? "").includes("J1939") || systems.some((row) => /battery|bms|ev/i.test(renderText(row.category ?? row.id))) ? "a possible area to review" : "not obvious from the current candidates"}.`, noisyIds.length ? `Unusually noisy IDs: ${noisyIds.join(", ")}.` : "No single ID appears overwhelmingly noisy." ]} />
-        <NarrativeBlock title="Abnormal Behavior" items={[avgJitter > 0 ? `Average timing jitter is about ${avgJitter.toFixed(4)}, so compare timing-sensitive IDs for irregular spacing.` : "Timing irregularity is not obvious from the available timing rows.", highEntropyBytes ? `${highEntropyBytes} byte position${highEntropyBytes === 1 ? "" : "s"} show higher variation, which may be real changing signals or noisy/chaotic data.` : "Byte patterns look relatively stable; no major high-entropy areas stand out.", stuckBits ? `${stuckBits} bit position${stuckBits === 1 ? "" : "s"} appear stuck high or low during this recording; that can be normal status data or a clue for fixed states.` : "No stuck-bit pattern stands out strongly.", busLoad > 80 ? "Estimated bus activity is high, so chatter or overload should be reviewed." : "Estimated bus load does not look overloaded from this capture.", anomalies ? `${anomalies} anomaly event${anomalies === 1 ? "" : "s"} should be matched against symptoms, wiring checks, or sensor behavior.` : "No obvious anomaly events were detected." ]} />
-        <NarrativeBlock title="Driver Behavior Indicators" items={[speedCandidates.length ? "Movement is possible, but exact slow/accelerating/cruising/stopping behavior requires validating the speed candidate against real vehicle speed." : "No clear speed candidate means driving style cannot be measured confidently.", pedalCandidates.length ? "Pedal-related candidates exist, so accelerator/brake behavior may be extractable after validation." : "Harsh braking or aggressive acceleration are not confirmed from this log alone.", rpmCandidates.length && !speedCandidates.length ? "The vehicle may have been idling or stationary with engine activity." : "Idling cannot be confirmed without a validated RPM signal and vehicle state reference.", activeBits > 16 ? "Multiple active bits suggest changing driver or vehicle inputs during the capture." : "Few active bits suggest a quieter or steadier operating state." ]} />
-        <NarrativeBlock title="Reverse-Engineering Insights" items={[speedCandidates.length ? `Likely speed ID candidates: ${speedCandidates.map(renderText).slice(0, 5).join(", ")}.` : "No strong speed ID candidate was found.", rpmCandidates.length ? `Likely RPM ID candidates: ${rpmCandidates.map(renderText).slice(0, 5).join(", ")}.` : "No strong RPM ID candidate was found.", pedalCandidates.length ? `Likely pedal/brake-sized ID candidates: ${pedalCandidates.map(renderText).slice(0, 5).join(", ")}.` : "No strong pedal or brake candidate was found.", `${activeBits} active bit candidate${activeBits === 1 ? "" : "s"} and ${highEntropyBytes} changing byte area${highEntropyBytes === 1 ? "" : "s"} are useful starting points for DBC signal work.`, suspectIds ? `${suspectIds} IDs behave like repeatable signals and may belong to related ECUs or message families.` : "The current log does not expose many repeatable signal candidates." ]} />
-        <NarrativeBlock title="Protocol, Network, And Timeline" items={[`Protocol impression: ${renderText(protocol.likely_protocol ?? "unknown")}.`, diagnosticPresent ? "Diagnostic-style traffic appears present, so UDS/ISO-TP or service-tool activity may be included." : "Diagnostic messages are not obvious in the current ID set.", `The log includes ${totalMessages || "unknown"} messages across ${uniqueIds || "multiple"} IDs; overall, ${condition}.`, timelineRows.length ? `Key events: ${timelineRows.map((row, index) => `event ${index + 1} on ID ${renderText(row.id ?? row.key ?? "unknown")}`).join("; ")}.` : "No clear event timeline was detected; use this capture as a baseline or compare it with a fault-condition log.", timelineRows.length ? "Before/after behavior should be checked around those IDs to see whether timing, payload length, or byte values changed." : "A longer recording with known driver actions would make the event timeline more specific." ]} />
-      </div>
-    </div>
-  );
+  const sections = [
+    ["Vehicle Activity", [movementSummary, speedCandidates.length ? "Speed-related traffic may show movement, acceleration, cruising, or stopping after validation." : "No reliable speed signal was identified.", pedalCandidates.length ? "Pedal-sized signals were present, so accelerator or brake-style inputs may be extractable after validation." : "Accelerator and brake use are not confirmed from the current candidates.", rpmCandidates.length ? "RPM-style IDs were present, which may indicate idle, engine-on activity, or changing load." : "Engine idle or load cannot be confirmed because no strong RPM candidate was found."]],
+    ["Systems Active", [`Powertrain or diagnostic-style traffic ${systems.some((row) => String(row.category ?? "").includes("powertrain")) ? "appears present" : "is not clearly dominant"}.`, `Body control traffic ${systems.some((row) => String(row.category ?? "").includes("body")) ? "appears present" : "is limited or unclear"}.`, noisyIds.length ? `Unusually noisy IDs: ${noisyIds.join(", ")}.` : "No single ID appears overwhelmingly noisy."]],
+    ["Abnormal Behavior", [avgJitter > 0 ? `Average timing jitter is about ${avgJitter.toFixed(4)}.` : "Timing irregularity is not obvious from the available timing rows.", highEntropyBytes ? `${highEntropyBytes} byte position(s) show higher variation.` : "Byte patterns look relatively stable.", stuckBits ? `${stuckBits} bit position(s) appear stuck high or low during this recording.` : "No stuck-bit pattern stands out strongly.", busLoad > 80 ? "Estimated bus activity is high, so chatter or overload should be reviewed." : "Estimated bus load does not look overloaded.", anomalies ? `${anomalies} anomaly event(s) should be matched against symptoms, wiring checks, or sensor behavior.` : "No obvious anomaly events were detected."]],
+    ["Driver Behavior Indicators", [speedCandidates.length ? "Driving behavior may be extractable once the speed candidate is validated." : "Driving style cannot be measured confidently without a speed candidate.", pedalCandidates.length ? "Pedal candidates may help identify acceleration or braking after validation." : "Harsh braking or aggressive acceleration are not confirmed.", rpmCandidates.length && !speedCandidates.length ? "The vehicle may have been idling or stationary with engine activity." : "Idling cannot be confirmed without validated RPM and vehicle state reference."]],
+    ["Reverse-Engineering Insights", [speedCandidates.length ? `Likely speed ID candidates: ${speedCandidates.map(renderText).slice(0, 5).join(", ")}.` : "No strong speed ID candidate was found.", rpmCandidates.length ? `Likely RPM ID candidates: ${rpmCandidates.map(renderText).slice(0, 5).join(", ")}.` : "No strong RPM ID candidate was found.", pedalCandidates.length ? `Likely pedal/brake-sized ID candidates: ${pedalCandidates.map(renderText).slice(0, 5).join(", ")}.` : "No strong pedal or brake candidate was found.", `${activeBits} active bit candidate(s) and ${highEntropyBytes} changing byte area(s) are useful starting points for DBC signal work.`]],
+    ["Protocol, Network, And Timeline", [`Protocol impression: ${renderText(protocol.likely_protocol ?? "unknown")}.`, diagnosticPresent ? "Diagnostic-style traffic appears present, so UDS/ISO-TP or service-tool activity may be included." : "Diagnostic messages are not obvious in the current ID set.", `The log includes ${totalMessages || "unknown"} messages across ${uniqueIds || "multiple"} IDs; overall, ${condition}.`, timelineRows.length ? `Key events: ${timelineRows.map((row, index) => `event ${index + 1} on ID ${renderText(row.id ?? row.key ?? "unknown")}`).join("; ")}.` : "No clear event timeline was detected."]],
+  ] as Array<[string, string[]]>;
+
+  return [`CJL CAN Intelligence Platform Plain English Summary`, `Log ID: ${fileId ?? "—"}`, `Generated: ${new Date().toLocaleString()}`, "", ...sections.flatMap(([title, items]) => [title, ...items.map((item) => `- ${item}`), ""])].join("\n");
 };
 
 const scoreTone = (score: number) => score >= 80 ? "text-success" : score >= 55 ? "text-warning" : "text-destructive";
@@ -469,6 +449,17 @@ const Results = () => {
     URL.revokeObjectURL(url);
   };
 
+  const downloadPlainEnglishSummary = () => {
+    if (!data) return;
+    const report = buildPlainEnglishSummaryReport({ data, fileId, anomalies: anomalies.length, suspectIds, componentHealth });
+    const url = URL.createObjectURL(new Blob([report], { type: "text/plain" }));
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `plain-english-summary-${fileId}.txt`;
+    link.click();
+    URL.revokeObjectURL(url);
+  };
+
   return (
     <main className="mx-auto min-h-screen max-w-7xl px-4 py-8 sm:px-6 lg:px-10">
       <div className="mb-8 flex flex-col justify-between gap-4 sm:flex-row sm:items-end">
@@ -483,6 +474,7 @@ const Results = () => {
         <div className="flex flex-wrap gap-3">
           <Button type="button" variant="outline" onClick={saveSnapshot}><Save className="size-4" /> Save Analysis</Button>
           <Button type="button" variant="outline" onClick={downloadReport}><Download className="size-4" /> Health Report</Button>
+          <Button type="button" variant="outline" onClick={downloadPlainEnglishSummary}><Download className="size-4" /> Plain English Summary</Button>
           <Button asChild variant="outline"><Link to="/upload">Analyze Another Log</Link></Button>
         </div>
       </div>
@@ -513,7 +505,6 @@ const Results = () => {
             <AnalysisCard title="Summary" icon={<MessageSquareText className="size-5" />}>
               <div className="grid gap-4">
                 <pre className="whitespace-pre-wrap rounded-lg border border-glass-border bg-glass p-5 text-sm leading-7 text-foreground backdrop-blur">{renderText(summaryText)}</pre>
-                <PlainEnglishSummary data={data} anomalies={anomalies.length} suspectIds={suspectIds} componentHealth={componentHealth} />
               </div>
             </AnalysisCard>
             <AnalysisCard title="Signal Activity" description="Live telemetry intensity preview." icon={<BarChart3 className="size-5" />}>
