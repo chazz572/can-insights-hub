@@ -14,7 +14,9 @@ export default {
     },
     extend: {
       fontFamily: {
-        sans: ["Inter", "ui-sans-serif", "system-ui", "sans-serif"],
+        sans: ["Roboto Condensed", "ui-sans-serif", "system-ui", "sans-serif"],
+        display: ["Oswald", "Roboto Condensed", "sans-serif"],
+        mono: ["JetBrains Mono", "ui-monospace", "SFMono-Regular", "Menlo", "Consolas", "monospace"],
       },
       colors: {
         border: "hsl(var(--border))",
@@ -88,6 +90,8 @@ export default {
         "gradient-panel": "var(--gradient-panel)",
         "gradient-accent": "var(--gradient-accent)",
         "gradient-subtle": "var(--gradient-subtle)",
+        "gradient-hazard": "var(--gradient-hazard)",
+        "gradient-steel": "var(--gradient-steel)",
       },
       boxShadow: {
         dashboard: "var(--shadow-dashboard)",

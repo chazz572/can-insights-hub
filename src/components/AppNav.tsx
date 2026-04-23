@@ -1,4 +1,4 @@
-import { BarChart3, Bell, Car, ChartNoAxesCombined, CheckCircle2, Download, GitCompareArrows, Home, LayoutDashboard, Moon, Settings, ShieldCheck, Sun, TerminalSquare, UploadCloud, UserCircle } from "lucide-react";
+import { BarChart3, Bell, Car, ChartNoAxesCombined, CheckCircle2, Download, GitCompareArrows, Home, LayoutDashboard, Moon, Settings, Sun, TerminalSquare, UploadCloud, UserCircle, Wrench } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Link, NavLink as RouterNavLink, useLocation } from "react-router-dom";
 
@@ -6,11 +6,12 @@ import { cn } from "@/lib/utils";
 
 const navClass = ({ isActive, highlight }: { isActive: boolean; highlight?: boolean }) =>
   cn(
-    "group flex items-center gap-3 rounded-lg px-4 py-3 text-sm font-semibold transition-all duration-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+    "group relative flex items-center gap-3 rounded-sm px-3 py-2.5 text-sm font-semibold uppercase tracking-wider transition-all duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+    "border border-transparent",
     isActive
-      ? "bg-gradient-accent text-primary-foreground shadow-glow"
-      : "text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground hover:shadow-glow",
-    highlight && !isActive && "border border-primary/30 bg-primary/5 text-primary",
+      ? "bg-primary text-primary-foreground border-primary shadow-[inset_0_-2px_0_hsl(0_0%_0%/0.4)]"
+      : "text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground hover:border-glass-border",
+    highlight && !isActive && "border-l-4 border-l-primary text-primary",
   );
 
 export const AppNav = () => {
@@ -18,6 +19,7 @@ export const AppNav = () => {
   const [fileId, setFileId] = useState<string | null>(() => localStorage.getItem("can_ai_file_id"));
   const [theme, setTheme] = useState<"dark" | "light">(() => (localStorage.getItem("can_ai_theme") === "light" ? "light" : "dark"));
   const [notice, setNotice] = useState<string | null>(null);
+  const [clock, setClock] = useState<string>(() => new Date().toLocaleTimeString([], { hour12: false }));
 
   useEffect(() => {
     setFileId(localStorage.getItem("can_ai_file_id"));
@@ -38,6 +40,11 @@ export const AppNav = () => {
     localStorage.setItem("can_ai_theme", theme);
   }, [theme]);
 
+  useEffect(() => {
+    const id = window.setInterval(() => setClock(new Date().toLocaleTimeString([], { hour12: false })), 1000);
+    return () => window.clearInterval(id);
+  }, []);
+
   const resultsPath = fileId ? `/results/${fileId}` : "/upload";
   const showNotice = (message: string) => {
     setNotice(message);
@@ -46,86 +53,121 @@ export const AppNav = () => {
 
   const links = [
     { to: "/", label: "Home", icon: Home, end: true },
-    { to: "/workspace", label: "Workspace", icon: LayoutDashboard },
-    { to: "/upload", label: "Upload", icon: UploadCloud },
-    { to: resultsPath, label: "Results", icon: BarChart3 },
+    { to: "/workspace", label: "Bay", icon: LayoutDashboard },
+    { to: "/upload", label: "Intake", icon: UploadCloud },
+    { to: resultsPath, label: "Diagnose", icon: BarChart3 },
     { to: "/compare", label: "Compare", icon: GitCompareArrows, highlight: true },
-    { to: "/engineering", label: "Engineering", icon: TerminalSquare },
-    { to: "/visualize", label: "Visualize", icon: ChartNoAxesCombined },
+    { to: "/engineering", label: "Bench", icon: TerminalSquare },
+    { to: "/visualize", label: "Scope", icon: ChartNoAxesCombined },
     { to: "/fleet", label: "Fleet", icon: Car },
-    { to: "/reports", label: "Reports", icon: Download },
+    { to: "/reports", label: "Work Order", icon: Download },
   ];
 
   return (
     <>
-      <aside className="fixed inset-y-0 left-0 z-40 hidden w-72 border-r border-sidebar-border bg-sidebar/88 p-5 shadow-dashboard backdrop-blur-xl md:flex md:flex-col">
-        <Link to="/" className="group mb-8 flex items-center gap-3 rounded-lg p-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
-          <span className="grid size-11 place-items-center rounded-lg bg-gradient-accent text-sm font-extrabold text-primary-foreground shadow-glow transition-transform duration-300 group-hover:scale-105">
-            CJL
-          </span>
-          <span>
-            <span className="block text-base font-bold leading-tight text-foreground">CJL CAN Intelligence</span>
-            <span className="text-xs font-medium text-muted-foreground">Pro diagnostics workspace</span>
-          </span>
-        </Link>
+      {/* Toolbox sidebar */}
+      <aside className="fixed inset-y-0 left-0 z-40 hidden w-72 flex-col border-r-2 border-primary/30 bg-sidebar md:flex">
+        {/* Hazard stripe header */}
+        <div className="hazard-stripe h-2 w-full" />
 
-        <nav className="space-y-1 overflow-y-auto pr-1">
+        <div className="flex flex-col gap-4 p-4">
+          <Link to="/" className="group flex items-center gap-3 rounded-sm border border-glass-border bg-card/60 p-3 brushed-steel">
+            <span className="grid size-12 place-items-center rounded-sm bg-primary font-display text-lg font-bold text-primary-foreground shadow-[inset_0_-2px_0_hsl(0_0%_0%/0.5)]">
+              CJL
+            </span>
+            <span className="min-w-0">
+              <span className="block font-display text-base font-bold leading-tight text-foreground">CAN INTELLIGENCE</span>
+              <span className="block font-mono text-[10px] uppercase tracking-widest text-primary">Service Bay · v2.0</span>
+            </span>
+          </Link>
+
+          <div className="flex items-center justify-between rounded-sm border border-glass-border bg-background/60 px-3 py-2 font-mono text-xs uppercase tracking-wider text-muted-foreground">
+            <span className="flex items-center gap-2">
+              <span className="status-led" />
+              SYS ONLINE
+            </span>
+            <span className="led-readout text-xs">{clock}</span>
+          </div>
+        </div>
+
+        <div className="px-4 pb-2">
+          <p className="stencil text-[10px] text-muted-foreground">— Service Stations —</p>
+        </div>
+
+        <nav className="flex-1 space-y-0.5 overflow-y-auto px-3 pr-2">
           {links.map((item) => (
             <RouterNavLink key={item.label} to={item.to} className={({ isActive }) => navClass({ isActive, highlight: item.highlight })} end={item.end}>
-              <item.icon className="transition-transform duration-300 group-hover:scale-110" />
+              <item.icon className="size-4 shrink-0" />
               {item.label}
+              {item.highlight && (
+                <span className="ml-auto rounded-sm bg-primary/20 px-1.5 py-0.5 font-mono text-[9px] text-primary">NEW</span>
+              )}
             </RouterNavLink>
           ))}
         </nav>
 
-        <div className="mt-auto rounded-lg border border-glass-border bg-glass p-4 backdrop-blur">
-          <div className="flex items-center gap-3">
-            <span className="grid size-10 place-items-center rounded-lg bg-secondary text-primary"><ShieldCheck className="size-5" /></span>
+        <div className="m-3 rounded-sm border-2 border-warning/40 bg-warning/5 p-3">
+          <div className="flex items-center gap-2">
+            <span className="grid size-9 place-items-center rounded-sm bg-warning text-warning-foreground">
+              <Wrench className="size-4" />
+            </span>
             <div className="min-w-0">
-              <p className="text-sm font-bold text-foreground">Pro workspace</p>
-              <p className="text-xs leading-5 text-muted-foreground">Log, DBC, fleet, and report workflows ready.</p>
+              <p className="font-display text-sm font-bold uppercase text-foreground">Pro Bay Active</p>
+              <p className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">All tools certified</p>
             </div>
           </div>
         </div>
+
+        <div className="hazard-stripe h-2 w-full" />
       </aside>
 
-      <header className="fixed inset-x-0 top-0 z-30 border-b border-glass-border bg-background/70 px-4 py-3 shadow-dashboard backdrop-blur-xl md:left-72 md:px-8">
+      {/* Top status bar — looks like a shop control panel */}
+      <header className="fixed inset-x-0 top-0 z-30 border-b-2 border-primary/30 bg-card/95 px-4 py-2.5 backdrop-blur md:left-72 md:px-6">
         <div className="flex items-center justify-between gap-4">
-          <div className="min-w-0">
-            <p className="text-xs font-semibold uppercase text-primary">CJL CAN Intelligence Platform</p>
-            <p className="truncate text-sm text-muted-foreground">Professional CAN diagnostics · DBC decoding · Fleet intelligence</p>
+          <div className="flex min-w-0 items-center gap-3">
+            <span className="status-led shrink-0" />
+            <div className="min-w-0">
+              <p className="font-display text-xs font-bold uppercase tracking-wider text-primary">CJL · Diagnostic Service Platform</p>
+              <p className="truncate font-mono text-[10px] uppercase tracking-wider text-muted-foreground">CAN Bus · DBC Decode · Fleet Telemetry</p>
+            </div>
           </div>
-          <div className="flex items-center gap-2">
-            <button type="button" aria-label="Toggle theme" onClick={() => setTheme((current) => current === "dark" ? "light" : "dark")} className="grid size-10 place-items-center rounded-lg border border-glass-border bg-glass text-foreground shadow-glow backdrop-blur transition-all duration-300 hover:scale-105 hover:border-primary/40">
+          <div className="flex items-center gap-1.5">
+            <button type="button" aria-label="Toggle theme" onClick={() => setTheme((current) => current === "dark" ? "light" : "dark")} className="grid size-9 place-items-center rounded-sm border border-glass-border bg-secondary text-foreground transition-colors hover:border-primary hover:text-primary">
               {theme === "dark" ? <Moon className="size-4" /> : <Sun className="size-4" />}
             </button>
-            <button type="button" aria-label="Notifications" onClick={() => showNotice("No Critical Alerts · CAN Monitor Ready")} className="hidden size-10 place-items-center rounded-lg border border-glass-border bg-glass text-foreground backdrop-blur transition-all duration-300 hover:border-primary/40 hover:shadow-glow sm:grid">
+            <button type="button" aria-label="Notifications" onClick={() => showNotice("All systems nominal · No active faults")} className="hidden size-9 place-items-center rounded-sm border border-glass-border bg-secondary text-foreground transition-colors hover:border-primary hover:text-primary sm:grid">
               <Bell className="size-4" />
             </button>
-            <button type="button" aria-label="Settings" onClick={() => showNotice("Settings Shortcut · Open Account For Workspace Controls")} className="hidden size-10 place-items-center rounded-lg border border-glass-border bg-glass text-foreground backdrop-blur transition-all duration-300 hover:border-primary/40 hover:shadow-glow sm:grid">
+            <button type="button" aria-label="Settings" onClick={() => showNotice("Open Account for shop settings")} className="hidden size-9 place-items-center rounded-sm border border-glass-border bg-secondary text-foreground transition-colors hover:border-primary hover:text-primary sm:grid">
               <Settings className="size-4" />
             </button>
-            <RouterNavLink to="/auth" className="flex items-center gap-2 rounded-lg border border-glass-border bg-glass px-3 py-2 text-sm font-semibold text-foreground backdrop-blur transition-all duration-300 hover:border-primary/40 hover:shadow-glow">
+            <RouterNavLink to="/auth" className="flex items-center gap-2 rounded-sm border border-glass-border bg-secondary px-3 py-2 font-mono text-xs font-semibold uppercase tracking-wider text-foreground transition-colors hover:border-primary hover:text-primary">
               <UserCircle className="size-4 text-primary" />
-              <span className="hidden sm:inline">Account</span>
+              <span className="hidden sm:inline">Tech</span>
             </RouterNavLink>
           </div>
         </div>
-        {notice ? <div className="mt-3 flex items-center gap-2 rounded-lg border border-glass-border bg-glass px-3 py-2 text-xs font-semibold text-muted-foreground shadow-glow"><CheckCircle2 className="size-4 text-success" /> {notice}</div> : null}
+        {notice ? (
+          <div className="mt-2 flex items-center gap-2 rounded-sm border border-success/40 bg-success/10 px-3 py-1.5 font-mono text-[11px] uppercase tracking-wider text-success">
+            <CheckCircle2 className="size-3.5" /> {notice}
+          </div>
+        ) : null}
       </header>
 
-      <header className="fixed inset-x-3 bottom-3 z-40 rounded-lg border border-sidebar-border bg-sidebar/90 p-2 shadow-dashboard backdrop-blur-xl md:hidden">
-        <nav className="grid grid-cols-5 gap-2">
+      {/* Mobile bottom toolbar */}
+      <header className="fixed inset-x-2 bottom-2 z-40 rounded-sm border-2 border-primary/30 bg-sidebar/98 p-1.5 backdrop-blur md:hidden">
+        <div className="hazard-stripe absolute inset-x-0 -top-1 h-1 rounded-t-sm" />
+        <nav className="grid grid-cols-5 gap-1">
           {[
-            links[0],  // Home
-            links[2],  // Upload
-            { ...links[4], highlight: true }, // Compare (highlighted)
-            links[3],  // Results
-            links[7],  // Fleet
+            links[0],
+            links[2],
+            { ...links[4], highlight: true },
+            links[3],
+            links[7],
           ].map((item) => (
-            <RouterNavLink key={item.label} to={item.to} className={({ isActive }) => cn(navClass({ isActive, highlight: item.highlight }), "justify-center px-2 py-2")} end={item.end}>
-              <item.icon />
-              <span className="sr-only sm:not-sr-only">{item.label}</span>
+            <RouterNavLink key={item.label} to={item.to} className={({ isActive }) => cn(navClass({ isActive, highlight: item.highlight }), "flex-col justify-center gap-1 px-1 py-1.5 text-[9px]")} end={item.end}>
+              <item.icon className="size-4" />
+              <span>{item.label}</span>
             </RouterNavLink>
           ))}
         </nav>
