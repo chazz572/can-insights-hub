@@ -372,7 +372,7 @@ const InfoTip = ({ text }: { text: string }) => <UiTooltip><TooltipTrigger asChi
 
 const FreezeFrameSnapshots = ({ anomalies, idStats }: { anomalies: unknown[]; idStats: unknown }) => {
   const rows = (anomalies.length ? toRecordArray(anomalies) : toRecordArray(idStats).slice(0, 4)).slice(0, 4);
-  return <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">{rows.map((row, index) => <div key={index} className="rounded-lg border border-glass-border bg-glass p-4"><p className="font-mono text-sm text-primary">Frame {index + 1}</p><p className="mt-2 text-sm text-muted-foreground">ID {renderText(row.id ?? row.key ?? "unknown")}</p><p className="mt-2 truncate font-mono text-xs text-foreground">{renderText(row.reason ?? row.data ?? row.value ?? "stable sample")}</p></div>)}</div>;
+  return <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">{rows.map((row, index) => <div key={index} className="rounded-lg border border-glass-border bg-glass p-4"><p className="font-mono text-sm text-primary">Frame {index + 1}</p><p className="mt-2 text-sm text-muted-foreground">ID {renderText(row.id ?? row.key ?? "unknown")}</p><p className="mt-2 break-words font-mono text-xs leading-5 text-foreground">{renderText(row.reason ?? row.data ?? row.value ?? "stable sample")}</p></div>)}</div>;
 };
 
 const TroubleTimeline = ({ anomalies, timing }: { anomalies: unknown[]; timing: unknown }) => {
@@ -408,20 +408,20 @@ const ModuleActivityMap = ({ systems }: { systems: unknown }) => {
           return (
             <div key={`${renderText(row.id ?? row.key)}-${index}`} className="rounded-lg border border-glass-border bg-glass p-4 backdrop-blur transition-all duration-300 hover:border-primary/40 hover:shadow-glow">
               <div className="flex items-start justify-between gap-3">
-                <div className="min-w-0">
+                <div className="min-w-0 flex-1">
                   <p className="font-mono text-sm font-bold text-foreground">ID {renderText(row.id ?? row.key)}</p>
-                  <p className="mt-1 truncate text-xs font-semibold uppercase text-primary">{titleCase(moduleType)}</p>
+                  <p className="mt-1 break-words text-xs font-semibold uppercase leading-5 text-primary">{titleCase(moduleType)}</p>
                 </div>
                 <span className="grid size-10 shrink-0 place-items-center rounded-lg border border-glass-border bg-gradient-subtle text-primary shadow-glow"><Car className="size-5" /></span>
               </div>
               <div className="mt-4 h-2 overflow-hidden rounded-full bg-secondary">
                 <div className="h-full rounded-full bg-gradient-accent" style={{ width: `${Math.min(100, Math.max(8, confidence))}%` }} />
               </div>
-              <div className="mt-3 flex items-center justify-between gap-3 text-xs text-muted-foreground">
+              <div className="mt-3 flex flex-wrap items-center justify-between gap-2 text-xs text-muted-foreground">
                 <span>{confidence}% heuristic confidence</span>
-                <span className="font-mono">{renderText(row.category ?? "CAN")}</span>
+                <span className="break-words font-mono">{renderText(row.category ?? "CAN")}</span>
               </div>
-              {row.reasoning ? <p className="mt-3 line-clamp-2 text-xs leading-5 text-muted-foreground">{renderText(row.reasoning)}</p> : null}
+              {row.reasoning ? <p className="mt-3 break-words text-xs leading-5 text-muted-foreground">{renderText(row.reasoning)}</p> : null}
             </div>
           );
         })}
