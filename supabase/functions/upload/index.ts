@@ -107,11 +107,11 @@ const parseCsv = (text: string, warnings: string[], format: CanFormat): Frame[] 
 const parseCandump = (text: string) => text.split(/\r?\n/).map((line, index) => {
   const trimmed = line.trim();
   const hash = trimmed.match(/^\(?([\d.]+)\)?\s+\S+\s+([0-9a-fA-F]+)#([0-9a-fA-F]*)/);
-  if (hash) return normalizeFrame(hash[1], hash[2], splitBytes(hash[3]), undefined, undefined, "16");
+  if (hash) return normalizeFrame(hash[1], hash[2], splitBytes(hash[3]), undefined, undefined, 16);
   const bracket = trimmed.match(/^\(?([\d.]+)\)?\s+\S+\s+([0-9a-fA-F]+)\s+\[(\d+)\]\s+(.+)$/);
-  if (bracket) return normalizeFrame(bracket[1], bracket[2], bracket[4].split(/\s+/).filter(isByte), Number(bracket[3]), undefined, "16");
+  if (bracket) return normalizeFrame(bracket[1], bracket[2], bracket[4].split(/\s+/).filter(isByte), Number(bracket[3]), undefined, 16);
   const noTimestamp = trimmed.match(/^\S+\s+([0-9a-fA-F]+)#([0-9a-fA-F]*)/);
-  return noTimestamp ? normalizeFrame(String(index), noTimestamp[1], splitBytes(noTimestamp[2]), undefined, undefined, "16") : null;
+  return noTimestamp ? normalizeFrame(String(index), noTimestamp[1], splitBytes(noTimestamp[2]), undefined, undefined, 16) : null;
 }).filter((frame): frame is Frame => Boolean(frame));
 
 const parseCrtd = (text: string) => text.split(/\r?\n/).map((line, index) => {
@@ -122,7 +122,7 @@ const parseCrtd = (text: string) => text.split(/\r?\n/).map((line, index) => {
   const timestamp = idIndex > 0 && /^\d+(\.\d+)?$/.test(parts[idIndex - 1]) ? parts[idIndex - 1] : String(index);
   const dlc = /^\d+$/.test(parts[idIndex + 1] ?? "") ? Number(parts[idIndex + 1]) : undefined;
   const byteStart = dlc === undefined ? idIndex + 1 : idIndex + 2;
-  return normalizeFrame(timestamp, parts[idIndex].replace(/x$/i, ""), parts.slice(byteStart).filter(isByte), dlc, undefined, "16");
+  return normalizeFrame(timestamp, parts[idIndex].replace(/x$/i, ""), parts.slice(byteStart).filter(isByte), dlc, undefined, 16);
 }).filter((frame): frame is Frame => Boolean(frame));
 
 const parseTrc = (text: string) => text.split(/\r?\n/).map((line, index) => {
@@ -135,7 +135,7 @@ const parseTrc = (text: string) => text.split(/\r?\n/).map((line, index) => {
   const timestamp = rawTimestamp ? String(Number(rawTimestamp) / 1000) : String(index);
   const dlcIndex = parts.findIndex((part, partIndex) => partIndex > idIndex && /^\d+$/.test(part) && Number(part) <= 64);
   const byteStart = dlcIndex >= 0 ? dlcIndex + 1 : idIndex + 1;
-  return normalizeFrame(timestamp, parts[idIndex].replace(/[xh]$/i, ""), parts.slice(byteStart).filter(isByte), dlcIndex >= 0 ? Number(parts[dlcIndex]) : undefined, undefined, "16");
+  return normalizeFrame(timestamp, parts[idIndex].replace(/[xh]$/i, ""), parts.slice(byteStart).filter(isByte), dlcIndex >= 0 ? Number(parts[dlcIndex]) : undefined, undefined, 16);
 }).filter((frame): frame is Frame => Boolean(frame));
 
 const parseAsc = (text: string) => text.split(/\r?\n/).map((line) => {
@@ -145,7 +145,7 @@ const parseAsc = (text: string) => text.split(/\r?\n/).map((line) => {
   if (idIndex < 0) return null;
   const dlcIndex = parts.findIndex((part, index) => index > idIndex && /^\d+$/.test(part) && Number(part) <= 64);
   if (dlcIndex < 0) return null;
-  return normalizeFrame(parts[0], parts[idIndex].replace(/x$/i, ""), parts.slice(dlcIndex + 1).filter(isByte), Number(parts[dlcIndex]), undefined, "16");
+  return normalizeFrame(parts[0], parts[idIndex].replace(/x$/i, ""), parts.slice(dlcIndex + 1).filter(isByte), Number(parts[dlcIndex]), undefined, 16);
 }).filter((frame): frame is Frame => Boolean(frame));
 
 const parseDbc = (text: string, warnings: string[]) => {
