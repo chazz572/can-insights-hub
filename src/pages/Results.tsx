@@ -180,7 +180,7 @@ const TimingLineChart = ({ data }: { data: unknown }) => {
 const SystemsBadges = ({ data }: { data: unknown }) => {
   const rows = toRecordArray(data);
   if (!rows.length) return <JsonTable data={data} />;
-  return <div className="flex flex-wrap gap-2">{rows.map((row, index) => <span key={index} className="rounded-lg border border-glass-border bg-secondary px-3 py-2 text-sm font-semibold text-secondary-foreground shadow-glow">{renderText(row.category ?? row.key ?? row.system ?? row.value)}</span>)}</div>;
+  return <div className="flex flex-wrap gap-2">{rows.map((row, index) => <span key={index} className="max-w-full break-words rounded-lg border border-glass-border bg-secondary px-3 py-2 text-sm font-semibold leading-5 text-secondary-foreground shadow-glow">{renderText(row.category ?? row.key ?? row.system ?? row.value)}</span>)}</div>;
 };
 
 const MechanicSummary = ({ data }: { data: unknown }) => (
@@ -393,8 +393,8 @@ const ModuleActivityMap = ({ systems }: { systems: unknown }) => {
     <div className="grid gap-4">
       <div className="grid gap-3 sm:grid-cols-3">
         {(Object.entries(groups) as Array<[string, Array<Record<string, unknown>>]>).slice(0, 3).map(([group, items]) => (
-          <div key={group} className="rounded-lg border border-glass-border bg-glass p-4 backdrop-blur">
-            <p className="text-xs font-bold uppercase text-muted-foreground">{titleCase(group)}</p>
+          <div key={group} className="min-w-0 rounded-lg border border-glass-border bg-glass p-4 backdrop-blur">
+            <p className="break-words text-xs font-bold uppercase leading-5 text-muted-foreground">{titleCase(group)}</p>
             <p className="mt-2 text-3xl font-extrabold text-primary">{items.length}</p>
             <p className="mt-1 text-xs text-muted-foreground">active identifier{items.length === 1 ? "" : "s"}</p>
           </div>
@@ -406,10 +406,10 @@ const ModuleActivityMap = ({ systems }: { systems: unknown }) => {
           const confidence = Math.round((numericValue(row, ["confidence_score", "confidence"]) || 0.55) * 100);
           const moduleType = renderText(row.module_type ?? row.category ?? "active").replace(/_/g, " ");
           return (
-            <div key={`${renderText(row.id ?? row.key)}-${index}`} className="rounded-lg border border-glass-border bg-glass p-4 backdrop-blur transition-all duration-300 hover:border-primary/40 hover:shadow-glow">
+            <div key={`${renderText(row.id ?? row.key)}-${index}`} className="min-w-0 overflow-hidden rounded-lg border border-glass-border bg-glass p-4 backdrop-blur transition-all duration-300 hover:border-primary/40 hover:shadow-glow">
               <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0 flex-1">
-                  <p className="font-mono text-sm font-bold text-foreground">ID {renderText(row.id ?? row.key)}</p>
+                  <p className="break-all font-mono text-sm font-bold leading-5 text-foreground">ID {renderText(row.id ?? row.key)}</p>
                   <p className="mt-1 break-words text-xs font-semibold uppercase leading-5 text-primary">{titleCase(moduleType)}</p>
                 </div>
                 <span className="grid size-10 shrink-0 place-items-center rounded-lg border border-glass-border bg-gradient-subtle text-primary shadow-glow"><Car className="size-5" /></span>
@@ -417,9 +417,9 @@ const ModuleActivityMap = ({ systems }: { systems: unknown }) => {
               <div className="mt-4 h-2 overflow-hidden rounded-full bg-secondary">
                 <div className="h-full rounded-full bg-gradient-accent" style={{ width: `${Math.min(100, Math.max(8, confidence))}%` }} />
               </div>
-              <div className="mt-3 flex flex-wrap items-center justify-between gap-2 text-xs text-muted-foreground">
-                <span>{confidence}% heuristic confidence</span>
-                <span className="break-words font-mono">{renderText(row.category ?? "CAN")}</span>
+              <div className="mt-3 grid min-w-0 gap-2 text-xs text-muted-foreground sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)] sm:items-start">
+                <span className="min-w-0 break-words">{confidence}% heuristic confidence</span>
+                <span className="min-w-0 break-all font-mono sm:text-right">{renderText(row.category ?? "CAN")}</span>
               </div>
               {row.reasoning ? <p className="mt-3 break-words text-xs leading-5 text-muted-foreground">{renderText(row.reasoning)}</p> : null}
             </div>
