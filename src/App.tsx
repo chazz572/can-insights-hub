@@ -18,7 +18,7 @@ const App = () => {
 
   useEffect(() => {
     checkBackendHealth().catch(() => {
-      setBackendError("Backend is offline. Start the FastAPI server on http://localhost:8000 and refresh the app.");
+      setBackendError("Backend is offline. Start the FastAPI server on http://127.0.0.1:8000 and refresh the app.");
     });
   }, []);
 

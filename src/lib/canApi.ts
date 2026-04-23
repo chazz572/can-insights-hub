@@ -1,9 +1,9 @@
-const API_BASE_URL = "http://localhost:8000/api";
+const API_BASE_URL = "http://127.0.0.1:8000/api";
 
 export type JsonRecord = Record<string, unknown>;
 
 export interface AnalysisResult {
-  summary?: string;
+  summary?: string | { text?: string; [key: string]: unknown };
   total_messages?: number;
   unique_ids?: number;
   id_stats?: JsonRecord[];
@@ -14,6 +14,7 @@ export interface AnalysisResult {
     possible_rpm_ids?: unknown[];
     possible_pedal_ids?: unknown[];
   };
+  diagnostics?: JsonRecord;
   [key: string]: unknown;
 }
 
@@ -33,7 +34,7 @@ export const uploadCsv = async (file: File): Promise<string> => {
   const payload = await fetch(`${API_BASE_URL}/upload`, {
     method: "POST",
     body: formData,
-  }).then((response) => parseJsonResponse<{ file_id?: string }>(response));
+  }).then((response) => parseJsonResponse<{ file_id?: string; filename?: string }>(response));
 
   if (!payload.file_id) {
     throw new Error("Upload succeeded, but no file_id was returned.");
