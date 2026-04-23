@@ -237,7 +237,13 @@ const convertFile = async (file: File): Promise<ConversionResult> => {
     return true;
   });
   if (!deduped.length) throw new Error(`No valid CAN frames found in ${file.name}. Try ASC, CSV, TRC, candump, CRTD, or a text export if this is a proprietary binary log.`);
-  const malformed = text.split(/\r?\n/).filter((line) => line.trim()).length - deduped.length;
+  const meaningfulLines = text.split(/\r?\n/).filter((line) => {
+    const trimmed = line.trim();
+    if (!trimmed) return false;
+    if (format === "TRC" && (trimmed.startsWith(";") || trimmed.startsWith("$"))) return false;
+    return true;
+  }).length;
+  const malformed = meaningfulLines - deduped.length;
   if (malformed > 0 && format !== "CSV" && format !== "BLF" && format !== "MDF/MF4") warnings.push(`${malformed} line(s) were skipped because they did not look like valid CAN frames.`);
   return { format, csv: toCsv(deduped), frameCount: deduped.length, warnings };
 };
