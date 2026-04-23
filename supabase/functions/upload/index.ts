@@ -219,7 +219,7 @@ const parseDbc = (text: string, warnings: string[]) => {
     const id = String(Number(message[1]));
     const dlc = Math.max(1, Math.min(Number(message[2]) || 8, 8));
     const signalCount = Math.min(signalCounts.get(id) ?? 0, 255).toString(16).padStart(2, "0");
-    return normalizeFrame(String(index), id, [signalCount, ...Array.from({ length: dlc - 1 }, () => "00")], dlc, messageMetadata.get(id)?.slice(0, 1800));
+    return normalizeFrame(String(index), id, [signalCount, ...Array.from({ length: dlc - 1 }, () => "00")], dlc, messageMetadata.get(id)?.slice(0, 1800), 10);
   }).filter((frame): frame is Frame => Boolean(frame));
 
   if (frames.length) warnings.push("DBC files contain message definitions, not live traffic. CANAI preserved message and signal names as metadata for message, signal, and likely ECU-structure review only; vehicle type is not inferred from a DBC file alone.");

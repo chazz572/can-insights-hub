@@ -498,6 +498,8 @@ const runAnalysis = (csv: string) => {
     decimal_id: Number(item.id),
     hex_id: formatCanIdHex(item.id),
     normalized_id: item.id,
+    raw_id_examples: [...new Set((metadataById.get(item.id) ?? "").match(/raw_can_id=([^;]+)/g)?.map((value) => value.replace(/^raw_can_id=/, "")) ?? [])].slice(0, 4),
+    declared_id_bases: [...new Set((metadataById.get(item.id) ?? "").match(/id_base=([^;]+)/g)?.map((value) => value.replace(/^id_base=/, "")) ?? [])].slice(0, 4),
     frame_count: item.count,
     percentage: item.percentage,
   }));
