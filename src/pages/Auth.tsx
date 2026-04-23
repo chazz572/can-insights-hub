@@ -65,7 +65,7 @@ const Auth = () => {
           <div className="mb-3 grid size-14 place-items-center rounded-lg bg-gradient-accent text-primary-foreground shadow-glow">
             <BrainCircuit className="size-7" />
           </div>
-          <CardTitle className="text-3xl">Access CANAI</CardTitle>
+          <CardTitle className="text-3xl">Access CJL CAN Intelligence Platform</CardTitle>
           <CardDescription>Secure workspace login for diagnostics, fleet records, and saved analysis history.</CardDescription>
         </CardHeader>
         <CardContent>
