@@ -452,7 +452,8 @@ const runAnalysis = (csv: string) => {
   const isExplicitDbcDefinition = metadataTextForRouting.includes("source_file_type=dbc_definition");
   const isExplicitLogWithDbc = metadataTextForRouting.includes("source_file_type=log_with_dbc");
   const hasRealDbcSignalMetadata = /dbc_message=|signal=.+\|start=.+\|length=/i.test(metadataTextForRouting);
-  const isDbcReference = isExplicitDbcDefinition || (hasRealDbcSignalMetadata && totalMessages === idCounts.size);
+  const rawFrameCount = [...metadataById.values()].filter((metadata) => metadata.includes("source_file_type=log_with_dbc")).length;
+  const isDbcReference = isExplicitDbcDefinition && !isExplicitLogWithDbc || (hasRealDbcSignalMetadata && totalMessages === idCounts.size && rawFrameCount === 0);
   const pipeline: PipelineKind = isDbcReference ? "dbc" : isExplicitLogWithDbc || hasRealDbcSignalMetadata ? "log_dbc" : "log";
   const pipelineLabel = pipeline === "dbc" ? "DBC definition viewer" : pipeline === "log_dbc" ? "Full Power decoded LOG + DBC analysis" : "Raw CAN log intelligence";
   const idStats = [...idCounts.entries()]
