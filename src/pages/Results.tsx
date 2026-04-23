@@ -611,6 +611,10 @@ const Results = () => {
               <CollapsiblePanel title="Timing" icon={<Clock className="size-5" />}><TimingLineChart data={diagnostics.timing} /><JsonTable data={diagnostics.timing} /></CollapsiblePanel>
               <CollapsiblePanel title="Signals" icon={<Radar className="size-5" />}><JsonTable data={diagnostics.signals} /></CollapsiblePanel>
               <CollapsiblePanel title="Systems" icon={<Gauge className="size-5" />}><SystemsBadges data={diagnostics.systems} /><div className="mt-4"><JsonTable data={diagnostics.systems} /></div></CollapsiblePanel>
+              <CollapsiblePanel title="ID Deep Dive" icon={<Hash className="size-5" />}><JsonTable data={diagnostics.id_deep_dive} /></CollapsiblePanel>
+              <CollapsiblePanel title="Network Health" icon={<Zap className="size-5" />}><JsonTable data={diagnostics.network_health} /></CollapsiblePanel>
+              <CollapsiblePanel title="Driver Behavior" icon={<Car className="size-5" />}><JsonTable data={diagnostics.driver_behavior} /></CollapsiblePanel>
+              <CollapsiblePanel title="Event Timeline" icon={<TimerReset className="size-5" />}><JsonTable data={diagnostics.event_timeline} /></CollapsiblePanel>
               <CollapsiblePanel title="Mechanic Summary" icon={<Wrench className="size-5" />} defaultOpen><MechanicSummary data={diagnostics.mechanic_summary} /></CollapsiblePanel>
             </div>
           </AnalysisCard>
