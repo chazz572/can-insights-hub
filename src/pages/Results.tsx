@@ -216,15 +216,6 @@ const describeVehicleState = ({ speedCandidates, rpmCandidates, pedalCandidates,
   return "I cannot confidently tell whether the car was driving or parked from this log alone; the recording has some activity, but not enough clear speed/RPM/pedal evidence to call it one way.";
 };
 
-const NarrativeBlock = ({ title, items }: { title: string; items: string[] }) => (
-  <section className="rounded-lg border border-glass-border bg-glass p-4 backdrop-blur">
-    <h4 className="mb-3 text-sm font-bold uppercase text-primary">{title}</h4>
-    <ul className="space-y-2 text-sm leading-6 text-muted-foreground">
-      {items.map((item) => <li key={item} className="flex gap-2"><span className="mt-2 size-1.5 shrink-0 rounded-full bg-primary" /> <span>{item}</span></li>)}
-    </ul>
-  </section>
-);
-
 const buildPlainEnglishSummaryReport = ({ data, fileId, anomalies, suspectIds, componentHealth }: { data: AnalysisResult; fileId?: string; anomalies: number; suspectIds: number; componentHealth: number }) => {
   const vehicleBehavior = data.vehicle_behavior ?? {};
   const speedCandidates = vehicleBehavior.possible_speed_ids ?? [];
