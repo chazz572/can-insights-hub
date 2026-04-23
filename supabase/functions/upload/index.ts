@@ -244,6 +244,23 @@ const mergeLogWithDbcMetadata = (logCsv: string, dbcCsv: string) => {
   }).join("\n");
 };
 
+const mergeRawLogCsvs = (items: Array<{ filename: string; converted: ConversionResult }>) => {
+  const rows = items.flatMap(({ filename, converted }, fileIndex) => converted.csv.split(/\r?\n/).slice(1).filter((line) => line.trim()).map((line, rowIndex) => {
+    const values = parseCsvLine(line);
+    const timestamp = Number(values[0] ?? rowIndex);
+    const source = `source_file=${filename};raw_format=${converted.format}`;
+    const existingMetadata = values[4]?.replace(/^"|"$/g, "").replace(/""/g, '"') ?? "";
+    return {
+      sortTime: Number.isFinite(timestamp) ? timestamp : fileIndex * 1_000_000_000 + rowIndex,
+      rowIndex,
+      values: [values[0] ?? String(rowIndex), values[1] ?? "", values[2] ?? "0", values[3] ?? "", [source, existingMetadata].filter(Boolean).join(";")],
+    };
+  }));
+
+  const sorted = rows.sort((a, b) => a.sortTime - b.sortTime || a.rowIndex - b.rowIndex);
+  return ["timestamp,id,dlc,data,metadata", ...sorted.map((row) => [csvEscape(row.values[0]), csvEscape(row.values[1]), row.values[2], csvEscape(row.values[3]), csvEscape(row.values[4])].join(","))].join("\n");
+};
+
 const convertFile = async (file: File): Promise<ConversionResult> => {
   const bytes = new Uint8Array(await file.arrayBuffer());
   const text = new TextDecoder("utf-8", { fatal: false }).decode(bytes);
@@ -302,37 +319,77 @@ Deno.serve(async (req) => {
         return { file, error: error instanceof Error ? error.message : "Conversion failed" };
       }
     }));
-    const dbcReference = convertedFiles.find((item): item is { file: File; converted: ConversionResult } => "converted" in item && item.converted.pipeline === "dbc")?.converted.csv;
-    const results = [];
+    const successfulConverted = convertedFiles.filter((item): item is { file: File; converted: ConversionResult } => "converted" in item);
+    const failedResults = convertedFiles.filter((item): item is { file: File; error: string } => "error" in item).map((item) => ({ filename: item.file.name, file_type: "unsupported", detected_format: "unsupported", analysis_pipeline: "unsupported_file", error: item.error }));
+    const rawLogItems = successfulConverted.filter((item) => item.converted.pipeline === "log");
+    const dbcItems = successfulConverted.filter((item) => item.converted.pipeline === "dbc");
+    const dbcReference = dbcItems[0]?.converted.csv;
+    const results = [...failedResults];
 
-    for (const item of convertedFiles) {
-      try {
-        if ("error" in item) {
-          results.push({ filename: item.file.name, file_type: "unsupported", detected_format: "unsupported", analysis_pipeline: "unsupported_file", error: item.error });
-          continue;
+    if (rawLogItems.length) {
+      const mergedCsv = mergeRawLogCsvs(rawLogItems.map((item) => ({ filename: item.file.name, converted: item.converted })));
+      const converted = dbcReference
+        ? {
+          format: "CSV" as CanFormat,
+          csv: mergeLogWithDbcMetadata(mergedCsv, dbcReference),
+          frameCount: rawLogItems.reduce((sum, item) => sum + item.converted.frameCount, 0),
+          pipeline: "log_dbc" as const,
+          warnings: [
+            `${rawLogItems.length} raw CAN log file(s) were normalized and merged chronologically into one dataset.`,
+            `DBC decoder ${dbcItems[0].file.name} was applied to the merged raw log dataset.`,
+            ...(dbcItems.length > 1 ? [`${dbcItems.length - 1} additional DBC file(s) were not merged; only the first DBC was used as the decoder.`] : []),
+            ...rawLogItems.flatMap((item) => item.converted.warnings),
+          ],
         }
+        : {
+          format: "CSV" as CanFormat,
+          csv: mergedCsv,
+          frameCount: rawLogItems.reduce((sum, item) => sum + item.converted.frameCount, 0),
+          pipeline: "log" as const,
+          warnings: [
+            `${rawLogItems.length} raw CAN log file(s) were normalized and merged chronologically into one dataset.`,
+            ...rawLogItems.flatMap((item) => item.converted.warnings),
+          ],
+        };
 
-        const { file, converted: initialConverted } = item;
-        const converted = dbcReference && initialConverted.pipeline === "log"
-          ? { ...initialConverted, csv: mergeLogWithDbcMetadata(initialConverted.csv, dbcReference), pipeline: "log_dbc" as const, warnings: [...initialConverted.warnings, "A DBC was uploaded in the same batch, so this log is routed through Full Power LOG+DBC analysis."] }
-          : initialConverted;
+      const fileId = crypto.randomUUID();
+      const storagePath = `${fileId}.csv`;
+      const normalizedBytes = new TextEncoder().encode(converted.csv);
+      const { error: uploadError } = await supabase.storage.from("can-csv-uploads").upload(storagePath, normalizedBytes, { contentType: "text/csv", upsert: false });
+      if (uploadError) throw new Error(`Storage upload failed: ${uploadError.message}`);
+      const { error: metadataError } = await supabase.from("can_uploads").insert({
+        file_id: fileId,
+        filename: rawLogItems.length === 1 ? rawLogItems[0].file.name : `merged-${rawLogItems.length}-raw-can-logs.csv`,
+        storage_path: storagePath,
+        content_type: "text/csv",
+        file_size: normalizedBytes.byteLength,
+      });
+      if (metadataError) throw new Error(`Upload metadata save failed: ${metadataError.message}`);
+      results.push({
+        file_id: fileId,
+        filename: rawLogItems.length === 1 ? rawLogItems[0].file.name : `Merged raw CAN logs (${rawLogItems.map((item) => item.file.name).join(", ")})`,
+        detected_format: rawLogItems.map((item) => item.converted.format).join(" + "),
+        file_type: converted.pipeline,
+        analysis_pipeline: converted.pipeline === "log_dbc" ? "full_power_merged_log_dbc_decoding" : "merged_raw_log_intelligence",
+        frame_count: converted.frameCount,
+        warnings: converted.warnings,
+      });
+    } else {
+      for (const item of dbcItems) {
         const fileId = crypto.randomUUID();
         const storagePath = `${fileId}.csv`;
-        const normalizedBytes = new TextEncoder().encode(converted.csv);
+        const normalizedBytes = new TextEncoder().encode(item.converted.csv);
         const { error: uploadError } = await supabase.storage.from("can-csv-uploads").upload(storagePath, normalizedBytes, { contentType: "text/csv", upsert: false });
         if (uploadError) throw new Error(`Storage upload failed: ${uploadError.message}`);
         const { error: metadataError } = await supabase.from("can_uploads").insert({
           file_id: fileId,
-          filename: file.name,
+          filename: item.file.name,
           storage_path: storagePath,
           content_type: "text/csv",
           file_size: normalizedBytes.byteLength,
         });
         if (metadataError) throw new Error(`Upload metadata save failed: ${metadataError.message}`);
-        const pipeline = converted.pipeline;
-        results.push({ file_id: fileId, filename: file.name, detected_format: converted.format, file_type: pipeline, analysis_pipeline: pipeline === "dbc" ? "dbc_definition_viewer" : pipeline === "log_dbc" ? "full_power_log_dbc_decoding" : "raw_log_intelligence", frame_count: converted.frameCount, warnings: converted.warnings });
-      } catch (error) {
-        results.push({ filename: file.name, error: error instanceof Error ? error.message : "Conversion failed" });
+        results.push({ file_id: fileId, filename: item.file.name, detected_format: item.converted.format, file_type: "dbc", analysis_pipeline: "dbc_definition_viewer", frame_count: item.converted.frameCount, warnings: item.converted.warnings });
       }
     }
 
