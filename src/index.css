@@ -153,6 +153,15 @@ All colors MUST be HSL.
     background-attachment: fixed;
   }
 
+  main * {
+    min-width: 0;
+  }
+
+  main :where(h1, h2, h3, h4, p, span, a, button, label) {
+    overflow-wrap: anywhere;
+    word-break: break-word;
+  }
+
   ::selection {
     @apply bg-primary text-primary-foreground;
   }
