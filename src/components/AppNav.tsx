@@ -56,7 +56,7 @@ export const AppNav = () => {
     { to: "/workspace", label: "Bay", icon: LayoutDashboard },
     { to: "/upload", label: "Intake", icon: UploadCloud },
     { to: resultsPath, label: "Diagnose", icon: BarChart3 },
-    { to: "/compare", label: "Compare", icon: GitCompareArrows, highlight: true },
+    { to: "/compare", label: "Compare", icon: GitCompareArrows },
     { to: "/engineering", label: "Bench", icon: TerminalSquare },
     { to: "/visualize", label: "Scope", icon: ChartNoAxesCombined },
     { to: "/fleet", label: "Fleet", icon: Car },
@@ -155,7 +155,7 @@ export const AppNav = () => {
           {[
             links[0],
             links[2],
-            { ...links[4], highlight: true },
+            links[4],
             links[3],
             links[7],
           ].map((item) => (
