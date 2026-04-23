@@ -260,11 +260,11 @@ const buildPlainEnglishSummaryReport = ({ data, fileId, anomalies, suspectIds, c
   const dynamicDetails = deepDiveRows.filter((row) => numericValue(row, ["payload_change_rate"]) > 0.15 || toRecordArray(row.volatile_bytes).length > 0).slice(0, 5).map((row) => `${renderText(row.id ?? row.key)} changes ${Math.round(numericValue(row, ["payload_change_rate"]) * 100)}% of frames; volatile bytes ${toRecordArray(row.volatile_bytes).map((item) => renderText(item.value ?? item.key ?? item.item)).join(", ") || "not isolated"}`);
   const staticDetails = deepDiveRows.filter((row) => numericValue(row, ["payload_change_rate"]) <= 0.05).slice(0, 5).map((row) => `${renderText(row.id ?? row.key)} (${numericValue(row, ["messages", "count"])} frames)`);
   const counterLikeIds = deepDiveRows.filter((row) => String(row.likely_role ?? "").includes("single-byte") || (numericValue(row, ["payload_change_rate"]) > 0.15 && toRecordArray(row.volatile_bytes).length <= 2)).map((row) => renderText(row.id ?? row.key)).slice(0, 6);
-  const systemGroups = Object.entries(systems.reduce((acc: Record<string, string[]>, row) => {
+  const systemGroups = (Object.entries(systems.reduce((acc: Record<string, string[]>, row) => {
     const label = titleCase(renderText(row.module_type ?? row.category ?? "unresolved_active_module").replace(/_/g, " "));
     acc[label] = [...(acc[label] ?? []), renderText(row.id ?? row.key)];
     return acc;
-  }, {})).sort((a, b) => b[1].length - a[1].length).slice(0, 5);
+  }, {})) as Array<[string, string[]]>).sort((a, b) => b[1].length - a[1].length).slice(0, 5);
 
   const sections = [
     ["Vehicle Activity", [movementSummary, speedCandidates.length ? `Speed-related candidates were found (${speedCandidates.map(renderText).slice(0, 5).join(", ")}), so movement behavior can be investigated further.` : "No speed signal was detected, so the capture does not show reliable vehicle movement, acceleration, cruising, slowing, or stopping.", pedalCandidates.length ? `Pedal/brake-style candidates were found (${pedalCandidates.map(renderText).slice(0, 5).join(", ")}), which are good targets for validation.` : "No accelerator, brake, or pedal signal was detected. The log contains no strong evidence of driver input changes.", rpmCandidates.length ? `RPM-style candidates were found (${rpmCandidates.map(renderText).slice(0, 5).join(", ")}), which may help separate engine-on idle from driving after validation.` : "No RPM signal was detected. If the engine was running, this capture did not include a clear engine-speed frame."]],
