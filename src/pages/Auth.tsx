@@ -1,5 +1,5 @@
 import { FormEvent, useState } from "react";
-import { BrainCircuit, Chrome, Loader2, LockKeyhole, Mail } from "lucide-react";
+import { BrainCircuit, Chrome, Loader2, LockKeyhole, Mail, ShieldCheck, Users, Wrench } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 
 import { Button } from "@/components/ui/button";
@@ -59,8 +59,17 @@ const Auth = () => {
   };
 
   return (
-    <main className="grid min-h-screen place-items-center px-4 py-10">
-      <Card className="w-full max-w-md animate-fade-up overflow-hidden">
+    <main className="mx-auto grid min-h-screen max-w-6xl gap-6 px-4 py-10 lg:grid-cols-[0.95fr_1fr] lg:items-center">
+      <section className="animate-fade-up rounded-lg border border-glass-border bg-glass-strong p-5 shadow-dashboard backdrop-blur sm:p-7">
+        <p className="inline-flex items-center gap-2 rounded-lg border border-glass-border bg-glass px-3 py-1 text-sm font-semibold uppercase text-primary shadow-glow"><ShieldCheck className="size-4" /> Secure Workspace</p>
+        <h1 className="mt-5 text-4xl font-extrabold tracking-tight sm:text-5xl">Professional account access for CAN diagnostics teams.</h1>
+        <p className="mt-4 text-sm leading-6 text-muted-foreground">Sign in to save analysis history, manage fleet records, prepare reports, and keep engineering workflows connected.</p>
+        <div className="mt-6 grid gap-3">
+          {[[BrainCircuit, "Saved diagnostic intelligence"], [Users, "Team-ready workspace"], [Wrench, "Fleet and repair workflows"]].map(([Icon, label]) => <div key={String(label)} className="flex items-center gap-3 rounded-lg border border-glass-border bg-glass p-3 text-sm font-semibold text-foreground"><Icon className="size-4 text-primary" />{String(label)}</div>)}
+        </div>
+      </section>
+
+      <Card className="w-full animate-fade-up overflow-hidden">
         <CardHeader>
           <div className="mb-3 grid size-14 place-items-center rounded-lg bg-gradient-accent text-primary-foreground shadow-glow">
             <BrainCircuit className="size-7" />
