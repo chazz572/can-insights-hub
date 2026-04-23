@@ -150,7 +150,6 @@ const Workspace = () => {
       <div className="mt-5 grid gap-3 lg:grid-cols-3">
         {[["Analyze", "Upload any supported CAN artifact and route it to the correct pipeline.", ScanLine], ["Operate", "Use fleet and comparison workflows to track vehicle readiness.", Route], ["Deliver", "Generate customer-safe reports and integration-ready outputs.", FileText]].map(([title, text, Icon]) => (
           <div key={String(title)} className="data-panel relative overflow-hidden p-5">
-            <div className="absolute right-0 top-0 h-full w-1 bg-primary" />
             <Icon className="mb-3 size-6 text-primary" />
             <h2 className="font-display text-lg font-bold uppercase tracking-wider">{String(title)}</h2>
             <p className="mt-1.5 font-sans text-sm leading-6 text-muted-foreground">{String(text)}</p>
