@@ -690,10 +690,26 @@ const runAnalysis = (csv: string) => {
     possible_pedal_ids: [...pedalIds],
   };
 
-  const decodedSignals = pipeline === "log_dbc" ? analogSignals.map((signal) => {
+  const decodedSignals = pipeline === "log_dbc" ? analogSignals.flatMap((signal) => {
     const dbcSignal = dbcSignals.find((candidate) => String(candidate.message_id) === String(signal.id) && Number(candidate.start_bit) <= Number(signal.bit_start ?? 0) && Number(candidate.start_bit) + Number(candidate.bit_length) >= Number(signal.bit_start ?? 0));
+    if (!dbcSignal) return [];
     const rawMidpoint = (Number(signal.min_value ?? 0) + Number(signal.max_value ?? 0)) / 2;
-    return { id: signal.id, signal_name: dbcSignal?.signal_name ?? signal.likely_signal_type, unit: dbcSignal?.unit ?? "raw", decoded_min: dbcSignal ? Number(signal.min_value ?? 0) * Number(dbcSignal.factor) + Number(dbcSignal.offset) : signal.min_value, decoded_max: dbcSignal ? Number(signal.max_value ?? 0) * Number(dbcSignal.factor) + Number(dbcSignal.offset) : signal.max_value, latest_estimate: dbcSignal ? Number((rawMidpoint * Number(dbcSignal.factor) + Number(dbcSignal.offset)).toFixed(3)) : rawMidpoint, evidence: signal.evidence };
+    const decodedMin = Number(signal.min_value ?? 0) * Number(dbcSignal.factor) + Number(dbcSignal.offset);
+    const decodedMax = Number(signal.max_value ?? 0) * Number(dbcSignal.factor) + Number(dbcSignal.offset);
+    return [{
+      id: signal.id,
+      signal_name: dbcSignal.signal_name,
+      unit: dbcSignal.unit || "raw",
+      start_bit: dbcSignal.start_bit,
+      bit_length: dbcSignal.bit_length,
+      endianness: dbcSignal.endianness,
+      factor: dbcSignal.factor,
+      offset: dbcSignal.offset,
+      decoded_min: Number(decodedMin.toFixed(3)),
+      decoded_max: Number(decodedMax.toFixed(3)),
+      latest_estimate: Number((rawMidpoint * Number(dbcSignal.factor) + Number(dbcSignal.offset)).toFixed(3)),
+      observed_trend: signal.direction,
+    }];
   }) : [];
 
   const idClassifications = idDeepDive.map((item) => {
@@ -738,38 +754,36 @@ const runAnalysis = (csv: string) => {
   const correlationPairs = idDeepDive.flatMap((left, leftIndex) => idDeepDive.slice(leftIndex + 1).map((right) => ({ left: left.id, right: right.id, correlation: Number((1 - Math.min(1, Math.abs(Number(left.average_period) - Number(right.average_period)))).toFixed(4)), relationship: "timing_cadence_similarity" }))).filter((item) => item.correlation >= 0.72).slice(0, 24);
   const enhancedNetworkHealth = { ...networkHealth, bus_health_score: Math.max(0, Math.min(100, 100 - anomalies.length * 4 - Math.round(Number(networkHealth.timing_irregularity_score) * 120))), chatter_classification: idStats.some((item) => item.percentage > 35) ? "dominant_id_chatter" : totalMessages / Math.max(idCounts.size, 1) > 60 ? "busy_periodic_chatter" : "normal_idle_chatter", dropout_events: timing.filter((item) => Number(item.max_period) > Math.max(Number(item.average_period) * 3, 0.1)).map((item) => ({ id: item.id, max_period: item.max_period, average_period: item.average_period, classification: "possible_gap_or_dropout" })).slice(0, 16) };
   const derivedEvents = enhancedNetworkHealth.dropout_events.map((item, index) => ({ event_index: eventTimeline.length + index + 1, id: item.id, timestamp: null, event_type: "possible_module_dropout", description: `Timing gap detected: max period ${item.max_period}s vs average ${item.average_period}s.`, before_after_hint: "Compare nearby frames to confirm wake/sleep or missing traffic." }));
-  const whatDataShows = [
-    pipeline === "dbc" ? "DBC Summary: this file contains message and signal definitions only. No behavior, motion, health state, or vehicle type can be inferred from a DBC alone." : pipeline === "log_dbc" ? `Decoded LOG + DBC Summary: ${decodedSignals.length} decoded signal candidates were matched against DBC metadata; strongest state is ${behaviorLabel} at ${Math.round(behaviorConfidence * 100)}% confidence when decoded/named evidence supports it.` : hasDefensibleMotion ? `Vehicle State Summary: strongest defensible state is ${behaviorLabel} at ${Math.round(behaviorConfidence * 100)}% confidence.` : baselinePattern.confidence >= 0.7 ? `Vehicle State Summary: ${baselinePattern.label} at ${Math.round(behaviorConfidence * 100)}% confidence. ${baselinePattern.evidence}` : hasBehaviorCandidateEvidence ? `Vehicle State Summary: ${behaviorLabel} at ${Math.round(behaviorConfidence * 100)}% candidate confidence. This is based on byte dynamics, not decoded physical units.` : "Vehicle State Summary: motion cannot be determined from this log because no validated speed, wheel-speed, pedal, brake, steering, gear, torque, engine-RPM, or motor-RPM signal was isolated.",
-    `Vehicle type: ${vehicleType.classification} ${vehicleType.confidence_score ? `(${Math.round(vehicleType.confidence_score * 100)}% confidence)` : ""}. ${vehicleType.reasoning}`,
-    metadataInsights.has_dbc_metadata ? `DBC/OEM evidence: ${metadataInsights.explanation} This metadata is used for structure and decoding support only, not vehicle-type classification by itself.` : "No DBC metadata was available; vehicle type remains unclassified unless explicit decoded EV, hybrid, or ICE signals are present.",
-    baselinePattern.confidence >= 0.7 && !hasDefensibleMotion ? `Evidence: ${baselinePattern.evidence} Counter/state-like byte movement is not reported as acceleration unless a DBC or controlled capture validates it.` : behavioralEvidence.length ? `Evidence: ${behavioralEvidence.slice(0, 6).join(" ")}${hasDefensibleMotion ? "" : " These remain unvalidated behavior candidates until decoded with a DBC or controlled captures."}` : "Evidence: no correlated directional speed, wheel, pedal, brake, steering, gear, torque, RPM, or sensor-like byte movement crossed threshold.",
-    `Protocol behavior: ${protocolInsights.likely_protocol}; extended-ID ratio ${(protocolInsights.extended_id_ratio * 100).toFixed(1)}%, diagnostic-shaped IDs ${protocolInsights.diagnostic_id_candidates.join(", ") || "not present"}.`,
-    `Reverse Engineering Insights: ${analogSignals.slice(0, 8).map((signal) => `${signal.id}:${signal.likely_signal_type} bytes ${signal.byte_start}-${Number(signal.byte_start ?? 0) + 1}`).join("; ") || "no strong analog candidate crossed threshold"}.`,
-    subtleAbnormalities.length ? `Anomalies & Health Indicators: ${subtleAbnormalities.slice(0, 6).map((item) => `${item.type} on ${item.id} (${item.evidence})`).join("; ")}.` : "Anomalies & Health Indicators: no threshold-level jitter, drift, sparse-ID, stuck-byte, or entropy-spike evidence was isolated.",
-    ecuClusters.length ? `ECU clusters: ${ecuClusters.slice(0, 4).map((cluster) => `${cluster.cluster_id} (${cluster.ids.join(", ")})`).join("; ")}.` : "ECU clusters: grouping evidence was weak because timing cadence and payload structures did not form repeated multi-ID clusters.",
-    `What Cannot Be Determined: vehicle type remains unclassified without explicit EV/hybrid/ICE signals; driving action remains unproven without decoded speed/pedal/brake/steering/RPM/torque signals, a matching DBC, or controlled validation captures.`,
+  const topIds = idStats.slice(0, 5).map((item) => `${item.id} (${item.count} frames)`).join(", ");
+  const timingSummary = timing.slice(0, 5).map((item) => `${item.id}: ${Number(item.average_period).toFixed(3)}s avg, ${Number(item.period_jitter).toFixed(3)}s jitter`).join("; ");
+  const activeEcus = systems.slice(0, 8).map((item) => `${item.id} ${String(item.category ?? "active ECU")}`).join(", ");
+  const decodedMotionSignals = decodedSignals.filter((signal) => /speed|wheel|rpm|torque|pedal|brake|steer|soc|charge|temp/i.test(String(signal.signal_name)));
+  const decodedEvents = decodedMotionSignals.slice(0, 8).map((signal) => `${signal.signal_name} ranged ${signal.decoded_min}–${signal.decoded_max}${signal.unit ? ` ${signal.unit}` : ""} (${signal.observed_trend})`);
+  const logSummaryLines = [
+    `This raw CAN log contains ${totalMessages} frames across ${idCounts.size} active IDs. The busiest IDs were ${topIds || "not isolated"}.`,
+    baselinePattern.confidence >= 0.7 ? baselinePattern.evidence : `${idDeepDive.filter((item) => Number(item.payload_change_rate) > 0.35).length} IDs changed during the capture and ${idDeepDive.filter((item) => Number(item.payload_change_rate) <= 0.05).length} stayed mostly static.`,
+    `Timing review: ${timingSummary || "not enough timestamp data to calculate stable periods"}.`,
+    subtleAbnormalities.length ? `Items to review: ${subtleAbnormalities.slice(0, 4).map((item) => `${item.type.replace(/_/g, " ")} on ${item.id}`).join("; ")}.` : "No major timing gaps, static-payload warnings, or sparse-frame issues crossed the alert threshold.",
+    "No vehicle type is inferred from a raw log. Without decoded signals, the platform reports network behavior and activity rather than claiming speed, braking, RPM, or torque.",
   ];
-  const detailedSummary = [
-    "Vehicle State Summary",
-    `- ${whatDataShows[0]}`,
-    "",
-    "Evidence",
-    `- ${whatDataShows[3]}`,
-    `- ${whatDataShows[4]}`,
-    "",
-    "Reverse Engineering Insights",
-    `- ${whatDataShows[5]}`,
-    `- ${whatDataShows[7]}`,
-    "",
-    "Anomalies & Health Indicators",
-    `- ${whatDataShows[6]}`,
-    "",
-    "What the Data Actually Shows",
-    ...whatDataShows.map((item) => `- ${item}`),
-    "",
-    "What Cannot Be Determined",
-    `- ${whatDataShows[8]}`,
-  ].join("\n");
+  const dbcSummaryLines = [
+    `This DBC defines ${dbcMessages.length} messages and ${dbcSignals.length} signals.`,
+    `Key signals: ${dbcSignals.slice(0, 10).map((signal) => `${signal.signal_name}${signal.unit ? ` (${signal.unit})` : ""}`).join(", ") || "none parsed"}.`,
+    `Multiplexing: ${dbcSignals.filter((signal) => signal.multiplex).length ? dbcSignals.filter((signal) => signal.multiplex).slice(0, 8).map((signal) => `${signal.signal_name} uses ${signal.multiplex}`).join("; ") : "no multiplexed signals found"}.`,
+    "This is a definition file only, so no driving behavior, vehicle health, timing, or vehicle type is inferred.",
+  ];
+  const logDbcSummaryLines = [
+    `Full Power mode matched this log with DBC metadata and produced ${decodedSignals.length} decoded signal range(s).`,
+    decodedEvents.length ? `Decoded behavior clues: ${decodedEvents.join("; ")}.` : "The DBC was attached, but no changing decoded speed, RPM, torque, pedal, brake, steering, SOC, or temperature signal crossed the activity threshold in this capture.",
+    subtleAbnormalities.length ? `Network issues to review: ${subtleAbnormalities.slice(0, 4).map((item) => `${item.type.replace(/_/g, " ")} on ${item.id}`).join("; ")}.` : "Network timing and payload health did not show major threshold-level issues.",
+    "Decoded physical signals take priority; raw byte heuristics are suppressed unless no decoded context exists for a message.",
+  ];
+  const whatDataShows = pipeline === "log_dbc" ? logDbcSummaryLines : pipeline === "dbc" ? dbcSummaryLines : logSummaryLines;
+  const detailedSummary = pipeline === "log_dbc"
+    ? ["Decoded LOG + DBC Summary", ...logDbcSummaryLines.map((item) => `- ${item}`), "", "Decoded Signals", ...(decodedSignals.slice(0, 12).map((signal) => `- ${signal.signal_name} on ID ${signal.id}: ${signal.decoded_min}–${signal.decoded_max}${signal.unit ? ` ${signal.unit}` : ""}, bit ${signal.start_bit}/${signal.bit_length}`) || ["- No active decoded signal ranges found."])].join("\n")
+    : pipeline === "dbc"
+      ? ["DBC Viewer Summary", ...dbcSummaryLines.map((item) => `- ${item}`)].join("\n")
+      : ["Raw CAN Log Summary", ...logSummaryLines.map((item) => `- ${item}`), "", "Active ECU / Timing View", `- Active IDs: ${activeEcus || "not isolated"}.`, `- Protocol: ${protocolInsights.likely_protocol}; extended-ID ratio ${(protocolInsights.extended_id_ratio * 100).toFixed(1)}%.`].join("\n");
 
   return {
     ok: true,
