@@ -403,33 +403,10 @@ const runAnalysis = (csv: string) => {
   });
 
   const systems = [...idCounts.keys()].map((id) => {
-    const numeric = Number.parseInt(cleanHex(id), 16);
-    const category = Number.isFinite(numeric) && numeric >= 0x18F00000
-      ? "powertrain_or_diagnostic"
-      : Number.isFinite(numeric) && numeric >= 0x700
-        ? "diagnostic"
-        : "body_or_chassis";
-
-    const module_type = category === "diagnostic"
-      ? "diagnostic"
-      : Number.isFinite(numeric) && numeric >= 0x500
-        ? "infotainment_or_cluster"
-        : Number.isFinite(numeric) && numeric >= 0x300
-          ? "body_control_or_security"
-          : Number.isFinite(numeric) && numeric >= 0x180
-            ? "chassis_or_powertrain"
-            : "body_control";
-
-    const metadata = (metadataById.get(id) ?? "").toLowerCase();
-    const metadataModule = containsAny(metadata, ["bms", "battery", "charge", "charger", "hv", "inverter", "motor", "drive", "torque"])
-      ? "ev_powertrain_or_battery"
-      : containsAny(metadata, ["autopilot", "camera", "radar", "gps", "ui_", "display"])
-        ? "adas_or_infotainment"
-        : containsAny(metadata, ["brake", "steering", "wheel", "epas", "esp"])
-          ? "chassis_brake_steering"
-          : module_type;
-    return { id, category: metadataModule.includes("ev_") ? "ev_powertrain_energy" : category, module_type: metadataModule, confidence_score: metadata ? 0.9 : category === "diagnostic" ? 0.82 : 0.58, confidence: metadata ? "dbc_metadata_supported" : "heuristic", reasoning: metadata ? `DBC/message names for ${cleanHex(id)} indicate ${metadataModule}.` : `ID range ${cleanHex(id)} maps heuristically to ${module_type}.` };
-  });
+    const metadata = metadataById.get(id) ?? "";
+    const timingRow = timing.find((row) => row.id === id);
+    return { id, ...classifyModuleFromEvidence({ id, metadata, profile: idProfiles.get(id), timingRow }) };
+  }).sort((a, b) => Number(b.confidence_score) - Number(a.confidence_score));
 
   const idDeepDive = [...idProfiles.entries()].map(([id, profile]) => {
     const periods = [...profile.timestamps].sort((a, b) => a - b).slice(1).map((timestamp, index, sorted) => timestamp - sorted[index]);
