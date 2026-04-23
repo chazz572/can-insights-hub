@@ -77,18 +77,7 @@ export const AppNav = () => {
           ))}
         </nav>
 
-        <div className="mt-5 space-y-2 border-t border-glass-border pt-5">
-          {["Diagnostics", "Engineering", "Fleet", "AI", "SaaS"].map((section) => (
-            <div key={section} className="rounded-lg px-4 py-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground transition-colors hover:text-primary">
-              {section}
-            </div>
-          ))}
-        </div>
-
-        <div className="mt-auto rounded-lg border border-glass-border bg-glass p-4 backdrop-blur">
-          <p className="text-xs font-semibold uppercase text-primary">CJL CAN Intelligence Platform</p>
-          <p className="mt-2 text-sm leading-6 text-muted-foreground">Formats · Diagnostics · Engineering · Fleet · AI</p>
-        </div>
+        <div className="mt-auto" />
       </aside>
 
       <header className="fixed inset-x-0 top-0 z-30 border-b border-glass-border bg-background/70 px-4 py-3 shadow-dashboard backdrop-blur-xl md:left-72 md:px-8">
