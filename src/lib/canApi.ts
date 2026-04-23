@@ -3,6 +3,9 @@ import { supabase } from "@/integrations/supabase/client";
 export type JsonRecord = Record<string, unknown>;
 
 export interface AnalysisResult {
+  file_type?: "log" | "dbc" | "log_dbc" | "batch" | "unsupported" | string;
+  analysis_pipeline?: string;
+  supported_file_type?: boolean;
   summary?: string | { text?: string; [key: string]: unknown };
   total_messages?: number;
   unique_ids?: number;
@@ -32,6 +35,8 @@ export interface UploadResult {
   file_id?: string;
   filename: string;
   detected_format?: string;
+  file_type?: string;
+  analysis_pipeline?: string;
   frame_count?: number;
   warnings?: string[];
   error?: string;

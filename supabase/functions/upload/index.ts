@@ -155,11 +155,12 @@ const parseDbc = (text: string, warnings: string[]) => {
       continue;
     }
 
-    const signal = line.match(/^\s*SG_\s+(\S+)\s*:/);
+    const signal = line.match(/^\s*SG_\s+(\S+)(?:\s+(M|m\d+))?\s*:\s*(\d+)\|(\d+)@(\d)([+-])\s*\(([\d.+-eE]+),([\d.+-eE]+)\)\s*\[([\d.+-eE]+)\|([\d.+-eE]+)\]\s*"([^"]*)"/);
     if (currentMessageId && signal) {
       signalCounts.set(currentMessageId, (signalCounts.get(currentMessageId) ?? 0) + 1);
       const existing = messageMetadata.get(currentMessageId) ?? "";
-      messageMetadata.set(currentMessageId, `${existing};signal=${signal[1]}`);
+      const details = `signal=${signal[1]}|multiplex=${signal[2] ?? "none"}|start=${signal[3]}|length=${signal[4]}|endian=${signal[5] === "1" ? "intel" : "motorola"}|signed=${signal[6] === "-"}|factor=${signal[7]}|offset=${signal[8]}|min=${signal[9]}|max=${signal[10]}|unit=${signal[11]}`;
+      messageMetadata.set(currentMessageId, `${existing};${details}`);
     }
   }
 
@@ -288,7 +289,8 @@ Deno.serve(async (req) => {
           file_size: normalizedBytes.byteLength,
         });
         if (metadataError) throw new Error(`Upload metadata save failed: ${metadataError.message}`);
-        results.push({ file_id: fileId, filename: file.name, detected_format: converted.format, frame_count: converted.frameCount, warnings: converted.warnings });
+        const pipeline = converted.format === "DBC" ? "dbc" : "log";
+        results.push({ file_id: fileId, filename: file.name, detected_format: converted.format, file_type: pipeline, analysis_pipeline: pipeline === "dbc" ? "dbc_definition_viewer" : "raw_log_intelligence", frame_count: converted.frameCount, warnings: converted.warnings });
       } catch (error) {
         results.push({ filename: file.name, error: error instanceof Error ? error.message : "Conversion failed" });
       }

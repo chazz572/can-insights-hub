@@ -18,6 +18,8 @@ type IdProfile = {
   cleanSamples: string[];
 };
 
+type PipelineKind = "log" | "dbc" | "log_dbc" | "batch" | "unsupported";
+
 const jsonResponse = (body: unknown) =>
   new Response(JSON.stringify(body), {
     status: 200,
@@ -178,6 +180,19 @@ const describeSignalEvidence = (signal: JsonRecord) => `ID ${signal.id} bytes ${
 
 const metadataTokens = (value: string) => value.toLowerCase().split(/[^a-z0-9]+/).filter(Boolean);
 const containsAny = (text: string, terms: string[]) => terms.some((term) => text.includes(term));
+const extractDbcSignals = (metadata: string) => [...metadata.matchAll(/signal=([^;|]+)(?:\|multiplex=([^;|]+))?\|start=([^;|]+)\|length=([^;|]+)\|endian=([^;|]+)\|signed=([^;|]+)\|factor=([^;|]+)\|offset=([^;|]+)\|min=([^;|]+)\|max=([^;|]+)\|unit=([^;]+)/g)].map((match) => ({
+  signal_name: match[1],
+  multiplex: match[2] === "none" ? null : match[2] ?? null,
+  start_bit: Number(match[3]),
+  bit_length: Number(match[4]),
+  endianness: match[5],
+  signed: match[6] === "true",
+  factor: Number(match[7]),
+  offset: Number(match[8]),
+  minimum: Number(match[9]),
+  maximum: Number(match[10]),
+  unit: match[11],
+}));
 const summarizeMetadata = (metadataById: Map<string, string>, idCounts: Map<string, number>) => {
   const rows = [...metadataById.entries()].map(([id, metadata]) => ({ id, metadata, text: metadata.toLowerCase(), tokens: metadataTokens(metadata) }));
   const scoreRows = (terms: string[]) => rows.filter((row) => containsAny(row.text, terms));
@@ -352,6 +367,8 @@ const runAnalysis = (csv: string) => {
 
   const metadataInsights = summarizeMetadata(metadataById, idCounts);
   const isDbcReference = metadataInsights.has_dbc_metadata && totalMessages === idCounts.size;
+  const pipeline: PipelineKind = isDbcReference ? "dbc" : metadataInsights.has_dbc_metadata ? "log_dbc" : "log";
+  const pipelineLabel = pipeline === "dbc" ? "DBC definition viewer" : pipeline === "log_dbc" ? "Full Power decoded LOG + DBC analysis" : "Raw CAN log intelligence";
   const idStats = [...idCounts.entries()]
     .sort((a, b) => b[1] - a[1])
     .map(([id, count]) => ({ id, count, percentage: totalMessages ? Number(((count / totalMessages) * 100).toFixed(2)) : 0 }));
@@ -362,6 +379,14 @@ const runAnalysis = (csv: string) => {
     cluster: index % 3,
     candidate_signal: Number(item.count ?? 0) > 1,
   }));
+
+  const dbcMessages = [...metadataById.entries()].map(([id, metadata]) => {
+    const signals = extractDbcSignals(metadata);
+    const messageName = metadata.match(/dbc_message=([^;]+)/)?.[1] ?? `Message_${id}`;
+    const transmitter = metadata.match(/transmitter=([^;]+)/)?.[1] ?? "unknown";
+    return { id, message_name: messageName, transmitter, signal_count: signals.length, signals };
+  });
+  const dbcSignals = dbcMessages.flatMap((message) => message.signals.map((signal) => ({ message_id: message.id, message_name: message.message_name, ...signal })));
 
   const byteAnalysis = byteCounts.map((counts, byteIndex) => {
     const values = [...counts.entries()].flatMap(([value, count]) => Array.from({ length: count }, () => value));
@@ -574,6 +599,12 @@ const runAnalysis = (csv: string) => {
     possible_pedal_ids: [...pedalIds],
   };
 
+  const decodedSignals = pipeline === "log_dbc" ? analogSignals.map((signal) => {
+    const dbcSignal = dbcSignals.find((candidate) => String(candidate.message_id) === String(signal.id) && Number(candidate.start_bit) <= Number(signal.bit_start ?? 0) && Number(candidate.start_bit) + Number(candidate.bit_length) >= Number(signal.bit_start ?? 0));
+    const rawMidpoint = (Number(signal.min_value ?? 0) + Number(signal.max_value ?? 0)) / 2;
+    return { id: signal.id, signal_name: dbcSignal?.signal_name ?? signal.likely_signal_type, unit: dbcSignal?.unit ?? "raw", decoded_min: dbcSignal ? Number(signal.min_value ?? 0) * Number(dbcSignal.factor) + Number(dbcSignal.offset) : signal.min_value, decoded_max: dbcSignal ? Number(signal.max_value ?? 0) * Number(dbcSignal.factor) + Number(dbcSignal.offset) : signal.max_value, latest_estimate: dbcSignal ? Number((rawMidpoint * Number(dbcSignal.factor) + Number(dbcSignal.offset)).toFixed(3)) : rawMidpoint, evidence: signal.evidence };
+  }) : [];
+
   const idClassifications = idDeepDive.map((item) => {
     const volatileByteCount = Array.isArray(item.volatile_bytes) ? item.volatile_bytes.length : 0;
     const changeRate = Number(item.payload_change_rate);
@@ -617,7 +648,7 @@ const runAnalysis = (csv: string) => {
   const enhancedNetworkHealth = { ...networkHealth, bus_health_score: Math.max(0, Math.min(100, 100 - anomalies.length * 4 - Math.round(Number(networkHealth.timing_irregularity_score) * 120))), chatter_classification: idStats.some((item) => item.percentage > 35) ? "dominant_id_chatter" : totalMessages / Math.max(idCounts.size, 1) > 60 ? "busy_periodic_chatter" : "normal_idle_chatter", dropout_events: timing.filter((item) => Number(item.max_period) > Math.max(Number(item.average_period) * 3, 0.1)).map((item) => ({ id: item.id, max_period: item.max_period, average_period: item.average_period, classification: "possible_gap_or_dropout" })).slice(0, 16) };
   const derivedEvents = enhancedNetworkHealth.dropout_events.map((item, index) => ({ event_index: eventTimeline.length + index + 1, id: item.id, timestamp: null, event_type: "possible_module_dropout", description: `Timing gap detected: max period ${item.max_period}s vs average ${item.average_period}s.`, before_after_hint: "Compare nearby frames to confirm wake/sleep or missing traffic." }));
   const whatDataShows = [
-    isDbcReference ? "Vehicle State Summary: this is a DBC definition map, not live CAN traffic. It defines message IDs, signal names, transmitters, and likely ECU groups, but it does not prove vehicle type or motion." : hasDefensibleMotion ? `Vehicle State Summary: strongest defensible state is ${behaviorLabel} at ${Math.round(behaviorConfidence * 100)}% confidence.` : hasBehaviorCandidateEvidence ? `Vehicle State Summary: ${behaviorLabel} at ${Math.round(behaviorConfidence * 100)}% candidate confidence. This is based on byte dynamics, not decoded physical units.` : "Vehicle State Summary: motion cannot be determined from this log because no validated speed, wheel-speed, pedal, brake, steering, gear, torque, engine-RPM, or motor-RPM signal was isolated.",
+    pipeline === "dbc" ? "DBC Summary: this file contains message and signal definitions only. No behavior, motion, health state, or vehicle type can be inferred from a DBC alone." : pipeline === "log_dbc" ? `Decoded LOG + DBC Summary: ${decodedSignals.length} decoded signal candidates were matched against DBC metadata; strongest state is ${behaviorLabel} at ${Math.round(behaviorConfidence * 100)}% confidence when decoded/named evidence supports it.` : hasDefensibleMotion ? `Vehicle State Summary: strongest defensible state is ${behaviorLabel} at ${Math.round(behaviorConfidence * 100)}% confidence.` : hasBehaviorCandidateEvidence ? `Vehicle State Summary: ${behaviorLabel} at ${Math.round(behaviorConfidence * 100)}% candidate confidence. This is based on byte dynamics, not decoded physical units.` : "Vehicle State Summary: motion cannot be determined from this log because no validated speed, wheel-speed, pedal, brake, steering, gear, torque, engine-RPM, or motor-RPM signal was isolated.",
     `Vehicle type: ${vehicleType.classification} ${vehicleType.confidence_score ? `(${Math.round(vehicleType.confidence_score * 100)}% confidence)` : ""}. ${vehicleType.reasoning}`,
     metadataInsights.has_dbc_metadata ? `DBC/OEM evidence: ${metadataInsights.explanation} This metadata is used for structure and decoding support only, not vehicle-type classification by itself.` : "No DBC metadata was available; vehicle type remains unclassified unless explicit decoded EV, hybrid, or ICE signals are present.",
     behavioralEvidence.length ? `Evidence: ${behavioralEvidence.slice(0, 6).join(" ")}${hasDefensibleMotion ? "" : " These remain unvalidated behavior candidates until decoded with a DBC or controlled captures."}` : "Evidence: no correlated directional speed, wheel, pedal, brake, steering, gear, torque, RPM, or sensor-like byte movement crossed threshold.",
@@ -651,6 +682,9 @@ const runAnalysis = (csv: string) => {
 
   return {
     ok: true,
+    file_type: pipeline,
+    analysis_pipeline: pipelineLabel,
+    supported_file_type: true,
     summary: {
       text: detailedSummary,
       what_the_data_actually_shows: whatDataShows,
@@ -666,6 +700,17 @@ const runAnalysis = (csv: string) => {
         ...protocolInsights,
         total_ids_sampled: totalMessages,
       },
+      file_routing: {
+        file_type: pipeline,
+        analysis_pipeline: pipelineLabel,
+        enforced_rules: pipeline === "dbc" ? ["DBC viewer only", "no behavior inference", "no vehicle-type classification"] : pipeline === "log_dbc" ? ["decode with DBC metadata", "signal charts enabled", "raw and decoded evidence shown"] : ["raw frame timing", "entropy", "ECU activity", "reverse-engineering only", "no signal decoding without DBC"],
+      },
+      dbc: {
+        messages: dbcMessages,
+        signals: dbcSignals,
+        bit_layout: dbcSignals.map((signal) => ({ message_id: signal.message_id, signal_name: signal.signal_name, start_bit: signal.start_bit, bit_length: signal.bit_length, byte_start: Math.floor(Number(signal.start_bit) / 8), byte_end: Math.floor((Number(signal.start_bit) + Number(signal.bit_length) - 1) / 8), multiplex: signal.multiplex })),
+      },
+      decoded_signals: decodedSignals,
       byte_analysis: byteAnalysis,
       bit_analysis: bitAnalysis,
       timing,

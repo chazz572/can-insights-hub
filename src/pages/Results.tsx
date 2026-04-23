@@ -1,4 +1,4 @@
-import { AlertTriangle, Activity, BarChart3, Binary, BrainCircuit, Car, ChevronDown, Clock, Cpu, Download, Gauge, GitBranch, Hash, Layers3, Loader2, Map, MessageSquareText, Radar, Save, ScanLine, ShieldCheck, Sparkles, TimerReset, Wrench, Zap } from "lucide-react";
+import { AlertTriangle, Activity, BarChart3, Binary, BrainCircuit, Car, ChevronDown, Clock, Cpu, Download, FileCode2, FileText, Gauge, GitBranch, Hash, Layers3, Loader2, Map, MessageSquareText, Radar, Save, ScanLine, ShieldCheck, Sparkles, TimerReset, Wrench, Zap } from "lucide-react";
 import { useEffect, useState } from "react";
 import type { ReactNode } from "react";
 import { Link, useParams } from "react-router-dom";
@@ -434,6 +434,37 @@ const ModuleActivityMap = ({ systems }: { systems: unknown }) => {
   );
 };
 
+const PipelineBadge = ({ type, label }: { type: string; label: string }) => (
+  <span className="inline-flex max-w-full items-center gap-2 rounded-lg border border-glass-border bg-secondary px-3 py-1 text-xs font-bold uppercase leading-5 text-secondary-foreground shadow-glow">
+    <FileText className="size-4 shrink-0" />
+    <span className="text-fit-tile">{type.replace(/_/g, " ")} · {label}</span>
+  </span>
+);
+
+const DbcViewer = ({ diagnostics }: { diagnostics: AnalysisResult["diagnostics"] }) => {
+  const dbc = diagnostics?.dbc && typeof diagnostics.dbc === "object" ? diagnostics.dbc as JsonRecord : {};
+  return (
+    <div className="grid gap-6">
+      <AnalysisCard title="DBC Message List" description="Definitions from BO_ entries only; no vehicle behavior is inferred." icon={<FileCode2 className="size-5" />}><JsonTable data={dbc.messages} /></AnalysisCard>
+      <AnalysisCard title="DBC Signal List" description="SG_ bit positions, scaling, units, value ranges, signedness, and byte order." icon={<Binary className="size-5" />}><JsonTable data={dbc.signals} /></AnalysisCard>
+      <AnalysisCard title="Bit Layout Viewer" description="Signal placement and multiplexing structure by message." icon={<Layers3 className="size-5" />}><JsonTable data={dbc.bit_layout} /></AnalysisCard>
+    </div>
+  );
+};
+
+const LogPipelinePanels = ({ data, diagnostics, idStats, anomalies, vehicleBehavior, partialDbcDraft }: { data: AnalysisResult; diagnostics: NonNullable<AnalysisResult["diagnostics"]>; idStats: JsonRecord[]; anomalies: JsonRecord[]; vehicleBehavior: NonNullable<AnalysisResult["vehicle_behavior"]>; partialDbcDraft: string }) => (
+  <div className="grid gap-5">
+    <CollapsiblePanel title="Raw Message Table & ID Activity" icon={<Binary className="size-5" />} defaultOpen><FrequencyChart data={idStats} /><div className="mb-4"><IdActivityTimeline data={idStats} /></div><JsonTable data={idStats} /></CollapsiblePanel>
+    <CollapsiblePanel title="Timing Charts" icon={<Clock className="size-5" />} defaultOpen><TimingLineChart data={diagnostics.timing} /><JsonTable data={diagnostics.timing} /></CollapsiblePanel>
+    <CollapsiblePanel title="Entropy & Byte-Change Charts" icon={<Layers3 className="size-5" />}><ByteEntropyHeatmap data={diagnostics.byte_analysis} /><div className="mt-4"><ByteCorrelationHeatmap data={diagnostics.byte_analysis} /></div><div className="mt-4"><BitToggleVisualization data={diagnostics.bit_analysis} /></div></CollapsiblePanel>
+    <CollapsiblePanel title="ECU Activity Map" icon={<Map className="size-5" />}><ModuleActivityMap systems={diagnostics.systems} /></CollapsiblePanel>
+    <CollapsiblePanel title="Anomalies & Health Indicators" icon={<AlertTriangle className="size-5" />} defaultOpen><JsonTable data={anomalies} /></CollapsiblePanel>
+    <CollapsiblePanel title="Reverse-Engineering Insights" icon={<Radar className="size-5" />}><JsonTable data={data.reverse_engineering} /><div className="mt-4"><JsonTable data={diagnostics.counter_checksum_analysis} /></div></CollapsiblePanel>
+    <CollapsiblePanel title="Vehicle Behavior Candidates" icon={<Gauge className="size-5" />}><div className="grid gap-5 lg:grid-cols-3"><div className="space-y-3"><h3 className="font-semibold">Speed Candidates</h3>{renderList(vehicleBehavior.possible_speed_ids)}</div><div className="space-y-3"><h3 className="font-semibold">RPM Candidates</h3>{renderList(vehicleBehavior.possible_rpm_ids)}</div><div className="space-y-3"><h3 className="font-semibold">Pedal Candidates</h3>{renderList(vehicleBehavior.possible_pedal_ids)}</div></div></CollapsiblePanel>
+    <CollapsiblePanel title="Partial DBC Draft Available" icon={<Download className="size-5" />}><pre className="whitespace-pre-wrap rounded-lg border border-glass-border bg-glass p-4 text-sm text-foreground">{partialDbcDraft}</pre></CollapsiblePanel>
+  </div>
+);
+
 const Results = () => {
   const { id, file_id } = useParams();
   const fileId = file_id ?? id;
@@ -483,6 +514,9 @@ const Results = () => {
   const summary = data?.summary;
   const summaryText = summary && typeof summary === "object" && !Array.isArray(summary) ? summary.text ?? summary : summary;
   const diagnostics = data?.diagnostics ?? {};
+  const routing = diagnostics.file_routing && typeof diagnostics.file_routing === "object" ? diagnostics.file_routing as JsonRecord : {};
+  const fileType = String(data?.file_type ?? routing.file_type ?? "log");
+  const pipelineLabel = String(data?.analysis_pipeline ?? routing.analysis_pipeline ?? "Raw CAN log intelligence");
   const idStats = data?.id_stats ?? [];
   const networkHealth = diagnostics.network_health && typeof diagnostics.network_health === "object" ? diagnostics.network_health as JsonRecord : {};
   const timingRows = toRecordArray(diagnostics.timing);
@@ -590,6 +624,7 @@ const Results = () => {
           <div className="grid gap-6 xl:grid-cols-[1.25fr_0.75fr]">
             <AnalysisCard title="Summary" icon={<MessageSquareText className="size-5" />}>
               <div className="grid gap-4">
+                <PipelineBadge type={fileType} label={pipelineLabel} />
                 <div className="min-w-0 max-w-full overflow-hidden break-all rounded-lg border border-primary/30 bg-gradient-subtle p-3 text-xs font-medium leading-6 text-foreground shadow-glow backdrop-blur [overflow-wrap:anywhere] sm:break-words sm:p-4 sm:text-sm">{shortPlainSummary}</div>
                 <details className="group min-w-0 overflow-hidden rounded-lg border border-glass-border bg-glass backdrop-blur">
                   <summary className="flex cursor-pointer list-none items-center justify-between gap-3 p-4 text-sm font-semibold text-foreground">
@@ -603,9 +638,17 @@ const Results = () => {
               </div>
             </AnalysisCard>
             <AnalysisCard title="Signal Activity" description="Live telemetry intensity preview." icon={<BarChart3 className="size-5" />}>
-              <MiniChart />
+              {fileType === "dbc" ? <p className="text-sm leading-6 text-muted-foreground">DBC files define signals and scaling only, so activity charts are intentionally disabled.</p> : <MiniChart />}
             </AnalysisCard>
           </div>
+
+          {fileType === "dbc" ? <DbcViewer diagnostics={diagnostics} /> : <>
+
+          {fileType === "log_dbc" ? (
+            <AnalysisCard title="Decoded Signal Dashboard" description="Full Power Mode: DBC-matched real-value signal candidates and decoded context." icon={<Gauge className="size-5" />}>
+              <JsonTable data={diagnostics.decoded_signals} />
+            </AnalysisCard>
+          ) : null}
 
           {vehicleIdentification ? (
             <AnalysisCard title="Vehicle Identification" description="Heuristic AVI fingerprint from ID ranges, protocol shape, timing, entropy, and diagnostic patterns." icon={<Car className="size-5" />}>
@@ -726,6 +769,7 @@ const Results = () => {
               <CollapsiblePanel title="Mechanic Summary" icon={<Wrench className="size-5" />} defaultOpen><MechanicSummary data={diagnostics.mechanic_summary} /></CollapsiblePanel>
             </div>
           </AnalysisCard>
+          </>}
         </div>
       ) : null}
     </main>
