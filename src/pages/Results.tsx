@@ -10,6 +10,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Tooltip as UiTooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { analyzeFile, AnalysisResult, type JsonRecord } from "@/lib/canApi";
+import { buildPartialDbcDraft, inferVehicleIdentification } from "@/lib/intelligence";
 import { requestAiInsight, saveAnalysisSnapshot, type AiInsightKind } from "@/lib/saasApi";
 import { cn } from "@/lib/utils";
 
@@ -414,6 +415,8 @@ const Results = () => {
   const busLoad = Math.min(100, Math.round(((data?.total_messages ?? 0) / Math.max(Number(data?.unique_ids ?? 1), 1)) * 10));
   const componentHealth = Math.max(0, Math.min(100, 100 - anomalies.length * 12));
   const suspectIds = toRecordArray(idStats).filter((row) => numericValue(row, ["count", "frequency", "messages", "total", "value"]) > 1).length;
+  const vehicleIdentification = data ? inferVehicleIdentification(data) : null;
+  const partialDbcDraft = data ? buildPartialDbcDraft([]) : "";
 
   const saveSnapshot = async () => {
     if (!fileId || !data) return;
@@ -511,6 +514,18 @@ const Results = () => {
               <MiniChart />
             </AnalysisCard>
           </div>
+
+          {vehicleIdentification ? (
+            <AnalysisCard title="Vehicle Identification" description="Heuristic AVI fingerprint from ID ranges, protocol shape, timing, entropy, and diagnostic patterns." icon={<Car className="size-5" />}>
+              <div className="grid gap-4 lg:grid-cols-3">
+                {[["Category", vehicleIdentification.category], ["Protocol", vehicleIdentification.protocol], ["OEM Style", vehicleIdentification.oemStyle]].map(([label, guess]) => {
+                  const item = guess as { label: string; confidence: number };
+                  return <div key={String(label)} className="rounded-lg border border-glass-border bg-glass p-4"><p className="text-xs font-bold uppercase text-muted-foreground">{String(label)}</p><p className="mt-2 font-semibold text-foreground">{item.label}</p><div className="mt-3 h-2 rounded-full bg-secondary"><div className="h-full rounded-full bg-gradient-accent" style={{ width: `${item.confidence}%` }} /></div><p className="mt-2 font-mono text-sm text-primary">{item.confidence}% confidence</p></div>;
+                })}
+              </div>
+              <p className="mt-4 rounded-lg border border-glass-border bg-glass p-4 text-sm leading-6 text-muted-foreground">{vehicleIdentification.explanation}</p>
+            </AnalysisCard>
+          ) : null}
 
           <div className="grid gap-6 lg:grid-cols-3">
             <MetricCard title="Total Messages" value={data.total_messages} icon={MessageSquareText} />
@@ -615,6 +630,7 @@ const Results = () => {
               <CollapsiblePanel title="Network Health" icon={<Zap className="size-5" />}><JsonTable data={diagnostics.network_health} /></CollapsiblePanel>
               <CollapsiblePanel title="Driver Behavior" icon={<Car className="size-5" />}><JsonTable data={diagnostics.driver_behavior} /></CollapsiblePanel>
               <CollapsiblePanel title="Event Timeline" icon={<TimerReset className="size-5" />}><JsonTable data={diagnostics.event_timeline} /></CollapsiblePanel>
+              <CollapsiblePanel title="Partial DBC Draft Available" icon={<Download className="size-5" />}><pre className="whitespace-pre-wrap rounded-lg border border-glass-border bg-glass p-4 text-sm text-foreground">{partialDbcDraft}</pre></CollapsiblePanel>
               <CollapsiblePanel title="Mechanic Summary" icon={<Wrench className="size-5" />} defaultOpen><MechanicSummary data={diagnostics.mechanic_summary} /></CollapsiblePanel>
             </div>
           </AnalysisCard>
