@@ -10,7 +10,10 @@ import Results from "./pages/Results.tsx";
 import Auth from "./pages/Auth.tsx";
 import BatchResults from "./pages/BatchResults.tsx";
 import Compare from "./pages/Compare.tsx";
+import Engineering from "./pages/Engineering.tsx";
 import Fleet from "./pages/Fleet.tsx";
+import Reports from "./pages/Reports.tsx";
+import Visualize from "./pages/Visualize.tsx";
 import Workspace from "./pages/Workspace.tsx";
 import NotFound from "./pages/NotFound.tsx";
 
@@ -32,7 +35,10 @@ const App = () => {
               <Route path="/upload" element={<Upload />} />
               <Route path="/batch-results" element={<BatchResults />} />
               <Route path="/compare" element={<Compare />} />
+              <Route path="/engineering" element={<Engineering />} />
               <Route path="/fleet" element={<Fleet />} />
+              <Route path="/reports" element={<Reports />} />
+              <Route path="/visualize" element={<Visualize />} />
               <Route path="/results/:file_id" element={<Results />} />
               {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
               <Route path="*" element={<NotFound />} />

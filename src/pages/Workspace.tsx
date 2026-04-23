@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Activity, BarChart3, Car, Code2, CreditCard, Database, FileText, Gauge, KeyRound, Users, type LucideIcon } from "lucide-react";
+import { Activity, BarChart3, BellRing, Car, Code2, CreditCard, Database, FileText, Gauge, KeyRound, Share2, Users, Webhook, type LucideIcon } from "lucide-react";
 import { Link } from "react-router-dom";
 
 import { Button } from "@/components/ui/button";
@@ -25,6 +25,8 @@ const Workspace = () => {
   const featureCards: Array<[string, string, LucideIcon]> = [
     ["Team accounts", "Invite engineers, mechanics, and fleet managers with role-based access.", Users],
     ["Developer API", "Use API keys for automated log ingestion and external tools.", Code2],
+    ["Webhook notifications", "Send completion and anomaly events to fleet systems.", Webhook],
+    ["Shareable links", "Package analysis summaries for customers and shop teams.", Share2],
     ["Maintenance prediction", "Track fleet health trends and prioritize service workflows.", Activity],
   ];
 
@@ -82,6 +84,13 @@ const Workspace = () => {
           </CardContent>
         </Card>
       </div>
+
+      <Card className="mt-6 animate-fade-up overflow-hidden">
+        <CardHeader><CardTitle className="flex items-center gap-2"><BellRing className="text-primary" /> Onboarding checklist</CardTitle></CardHeader>
+        <CardContent className="grid gap-3 md:grid-cols-4">
+          {["Upload first log", "Review AI summary", "Save analysis", "Invite team"].map((step, index) => <div key={step} className="rounded-lg border border-glass-border bg-glass p-4"><p className="font-mono text-xs text-primary">0{index + 1}</p><p className="mt-2 font-semibold">{step}</p></div>)}
+        </CardContent>
+      </Card>
 
       <div className="mt-6 grid gap-6 lg:grid-cols-3">
         {featureCards.map(([title, text, Icon]) => (
