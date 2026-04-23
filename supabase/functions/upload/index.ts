@@ -16,7 +16,7 @@ const jsonResponse = (body: unknown) =>
     headers: { ...corsHeaders, "Content-Type": "application/json" },
   });
 
-const cleanId = (value: string) => value.replace(/^0x/i, "").replace(/[^a-fA-F0-9]/g, "").toUpperCase();
+const cleanId = (value: string) => value.replace(/^0x/i, "").replace(/[^a-fA-F0-9]/g, "").toUpperCase().replace(/^0+(?=[0-9A-F])/, "") || "0";
 const cleanByte = (value: string) => value.replace(/^0x/i, "").replace(/[^a-fA-F0-9]/g, "").slice(0, 2).padStart(2, "0").toUpperCase();
 const isId = (value: string) => /^[0-9a-fA-F]{1,8}[xh]?$/.test(value.replace(/^0x/i, ""));
 const isByte = (value: string) => /^(0x)?[0-9a-fA-F]{1,2}$/.test(value);
@@ -245,17 +245,28 @@ const mergeLogWithDbcMetadata = (logCsv: string, dbcCsv: string) => {
 };
 
 const mergeRawLogCsvs = (items: Array<{ filename: string; converted: ConversionResult }>) => {
-  const rows = items.flatMap(({ filename, converted }, fileIndex) => converted.csv.split(/\r?\n/).slice(1).filter((line) => line.trim()).map((line, rowIndex) => {
-    const values = parseCsvLine(line);
-    const timestamp = Number(values[0] ?? rowIndex);
-    const source = `source_file=${filename};raw_format=${converted.format}`;
-    const existingMetadata = values[4]?.replace(/^"|"$/g, "").replace(/""/g, '"') ?? "";
-    return {
-      sortTime: Number.isFinite(timestamp) ? timestamp : fileIndex * 1_000_000_000 + rowIndex,
-      rowIndex,
-      values: [values[0] ?? String(rowIndex), values[1] ?? "", values[2] ?? "0", values[3] ?? "", [source, existingMetadata].filter(Boolean).join(";")],
-    };
-  }));
+  let cumulativeOffset = 0;
+  const rows = items.flatMap(({ filename, converted }, fileIndex) => {
+    const parsedRows = converted.csv.split(/\r?\n/).slice(1).filter((line) => line.trim()).map((line, rowIndex) => {
+      const values = parseCsvLine(line);
+      const timestamp = Number(values[0] ?? rowIndex);
+      return { values, rowIndex, timestamp: Number.isFinite(timestamp) ? timestamp : rowIndex };
+    }).sort((a, b) => a.timestamp - b.timestamp || a.rowIndex - b.rowIndex);
+    const firstTimestamp = parsedRows[0]?.timestamp ?? 0;
+    const lastTimestamp = parsedRows[parsedRows.length - 1]?.timestamp ?? firstTimestamp;
+    const sourceOffset = cumulativeOffset;
+    cumulativeOffset += Math.max(0, lastTimestamp - firstTimestamp) + 0.001;
+    return parsedRows.map((row) => {
+      const normalizedTimestamp = sourceOffset + Math.max(0, row.timestamp - firstTimestamp);
+      const source = `source_file=${filename};raw_format=${converted.format};source_timebase_normalized=true`;
+      const existingMetadata = row.values[4]?.replace(/^"|"$/g, "").replace(/""/g, '"') ?? "";
+      return {
+        sortTime: normalizedTimestamp,
+        rowIndex: fileIndex * 1_000_000_000 + row.rowIndex,
+        values: [normalizedTimestamp.toFixed(6), row.values[1] ?? "", row.values[2] ?? "0", row.values[3] ?? "", [source, existingMetadata].filter(Boolean).join(";")],
+      };
+    });
+  });
 
   const sorted = rows.sort((a, b) => a.sortTime - b.sortTime || a.rowIndex - b.rowIndex);
   return ["timestamp,id,dlc,data,metadata", ...sorted.map((row) => [csvEscape(row.values[0]), csvEscape(row.values[1]), row.values[2], csvEscape(row.values[3]), csvEscape(row.values[4])].join(","))].join("\n");
