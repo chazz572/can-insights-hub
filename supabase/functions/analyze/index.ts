@@ -6,8 +6,8 @@ const corsHeaders = {
 };
 
 type JsonRecord = Record<string, unknown>;
-type CsvIndexes = { timestampIndex: number; idIndex: number; dataIndex: number };
-type ParsedRecord = { id: string; data: string; timestamp: number };
+type CsvIndexes = { timestampIndex: number; idIndex: number; dataIndex: number; metadataIndex: number };
+type ParsedRecord = { id: string; data: string; timestamp: number; metadata: string };
 type IdProfile = {
   count: number;
   lengths: Map<number, number>;
@@ -65,12 +65,13 @@ const resolveIndexes = (headerLine: string): CsvIndexes => {
   const timestampIndex = find(["timestamp", "time", "ts", "date time", "datetime"]);
   const idIndex = find(["id", "can_id", "arbitration_id", "identifier", "message_id", "canid", "pgn"]);
   const dataIndex = find(["data", "payload", "bytes", "data bytes"]);
+  const metadataIndex = find(["metadata", "dbc_metadata", "description", "signals", "signal_names"]);
 
   if (idIndex < 0 || dataIndex < 0) {
     throw new Error("Normalized CSV is missing required id/data columns.");
   }
 
-  return { timestampIndex, idIndex, dataIndex };
+  return { timestampIndex, idIndex, dataIndex, metadataIndex };
 };
 
 const forEachCsvRecord = (csv: string, callback: (record: ParsedRecord) => void) => {
@@ -97,6 +98,7 @@ const forEachCsvRecord = (csv: string, callback: (record: ParsedRecord) => void)
       id: values[indexes.idIndex] ?? "",
       data: values[indexes.dataIndex] ?? "",
       timestamp: Number(values[indexes.timestampIndex] ?? Number.NaN),
+      metadata: indexes.metadataIndex >= 0 ? values[indexes.metadataIndex] ?? "" : "",
     });
   }
 };
