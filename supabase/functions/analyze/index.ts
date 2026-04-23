@@ -105,6 +105,12 @@ const forEachCsvRecord = (csv: string, callback: (record: ParsedRecord) => void)
   }
 };
 
+const normalizeCanId = (value: string) => {
+  const raw = value.trim().replace(/[xh]$/i, "").replace(/^0x/i, "");
+  const cleaned = raw.replace(/[^a-fA-F0-9]/g, "").toUpperCase().replace(/^0+(?=[0-9A-F])/, "") || "0";
+  const parsed = Number.parseInt(cleaned, /[A-F]/i.test(cleaned) ? 16 : 10);
+  return Number.isFinite(parsed) ? String(parsed) : "0";
+};
 const cleanHex = (value: string) => value.replace(/[^a-fA-F0-9]/g, "").toUpperCase();
 const byteValues = (value: string) => cleanHex(value).match(/.{1,2}/g)?.slice(0, 8).map((byte) => Number.parseInt(byte, 16)).filter((byte) => Number.isFinite(byte)) ?? [];
 const average = (values: number[]) => values.length ? values.reduce((sum, value) => sum + value, 0) / values.length : 0;
