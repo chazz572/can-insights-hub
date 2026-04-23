@@ -505,6 +505,17 @@ const Results = () => {
     URL.revokeObjectURL(url);
   };
 
+  const downloadPlainEnglishSummary = () => {
+    if (!data) return;
+    const report = buildPlainEnglishSummaryReport({ data, fileId, anomalies: anomalies.length, suspectIds, componentHealth });
+    const url = URL.createObjectURL(new Blob([report], { type: "text/plain" }));
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `plain-english-summary-${fileId}.txt`;
+    link.click();
+    URL.revokeObjectURL(url);
+  };
+
   return (
     <main className="mx-auto min-h-screen max-w-7xl px-4 py-8 sm:px-6 lg:px-10">
       <div className="mb-8 flex flex-col justify-between gap-4 sm:flex-row sm:items-end">
@@ -519,6 +530,7 @@ const Results = () => {
         <div className="flex flex-wrap gap-3">
           <Button type="button" variant="outline" onClick={saveSnapshot}><Save className="size-4" /> Save Analysis</Button>
           <Button type="button" variant="outline" onClick={downloadReport}><Download className="size-4" /> Health Report</Button>
+          <Button type="button" variant="outline" onClick={downloadPlainEnglishSummary}><Download className="size-4" /> Plain English Summary</Button>
           <Button asChild variant="outline"><Link to="/upload">Analyze Another Log</Link></Button>
         </div>
       </div>
@@ -549,7 +561,6 @@ const Results = () => {
             <AnalysisCard title="Summary" icon={<MessageSquareText className="size-5" />}>
               <div className="grid gap-4">
                 <pre className="whitespace-pre-wrap rounded-lg border border-glass-border bg-glass p-5 text-sm leading-7 text-foreground backdrop-blur">{renderText(summaryText)}</pre>
-                <PlainEnglishSummary data={data} anomalies={anomalies.length} suspectIds={suspectIds} componentHealth={componentHealth} />
               </div>
             </AnalysisCard>
             <AnalysisCard title="Signal Activity" description="Live telemetry intensity preview." icon={<BarChart3 className="size-5" />}>
