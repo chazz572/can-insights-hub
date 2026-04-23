@@ -13,8 +13,18 @@ export interface AnalysisResult {
     possible_speed_ids?: unknown[];
     possible_rpm_ids?: unknown[];
     possible_pedal_ids?: unknown[];
+    [key: string]: unknown;
   };
-  diagnostics?: JsonRecord;
+  diagnostics?: {
+    protocol?: unknown;
+    byte_analysis?: unknown;
+    bit_analysis?: unknown;
+    timing?: unknown;
+    signals?: unknown;
+    systems?: unknown;
+    mechanic_summary?: unknown;
+    [key: string]: unknown;
+  };
   [key: string]: unknown;
 }
 
