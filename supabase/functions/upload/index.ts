@@ -391,7 +391,7 @@ Deno.serve(async (req) => {
     const rawLogItems = successfulConverted.filter((item) => item.converted.pipeline === "log");
     const dbcItems = successfulConverted.filter((item) => item.converted.pipeline === "dbc");
     const dbcReference = dbcItems[0]?.converted.csv;
-    const results = [...failedResults];
+    const results: Array<Record<string, unknown>> = [...failedResults];
 
     if (rawLogItems.length) {
       const mergedCsv = mergeRawLogCsvs(rawLogItems.map((item) => ({ filename: item.file.name, converted: item.converted })));

@@ -412,7 +412,7 @@ const runAnalysis = (csv: string) => {
   const bitOnes = Array.from({ length: 64 }, () => 0);
   const bitObserved = Array.from({ length: 64 }, () => 0);
   const bitTransitions = Array.from({ length: 64 }, () => 0);
-  const bitPrevious = Array.from<number | null>({ length: 64 }, () => null);
+  const bitPrevious = Array.from({ length: 64 }, (): number | null => null);
   const timingById = new Map<string, number[]>();
   const idProfiles = new Map<string, IdProfile>();
   const metadataById = new Map<string, string>();
@@ -896,12 +896,10 @@ const runAnalysis = (csv: string) => {
     subtleAbnormalities.length ? `Network issues to review: ${subtleAbnormalities.slice(0, 4).map((item) => `${item.type.replace(/_/g, " ")} on ${item.id}`).join("; ")}.` : "Network timing and payload health did not show major threshold-level issues.",
     "Decoded physical signals take priority and are never filtered by activity, variance, or change detection when their DBC message appears in the log.",
   ];
-  const whatDataShows = pipeline === "log_dbc" ? logDbcSummaryLines : pipeline === "dbc" ? dbcSummaryLines : logSummaryLines;
+  const whatDataShows = pipeline === "log_dbc" ? logDbcSummaryLines : logSummaryLines;
   const detailedSummary = pipeline === "log_dbc"
     ? ["Decoded LOG + DBC Summary", ...logDbcSummaryLines.map((item) => `- ${item}`), "", "Decoded Signals", ...(decodedSignals.length ? decodedSignals.slice(0, 12).map((signal) => `- ${signal.signal_name} on ID ${signal.id}: ${signal.decoded_min}–${signal.decoded_max}${signal.unit ? ` ${signal.unit}` : ""}, bit ${signal.start_bit}/${signal.bit_length}`) : ["- No DBC message IDs matched the merged log after decimal ID normalization."])].join("\n")
-    : pipeline === "dbc"
-      ? ["DBC Viewer Summary", ...dbcSummaryLines.map((item) => `- ${item}`)].join("\n")
-      : ["Raw CAN Log Summary", ...logSummaryLines.map((item) => `- ${item}`), "", "Active ECU / Timing View", `- Active IDs: ${activeEcus || "not isolated"}.`, `- Protocol: ${protocolInsights.likely_protocol}; extended-ID ratio ${(protocolInsights.extended_id_ratio * 100).toFixed(1)}%.`].join("\n");
+    : ["Raw CAN Log Summary", ...logSummaryLines.map((item) => `- ${item}`), "", "Active ECU / Timing View", `- Active IDs: ${activeEcus || "not isolated"}.`, `- Protocol: ${protocolInsights.likely_protocol}; extended-ID ratio ${(protocolInsights.extended_id_ratio * 100).toFixed(1)}%.`].join("\n");
 
   return {
     ok: true,
@@ -927,7 +925,7 @@ const runAnalysis = (csv: string) => {
       file_routing: {
         file_type: pipeline,
         analysis_pipeline: pipelineLabel,
-        enforced_rules: pipeline === "dbc" ? ["DBC viewer only", "no behavior inference", "no vehicle-type classification"] : pipeline === "log_dbc" ? ["decode with DBC metadata", "show every DBC-defined signal whose message appears in the log", "do not filter decoded signals by activity variance or change detection", "signal charts enabled", "raw and decoded evidence shown"] : ["raw frame timing", "entropy", "ECU activity", "reverse-engineering only", "no signal decoding without DBC"],
+        enforced_rules: pipeline === "log_dbc" ? ["decode with DBC metadata", "show every DBC-defined signal whose message appears in the log", "do not filter decoded signals by activity variance or change detection", "signal charts enabled", "raw and decoded evidence shown"] : ["raw frame timing", "entropy", "ECU activity", "reverse-engineering only", "no signal decoding without DBC"],
       },
       dbc: {
         messages: dbcMessages,
