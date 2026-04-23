@@ -1,4 +1,4 @@
-import { BarChart3, Bell, Car, ChartNoAxesCombined, Download, GitCompareArrows, Home, LayoutDashboard, Moon, Settings, Sun, TerminalSquare, UploadCloud, UserCircle } from "lucide-react";
+import { BarChart3, Bell, Car, ChartNoAxesCombined, CheckCircle2, Download, GitCompareArrows, Home, LayoutDashboard, Moon, Settings, Sun, TerminalSquare, UploadCloud, UserCircle } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Link, NavLink as RouterNavLink, useLocation } from "react-router-dom";
 
@@ -16,6 +16,7 @@ export const AppNav = () => {
   const location = useLocation();
   const [fileId, setFileId] = useState<string | null>(() => localStorage.getItem("can_ai_file_id"));
   const [theme, setTheme] = useState<"dark" | "light">(() => (localStorage.getItem("can_ai_theme") === "light" ? "light" : "dark"));
+  const [notice, setNotice] = useState<string | null>(null);
 
   useEffect(() => {
     setFileId(localStorage.getItem("can_ai_file_id"));
@@ -37,6 +38,10 @@ export const AppNav = () => {
   }, [theme]);
 
   const resultsPath = fileId ? `/results/${fileId}` : "/upload";
+  const showNotice = (message: string) => {
+    setNotice(message);
+    window.setTimeout(() => setNotice(null), 2400);
+  };
 
   const links = [
     { to: "/", label: "Home", icon: Home, end: true },
@@ -96,10 +101,10 @@ export const AppNav = () => {
             <button type="button" aria-label="Toggle theme" onClick={() => setTheme((current) => current === "dark" ? "light" : "dark")} className="grid size-10 place-items-center rounded-lg border border-glass-border bg-glass text-foreground shadow-glow backdrop-blur transition-all duration-300 hover:scale-105 hover:border-primary/40">
               {theme === "dark" ? <Moon className="size-4" /> : <Sun className="size-4" />}
             </button>
-            <button type="button" aria-label="Notifications" className="hidden size-10 place-items-center rounded-lg border border-glass-border bg-glass text-foreground backdrop-blur transition-all duration-300 hover:border-primary/40 hover:shadow-glow sm:grid">
+            <button type="button" aria-label="Notifications" onClick={() => showNotice("No Critical Alerts · CAN Monitor Ready")} className="hidden size-10 place-items-center rounded-lg border border-glass-border bg-glass text-foreground backdrop-blur transition-all duration-300 hover:border-primary/40 hover:shadow-glow sm:grid">
               <Bell className="size-4" />
             </button>
-            <button type="button" aria-label="Settings" className="hidden size-10 place-items-center rounded-lg border border-glass-border bg-glass text-foreground backdrop-blur transition-all duration-300 hover:border-primary/40 hover:shadow-glow sm:grid">
+            <button type="button" aria-label="Settings" onClick={() => showNotice("Settings Shortcut · Open Account For Workspace Controls")} className="hidden size-10 place-items-center rounded-lg border border-glass-border bg-glass text-foreground backdrop-blur transition-all duration-300 hover:border-primary/40 hover:shadow-glow sm:grid">
               <Settings className="size-4" />
             </button>
             <RouterNavLink to="/auth" className="flex items-center gap-2 rounded-lg border border-glass-border bg-glass px-3 py-2 text-sm font-semibold text-foreground backdrop-blur transition-all duration-300 hover:border-primary/40 hover:shadow-glow">
@@ -108,6 +113,7 @@ export const AppNav = () => {
             </RouterNavLink>
           </div>
         </div>
+        {notice ? <div className="mt-3 flex items-center gap-2 rounded-lg border border-glass-border bg-glass px-3 py-2 text-xs font-semibold text-muted-foreground shadow-glow"><CheckCircle2 className="size-4 text-success" /> {notice}</div> : null}
       </header>
 
       <header className="fixed inset-x-3 bottom-3 z-40 rounded-lg border border-sidebar-border bg-sidebar/90 p-2 shadow-dashboard backdrop-blur-xl md:hidden">

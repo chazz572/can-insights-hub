@@ -28,7 +28,7 @@ All colors MUST be HSL.
     --muted: 222 20% 16%;
     --muted-foreground: 218 16% 70%;
 
-    --accent: 266 92% 68%;
+    --accent: 28 96% 56%;
     --accent-foreground: 210 40% 98%;
 
     --destructive: 0 84% 62%;
@@ -49,16 +49,16 @@ All colors MUST be HSL.
     --glass-border: 210 40% 98% / 0.1;
     --chart-cyan: 185 95% 56%;
     --chart-blue: 217 96% 61%;
-    --chart-purple: 267 92% 70%;
+    --chart-purple: 39 96% 56%;
     --diagnostic-green: 158 78% 48%;
     --safety-orange: 28 96% 56%;
     --steel: 215 18% 34%;
     --gradient-hero: linear-gradient(135deg, hsl(216 18% 5%) 0%, hsl(220 20% 8%) 48%, hsl(216 18% 5%) 100%);
     --gradient-panel: linear-gradient(145deg, hsl(var(--glass-strong)) 0%, hsl(220 26% 9% / 0.72) 100%);
-    --gradient-accent: linear-gradient(135deg, hsl(var(--primary)) 0%, hsl(var(--accent)) 55%, hsl(var(--chart-cyan)) 100%);
+    --gradient-accent: linear-gradient(135deg, hsl(var(--primary)) 0%, hsl(var(--diagnostic-green)) 52%, hsl(var(--safety-orange)) 100%);
     --gradient-subtle: linear-gradient(180deg, hsl(210 40% 98% / 0.08), hsl(210 40% 98% / 0.02));
-    --shadow-dashboard: 0 24px 80px -36px hsl(199 96% 55% / 0.45), 0 18px 48px -38px hsl(266 92% 68% / 0.55);
-    --shadow-glow: 0 0 34px hsl(199 96% 55% / 0.28), 0 0 60px hsl(266 92% 68% / 0.18);
+    --shadow-dashboard: 0 24px 80px -36px hsl(199 96% 55% / 0.38), 0 18px 48px -38px hsl(158 78% 48% / 0.35);
+    --shadow-glow: 0 0 28px hsl(199 96% 55% / 0.24), 0 0 44px hsl(158 78% 48% / 0.14);
 
     --radius: 1rem;
 
@@ -85,7 +85,7 @@ All colors MUST be HSL.
     --secondary-foreground: 222 47% 11%;
     --muted: 214 32% 91%;
     --muted-foreground: 215 16% 42%;
-    --accent: 266 75% 55%;
+    --accent: 28 96% 48%;
     --accent-foreground: 210 40% 98%;
     --destructive: 0 84% 55%;
     --destructive-foreground: 210 40% 98%;
@@ -97,7 +97,7 @@ All colors MUST be HSL.
     --glass: 0 0% 100% / 0.72;
     --glass-strong: 0 0% 100% / 0.9;
     --glass-border: 222 47% 11% / 0.1;
-    --gradient-hero: radial-gradient(circle at 18% 8%, hsl(199 96% 42% / 0.18), transparent 30%), radial-gradient(circle at 85% 0%, hsl(266 75% 55% / 0.16), transparent 34%), linear-gradient(135deg, hsl(210 40% 98%) 0%, hsl(214 32% 94%) 55%, hsl(210 40% 98%) 100%);
+    --gradient-hero: radial-gradient(circle at 18% 8%, hsl(199 96% 42% / 0.16), transparent 30%), radial-gradient(circle at 85% 0%, hsl(158 78% 42% / 0.12), transparent 34%), linear-gradient(135deg, hsl(210 40% 98%) 0%, hsl(214 32% 94%) 55%, hsl(210 40% 98%) 100%);
     --gradient-panel: linear-gradient(145deg, hsl(var(--glass-strong)) 0%, hsl(214 32% 96% / 0.82) 100%);
     --sidebar-background: 222 47% 10%;
     --sidebar-foreground: 214 32% 86%;
@@ -166,5 +166,19 @@ All colors MUST be HSL.
 
   .data-panel {
     @apply rounded-lg border border-glass-border bg-glass shadow-dashboard backdrop-blur-xl;
+  }
+
+  .scanline-panel {
+    position: relative;
+    overflow: hidden;
+  }
+
+  .scanline-panel::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    background: repeating-linear-gradient(180deg, transparent 0 9px, hsl(var(--primary) / 0.04) 10px 11px);
+    mix-blend-mode: screen;
   }
 }

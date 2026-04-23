@@ -42,7 +42,7 @@ const Engineering = () => {
       {tools.map((tool) => {
         const [title, detail, Icon] = tool;
         return (
-        <Card key={title} className="animate-fade-up overflow-hidden">
+        <Card key={title} className="scanline-panel animate-fade-up overflow-hidden">
           <CardContent className="p-6">
             <span className="grid size-12 place-items-center rounded-lg border border-glass-border bg-glass text-primary shadow-glow"><Icon className="size-6" /></span>
             <h2 className="mt-5 text-xl font-bold">{title}</h2>
@@ -53,7 +53,7 @@ const Engineering = () => {
       );})}
     </div>
 
-    <Card className="mt-6 animate-fade-up overflow-hidden">
+    <Card className="scanline-panel mt-6 animate-fade-up overflow-hidden">
       <CardHeader><CardTitle className="flex items-center gap-2"><ActiveToolIcon className="text-primary" /> {activeTool[0]}</CardTitle></CardHeader>
       <CardContent className="grid gap-5 lg:grid-cols-[1fr_0.8fr]">
         <div className="rounded-lg border border-glass-border bg-glass p-5">
@@ -74,7 +74,7 @@ const Engineering = () => {
       </CardContent>
     </Card>
 
-    <Card className="mt-6 animate-fade-up overflow-hidden">
+    <Card className="scanline-panel mt-6 animate-fade-up overflow-hidden">
       <CardHeader><CardTitle className="flex items-center gap-2"><BrainCircuit className="text-primary" /> Protocol Intelligence Matrix</CardTitle></CardHeader>
       <CardContent className="overflow-x-auto">
         <table className="w-full min-w-[680px] text-left text-sm">
