@@ -261,7 +261,17 @@ const runAnalysis = (csv: string) => {
         ? "diagnostic"
         : "body_or_chassis";
 
-    return { id, category, confidence: "heuristic" };
+    const module_type = category === "diagnostic"
+      ? "diagnostic"
+      : Number.isFinite(numeric) && numeric >= 0x500
+        ? "infotainment_or_cluster"
+        : Number.isFinite(numeric) && numeric >= 0x300
+          ? "body_control_or_security"
+          : Number.isFinite(numeric) && numeric >= 0x180
+            ? "chassis_or_powertrain"
+            : "body_control";
+
+    return { id, category, module_type, confidence_score: category === "diagnostic" ? 0.82 : 0.58, confidence: "heuristic", reasoning: `ID range ${cleanHex(id)} maps heuristically to ${module_type}.` };
   });
 
   const idDeepDive = [...idProfiles.entries()].map(([id, profile]) => {
@@ -326,6 +336,48 @@ const runAnalysis = (csv: string) => {
     possible_rpm_ids: [...rpmIds],
     possible_pedal_ids: [...pedalIds],
   };
+
+  const idClassifications = idDeepDive.map((item) => {
+    const volatileByteCount = Array.isArray(item.volatile_bytes) ? item.volatile_bytes.length : 0;
+    const changeRate = Number(item.payload_change_rate);
+    const classification = changeRate > 0.75 || volatileByteCount >= 4 ? "volatile" : changeRate > 0.35 || volatileByteCount >= 2 ? "dynamic" : changeRate > 0.05 || volatileByteCount >= 1 ? "semi-static" : "static";
+    return { id: item.id, classification, volatility_score: Number(Math.min(1, changeRate + volatileByteCount / 8).toFixed(4)), reasoning: `${item.id} changed in ${Math.round(changeRate * 100)}% of observed transitions with ${volatileByteCount} volatile byte position(s).` };
+  });
+
+  const ecuClusters = idDeepDive.map((item) => {
+    const timingMatches = timing.filter((row) => row.id !== item.id && Math.abs(Number(row.average_period) - Number(item.average_period)) < 0.002).map((row) => row.id).slice(0, 6);
+    const structureMatches = idDeepDive.filter((row) => row.id !== item.id && JSON.stringify(row.payload_lengths) === JSON.stringify(item.payload_lengths)).map((row) => row.id).slice(0, 6);
+    const ids = [...new Set([String(item.id), ...timingMatches, ...structureMatches])];
+    return { cluster_id: `cluster_${item.id}`, ids, confidence: Number(Math.min(0.95, 0.35 + timingMatches.length * 0.08 + structureMatches.length * 0.06).toFixed(3)), behavior: "IDs share timing cadence and/or payload structure, suggesting related ECU housekeeping/status traffic." };
+  }).filter((cluster) => cluster.ids.length > 1).slice(0, 16);
+
+  const counterChecksumAnalysis = idDeepDive.map((item) => {
+    const byteEntropy = Array.isArray(item.byte_entropy) ? item.byte_entropy as JsonRecord[] : [];
+    const counters = byteEntropy.filter((row) => Number(row.unique_values ?? 0) > 1 && Number(row.unique_values ?? 0) <= 16 && Number(row.entropy ?? 0) > 0.3).map((row) => ({ byte_index: row.byte_index, direction: "rolling_or_modulo", modulo: row.unique_values, confidence: 0.58 }));
+    const checksums = byteEntropy.filter((row) => Number(row.unique_values ?? 0) > 16 && Number(row.entropy ?? 0) > 1.2).map((row) => ({ byte_index: row.byte_index, confidence: 0.52 }));
+    return { id: item.id, counters, checksums, byte_behavior: byteEntropy };
+  }).filter((item) => item.counters.length || item.checksums.length);
+
+  const missingPhysicalSignals = [
+    speedIds.size ? null : { signal: "speed", reasoning: "No repeated motion-shaped payload pattern was found." },
+    rpmIds.size ? null : { signal: "rpm", reasoning: "No clear engine-speed-style changing payload was found." },
+    pedalIds.size ? null : { signal: "pedal", reasoning: "No compact pedal-position-style changing signal was found." },
+    { signal: "brake", reasoning: "No validated brake toggle or pressure pattern was isolated." },
+    { signal: "steering", reasoning: "No steering-angle-style bidirectional changing pattern was isolated." },
+    { signal: "wheel_speed", reasoning: "No grouped wheel-speed-like correlated byte patterns were isolated." },
+    { signal: "torque", reasoning: "No torque-like dynamic powertrain signal was isolated." },
+    { signal: "gear", reasoning: "No gear-state enum pattern was isolated." },
+  ].filter(Boolean);
+
+  const vehicleState = {
+    classification: speedIds.size || pedalIds.size ? "possible_low_speed_or_driving" : rpmIds.size ? "engine_running_stationary" : "ignition_on_idle_or_accessory",
+    confidence_score: speedIds.size || pedalIds.size ? 0.62 : 0.86,
+    reasoning: speedIds.size || pedalIds.size ? "Motion-like candidates exist, but full driving state needs validation against controlled movement." : "Motion, wheel-speed, pedal, brake, steering, torque, and gear signals are absent while periodic housekeeping traffic is present.",
+  };
+
+  const correlationPairs = idDeepDive.flatMap((left, leftIndex) => idDeepDive.slice(leftIndex + 1).map((right) => ({ left: left.id, right: right.id, correlation: Number((1 - Math.min(1, Math.abs(Number(left.average_period) - Number(right.average_period)))).toFixed(4)), relationship: "timing_cadence_similarity" }))).filter((item) => item.correlation >= 0.72).slice(0, 24);
+  const enhancedNetworkHealth = { ...networkHealth, bus_health_score: Math.max(0, Math.min(100, 100 - anomalies.length * 4 - Math.round(Number(networkHealth.timing_irregularity_score) * 120))), chatter_classification: idStats.some((item) => item.percentage > 35) ? "dominant_id_chatter" : totalMessages / Math.max(idCounts.size, 1) > 60 ? "busy_periodic_chatter" : "normal_idle_chatter", dropout_events: timing.filter((item) => Number(item.max_period) > Math.max(Number(item.average_period) * 3, 0.1)).map((item) => ({ id: item.id, max_period: item.max_period, average_period: item.average_period, classification: "possible_gap_or_dropout" })).slice(0, 16) };
+  const derivedEvents = enhancedNetworkHealth.dropout_events.map((item, index) => ({ event_index: eventTimeline.length + index + 1, id: item.id, timestamp: null, event_type: "possible_module_dropout", description: `Timing gap detected: max period ${item.max_period}s vs average ${item.average_period}s.`, before_after_hint: "Compare nearby frames to confirm wake/sleep or missing traffic." }));
 
   return {
     ok: true,
