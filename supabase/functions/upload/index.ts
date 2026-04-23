@@ -155,7 +155,7 @@ const parseDbc = (text: string, warnings: string[]) => {
   for (const line of text.split(/\r?\n/)) {
     const message = line.match(/^\s*BO_\s+(\d+)\s+(\S+)\s*:\s*(\d+)\s+(\S+)/);
     if (message) {
-      currentMessageId = Number(message[1]).toString(16).toUpperCase();
+      currentMessageId = String(Number(message[1]));
       signalCounts.set(currentMessageId, 0);
       messageMetadata.set(currentMessageId, `source_file_type=dbc_definition;dbc_message=${message[2]};transmitter=${message[4]}`);
       continue;
@@ -173,7 +173,7 @@ const parseDbc = (text: string, warnings: string[]) => {
   const frames = text.split(/\r?\n/).map((line, index) => {
     const message = line.match(/^\s*BO_\s+(\d+)\s+\S+\s*:\s*(\d+)\s+\S+/);
     if (!message) return null;
-    const id = Number(message[1]).toString(16).toUpperCase();
+    const id = String(Number(message[1]));
     const dlc = Math.max(1, Math.min(Number(message[2]) || 8, 8));
     const signalCount = Math.min(signalCounts.get(id) ?? 0, 255).toString(16).padStart(2, "0");
     return normalizeFrame(String(index), id, [signalCount, ...Array.from({ length: dlc - 1 }, () => "00")], dlc, messageMetadata.get(id)?.slice(0, 1800));
