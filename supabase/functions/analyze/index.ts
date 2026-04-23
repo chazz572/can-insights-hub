@@ -729,9 +729,9 @@ const runAnalysis = (csv: string) => {
   }));
 
   const decodedSignals = pipeline === "log_dbc" ? dbcSignals.flatMap((dbcSignal) => {
-    const messageId = normalizeCanId(String(dbcSignal.message_id));
-    const profile = idProfiles.get(messageId);
-    if (!profile) return [];
+    const matched = canIdAliases(String(dbcSignal.message_id)).map((candidateId) => ({ candidateId, profile: idProfiles.get(candidateId) })).find((item) => item.profile);
+    if (!matched?.profile) return [];
+    const { candidateId: messageId, profile } = matched;
     const rawValues = profile.cleanSamples
       .map(byteValues)
       .map((bytes) => decodeDbcRawValue(bytes, dbcSignal))
