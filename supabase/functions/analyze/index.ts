@@ -13,10 +13,8 @@ type IdProfile = {
   lengths: Map<number, number>;
   timestamps: number[];
   byteCounts: Array<Map<number, number>>;
-  byteSeries: number[][];
   previousData: string | null;
   changes: number;
-  cleanSamples: string[];
 };
 
 const jsonResponse = (body: unknown) =>
@@ -119,45 +117,6 @@ const entropy = (values: number[]) => {
   }, 0).toFixed(4));
 };
 
-const pearson = (a: number[], b: number[]) => {
-  const length = Math.min(a.length, b.length);
-  if (length < 4) return 0;
-  const x = a.slice(0, length);
-  const y = b.slice(0, length);
-  const ax = average(x);
-  const ay = average(y);
-  const numerator = x.reduce((sum, value, index) => sum + (value - ax) * (y[index] - ay), 0);
-  const dx = Math.sqrt(x.reduce((sum, value) => sum + (value - ax) ** 2, 0));
-  const dy = Math.sqrt(y.reduce((sum, value) => sum + (value - ay) ** 2, 0));
-  return dx && dy ? Number((numerator / (dx * dy)).toFixed(4)) : 0;
-};
-
-const classifyVolatility = (changeRate: number, volatileByteCount: number) => {
-  if (changeRate > 0.75 || volatileByteCount >= 4) return "volatile";
-  if (changeRate > 0.35 || volatileByteCount >= 2) return "dynamic";
-  if (changeRate > 0.05 || volatileByteCount >= 1) return "semi-static";
-  return "static";
-};
-
-const detectByteBehavior = (series: number[]) => {
-  const values = series.filter((value) => Number.isFinite(value));
-  if (values.length < 4) return { counter: false, direction: "none", modulo: null as number | null, checksum_like: false, confidence: 0 };
-  const deltas = values.slice(1).map((value, index) => value - values[index]);
-  const inc = deltas.filter((delta) => delta === 1 || delta < -200).length;
-  const dec = deltas.filter((delta) => delta === -1 || delta > 200).length;
-  const unique = new Set(values).size;
-  const transitions = deltas.filter((delta) => delta !== 0).length;
-  const counterScore = Math.max(inc, dec) / Math.max(deltas.length, 1);
-  const checksumScore = unique / values.length;
-  return {
-    counter: counterScore > 0.55,
-    direction: inc >= dec ? "incrementing" : "decrementing",
-    modulo: counterScore > 0.55 && unique <= 16 ? unique : null,
-    checksum_like: checksumScore > 0.65 && transitions / Math.max(deltas.length, 1) > 0.65,
-    confidence: Number(Math.max(counterScore, checksumScore * 0.75).toFixed(3)),
-  };
-};
-
 const runAnalysis = (csv: string) => {
   let totalMessages = 0;
   let extendedIds = 0;
@@ -180,7 +139,7 @@ const runAnalysis = (csv: string) => {
   forEachCsvRecord(csv, ({ id, data, timestamp }) => {
     totalMessages += 1;
     idCounts.set(id, (idCounts.get(id) ?? 0) + 1);
-    const profile = idProfiles.get(id) ?? { count: 0, lengths: new Map<number, number>(), timestamps: [], byteCounts: Array.from({ length: 8 }, () => new Map<number, number>()), byteSeries: Array.from({ length: 8 }, () => []), previousData: null, changes: 0, cleanSamples: [] };
+    const profile = idProfiles.get(id) ?? { count: 0, lengths: new Map<number, number>(), timestamps: [], byteCounts: Array.from({ length: 8 }, () => new Map<number, number>()), previousData: null, changes: 0 };
     profile.count += 1;
     profile.lengths.set(data.length, (profile.lengths.get(data.length) ?? 0) + 1);
     if (Number.isFinite(timestamp)) profile.timestamps.push(timestamp);
@@ -203,9 +162,7 @@ const runAnalysis = (csv: string) => {
 
     bytes.forEach((byte, byteIndex) => {
       profile.byteCounts[byteIndex].set(byte, (profile.byteCounts[byteIndex].get(byte) ?? 0) + 1);
-      if (profile.byteSeries[byteIndex].length < 400) profile.byteSeries[byteIndex].push(byte);
     });
-    if (profile.cleanSamples.length < 400) profile.cleanSamples.push(cleanHex(data));
 
     for (let byteIndex = 0; byteIndex < bytes.length; byteIndex += 1) {
       const byte = bytes[byteIndex];
@@ -341,35 +298,6 @@ const runAnalysis = (csv: string) => {
     };
   }).sort((a, b) => Number(b.messages) - Number(a.messages));
 
-  const idClassifications = idDeepDive.map((item) => {
-    const volatility_score = Math.min(1, Number(item.payload_change_rate) + (Array.isArray(item.volatile_bytes) ? item.volatile_bytes.length : 0) / 8);
-    const classification = classifyVolatility(Number(item.payload_change_rate), Array.isArray(item.volatile_bytes) ? item.volatile_bytes.length : 0);
-    return { id: item.id, classification, volatility_score: Number(volatility_score.toFixed(4)), reasoning: `${item.id} changed in ${Math.round(Number(item.payload_change_rate) * 100)}% of observed transitions with ${(item.volatile_bytes as number[]).length} volatile byte position(s).` };
-  });
-
-  const counterChecksum = [...idProfiles.entries()].map(([id, profile]) => {
-    const byte_behavior = profile.byteSeries.map((series, byte_index) => ({ byte_index, ...detectByteBehavior(series) }));
-    return {
-      id,
-      counters: byte_behavior.filter((item) => item.counter).map((item) => ({ byte_index: item.byte_index, direction: item.direction, modulo: item.modulo, confidence: item.confidence })),
-      checksums: byte_behavior.filter((item) => item.checksum_like && !item.counter).map((item) => ({ byte_index: item.byte_index, confidence: item.confidence })),
-      byte_behavior,
-    };
-  }).filter((item) => item.counters.length || item.checksums.length);
-
-  const correlationSignals = [...idProfiles.entries()].flatMap(([id, profile]) => profile.byteSeries.map((series, byte_index) => ({ key: `${id}:byte${byte_index}`, id, byte_index, series })));
-  const topCorrelatedPairs = correlationSignals.flatMap((left, leftIndex) => correlationSignals.slice(leftIndex + 1).map((right) => ({ left: left.key, right: right.key, correlation: pearson(left.series, right.series), relationship: "byte_value_correlation" })))
-    .filter((item) => Math.abs(item.correlation) >= 0.72)
-    .sort((a, b) => Math.abs(b.correlation) - Math.abs(a.correlation))
-    .slice(0, 24);
-
-  const ecuClusters = idDeepDive.map((item) => {
-    const timingMatch = timing.filter((row) => Math.abs(Number(row.average_period) - Number(item.average_period)) < 0.002).map((row) => row.id).filter((id) => id !== item.id).slice(0, 8);
-    const structureMatch = idDeepDive.filter((row) => row.id !== item.id && JSON.stringify(row.payload_lengths) === JSON.stringify(item.payload_lengths)).map((row) => row.id).slice(0, 8);
-    const ids = [...new Set([item.id, ...timingMatch, ...structureMatch])];
-    return { cluster_id: `cluster_${item.id}`, ids, confidence: Number(Math.min(0.95, 0.35 + timingMatch.length * 0.08 + structureMatch.length * 0.06).toFixed(3)), behavior: `IDs share ${timingMatch.length ? "timing" : "limited timing"} and ${structureMatch.length ? "payload length" : "limited payload"} similarity; likely related ECU/status group.` };
-  }).filter((cluster) => cluster.ids.length > 1).slice(0, 16);
-
   const networkHealth = {
     estimated_bus_load_score: Math.min(100, Math.round((totalMessages / Math.max(idCounts.size, 1)) * 10)),
     dominant_ids: idStats.filter((item) => item.percentage > 10).slice(0, 8),
@@ -377,9 +305,6 @@ const runAnalysis = (csv: string) => {
     quiet_ids: idDeepDive.filter((item) => Number(item.messages) <= 2).slice(0, 12),
     missing_or_sparse_message_risk: idDeepDive.filter((item) => Number(item.messages) <= 2).length,
     timing_irregularity_score: Number(average(idDeepDive.map((item) => Number(item.period_jitter))).toFixed(6)),
-    bus_health_score: Math.max(0, Math.min(100, 100 - anomalies.length * 4 - Math.round(average(idDeepDive.map((item) => Number(item.period_jitter))) * 120))),
-    chatter_classification: idStats.some((item) => item.percentage > 35) ? "dominant_id_chatter" : totalMessages / Math.max(idCounts.size, 1) > 60 ? "busy_periodic_chatter" : "normal_idle_chatter",
-    dropout_events: timing.filter((item) => Number(item.max_period) > Math.max(Number(item.average_period) * 3, 0.1)).map((item) => ({ id: item.id, max_period: item.max_period, average_period: item.average_period, classification: "possible_gap_or_dropout" })).slice(0, 16),
   };
 
   const protocolInsights = {
@@ -398,7 +323,42 @@ const runAnalysis = (csv: string) => {
     interpretation: speedIds.size || pedalIds.size ? "Vehicle activity signals are present, but exact driving behavior requires DBC validation." : "Driving behavior cannot be confirmed from this capture without stronger speed/pedal candidates.",
   };
 
-  const missingSignals = [
+  const eventTimeline = anomalies.slice(0, 24).map((item, index) => ({
+    event_index: index + 1,
+    id: item.id,
+    event_type: "payload_anomaly",
+    description: item.reason,
+    before_after_hint: "Compare this ID against nearby frames for timing or payload changes.",
+  }));
+
+  const vehicleBehavior = {
+    possible_speed_ids: [...speedIds],
+    possible_rpm_ids: [...rpmIds],
+    possible_pedal_ids: [...pedalIds],
+  };
+
+  const idClassifications = idDeepDive.map((item) => {
+    const volatileByteCount = Array.isArray(item.volatile_bytes) ? item.volatile_bytes.length : 0;
+    const changeRate = Number(item.payload_change_rate);
+    const classification = changeRate > 0.75 || volatileByteCount >= 4 ? "volatile" : changeRate > 0.35 || volatileByteCount >= 2 ? "dynamic" : changeRate > 0.05 || volatileByteCount >= 1 ? "semi-static" : "static";
+    return { id: item.id, classification, volatility_score: Number(Math.min(1, changeRate + volatileByteCount / 8).toFixed(4)), reasoning: `${item.id} changed in ${Math.round(changeRate * 100)}% of observed transitions with ${volatileByteCount} volatile byte position(s).` };
+  });
+
+  const ecuClusters = idDeepDive.map((item) => {
+    const timingMatches = timing.filter((row) => row.id !== item.id && Math.abs(Number(row.average_period) - Number(item.average_period)) < 0.002).map((row) => row.id).slice(0, 6);
+    const structureMatches = idDeepDive.filter((row) => row.id !== item.id && JSON.stringify(row.payload_lengths) === JSON.stringify(item.payload_lengths)).map((row) => row.id).slice(0, 6);
+    const ids = [...new Set([String(item.id), ...timingMatches, ...structureMatches])];
+    return { cluster_id: `cluster_${item.id}`, ids, confidence: Number(Math.min(0.95, 0.35 + timingMatches.length * 0.08 + structureMatches.length * 0.06).toFixed(3)), behavior: "IDs share timing cadence and/or payload structure, suggesting related ECU housekeeping/status traffic." };
+  }).filter((cluster) => cluster.ids.length > 1).slice(0, 16);
+
+  const counterChecksumAnalysis = idDeepDive.map((item) => {
+    const byteEntropy = Array.isArray(item.byte_entropy) ? item.byte_entropy as JsonRecord[] : [];
+    const counters = byteEntropy.filter((row) => Number(row.unique_values ?? 0) > 1 && Number(row.unique_values ?? 0) <= 16 && Number(row.entropy ?? 0) > 0.3).map((row) => ({ byte_index: row.byte_index, direction: "rolling_or_modulo", modulo: row.unique_values, confidence: 0.58 }));
+    const checksums = byteEntropy.filter((row) => Number(row.unique_values ?? 0) > 16 && Number(row.entropy ?? 0) > 1.2).map((row) => ({ byte_index: row.byte_index, confidence: 0.52 }));
+    return { id: item.id, counters, checksums, byte_behavior: byteEntropy };
+  }).filter((item) => item.counters.length || item.checksums.length);
+
+  const missingPhysicalSignals = [
     speedIds.size ? null : { signal: "speed", reasoning: "No repeated motion-shaped payload pattern was found." },
     rpmIds.size ? null : { signal: "rpm", reasoning: "No clear engine-speed-style changing payload was found." },
     pedalIds.size ? null : { signal: "pedal", reasoning: "No compact pedal-position-style changing signal was found." },
@@ -412,32 +372,12 @@ const runAnalysis = (csv: string) => {
   const vehicleState = {
     classification: speedIds.size || pedalIds.size ? "possible_low_speed_or_driving" : rpmIds.size ? "engine_running_stationary" : "ignition_on_idle_or_accessory",
     confidence_score: speedIds.size || pedalIds.size ? 0.62 : 0.86,
-    reasoning: speedIds.size || pedalIds.size
-      ? "Motion-like candidates exist, but full driving state needs validation against controlled movement."
-      : "Motion, wheel-speed, pedal, brake, steering, torque, and gear signals are absent while periodic housekeeping traffic is present.",
+    reasoning: speedIds.size || pedalIds.size ? "Motion-like candidates exist, but full driving state needs validation against controlled movement." : "Motion, wheel-speed, pedal, brake, steering, torque, and gear signals are absent while periodic housekeeping traffic is present.",
   };
 
-  const infotainmentSecurityFrames = systems.filter((item) => ["infotainment_or_cluster", "body_control_or_security"].includes(String(item.module_type))).map((item) => ({ id: item.id, classification: item.module_type, confidence_score: item.confidence_score, reasoning: item.reasoning })).slice(0, 24);
-
-  const eventTimeline = anomalies.slice(0, 24).map((item, index) => ({
-    event_index: index + 1,
-    id: item.id,
-    timestamp: null,
-    event_type: "payload_anomaly",
-    description: item.reason,
-    before_after_hint: "Compare this ID against nearby frames for timing or payload changes.",
-  }));
-
-  const derivedEvents = [
-    ...networkHealth.dropout_events.map((item, index) => ({ event_index: eventTimeline.length + index + 1, id: item.id, timestamp: null, event_type: "possible_module_dropout", description: `Timing gap detected: max period ${item.max_period}s vs average ${item.average_period}s.`, before_after_hint: "Compare nearby frames to confirm wake/sleep or missing traffic." })),
-    ...idStats.filter((item) => item.percentage > 35).map((item, index) => ({ event_index: eventTimeline.length + networkHealth.dropout_events.length + index + 1, id: item.id, timestamp: null, event_type: "traffic_burst_or_chatter", description: `${item.id} dominates ${item.percentage}% of captured traffic.`, before_after_hint: "Inspect this ID for repeated status chatter or abnormal module activity." })),
-  ].slice(0, 24);
-
-  const vehicleBehavior = {
-    possible_speed_ids: [...speedIds],
-    possible_rpm_ids: [...rpmIds],
-    possible_pedal_ids: [...pedalIds],
-  };
+  const correlationPairs = idDeepDive.flatMap((left, leftIndex) => idDeepDive.slice(leftIndex + 1).map((right) => ({ left: left.id, right: right.id, correlation: Number((1 - Math.min(1, Math.abs(Number(left.average_period) - Number(right.average_period)))).toFixed(4)), relationship: "timing_cadence_similarity" }))).filter((item) => item.correlation >= 0.72).slice(0, 24);
+  const enhancedNetworkHealth = { ...networkHealth, bus_health_score: Math.max(0, Math.min(100, 100 - anomalies.length * 4 - Math.round(Number(networkHealth.timing_irregularity_score) * 120))), chatter_classification: idStats.some((item) => item.percentage > 35) ? "dominant_id_chatter" : totalMessages / Math.max(idCounts.size, 1) > 60 ? "busy_periodic_chatter" : "normal_idle_chatter", dropout_events: timing.filter((item) => Number(item.max_period) > Math.max(Number(item.average_period) * 3, 0.1)).map((item) => ({ id: item.id, max_period: item.max_period, average_period: item.average_period, classification: "possible_gap_or_dropout" })).slice(0, 16) };
+  const derivedEvents = enhancedNetworkHealth.dropout_events.map((item, index) => ({ event_index: eventTimeline.length + index + 1, id: item.id, timestamp: null, event_type: "possible_module_dropout", description: `Timing gap detected: max period ${item.max_period}s vs average ${item.average_period}s.`, before_after_hint: "Compare nearby frames to confirm wake/sleep or missing traffic." }));
 
   return {
     ok: true,
@@ -465,18 +405,18 @@ const runAnalysis = (csv: string) => {
       systems,
       id_deep_dive: idDeepDive,
       ecu_clusters: ecuClusters,
-      counter_checksum_analysis: counterChecksum,
+      counter_checksum_analysis: counterChecksumAnalysis,
       id_classifications: idClassifications,
       module_type_heuristics: systems,
-      vehicle_state,
-      missing_physical_signals: missingSignals,
-      infotainment_security_frames: infotainmentSecurityFrames,
+      vehicle_state: vehicleState,
+      missing_physical_signals: missingPhysicalSignals,
+      infotainment_security_frames: systems.filter((item) => ["infotainment_or_cluster", "body_control_or_security"].includes(String(item.module_type))),
       correlation_analysis: {
-        top_correlated_pairs: topCorrelatedPairs,
-        correlation_matrix: topCorrelatedPairs,
-        likely_signal_relationships: topCorrelatedPairs.map((item) => ({ ...item, explanation: "These byte streams moved together strongly enough to be reviewed as related status, counter, or sensor fields." })),
+        top_correlated_pairs: correlationPairs,
+        correlation_matrix: correlationPairs,
+        likely_signal_relationships: correlationPairs.map((item) => ({ ...item, explanation: "These IDs share timing cadence and should be reviewed as related ECU/status traffic." })),
       },
-      network_health: networkHealth,
+      network_health: enhancedNetworkHealth,
       driver_behavior: driverBehavior,
       event_timeline: [...eventTimeline, ...derivedEvents],
       mechanic_summary: `Capture contains ${totalMessages} CAN messages. ${anomalies.length} anomalous payloads were detected. Candidate speed IDs: ${vehicleBehavior.possible_speed_ids.join(", ") || "none"}. Candidate RPM IDs: ${vehicleBehavior.possible_rpm_ids.join(", ") || "none"}.`,
