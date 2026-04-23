@@ -730,7 +730,8 @@ const runAnalysis = (csv: string) => {
   };
 
   const decodedSignals = pipeline === "log_dbc" ? dbcSignals.flatMap((dbcSignal) => {
-    const profile = idProfiles.get(String(dbcSignal.message_id));
+    const messageId = normalizeCanId(String(dbcSignal.message_id));
+    const profile = idProfiles.get(messageId);
     if (!profile) return [];
     const rawValues = profile.cleanSamples
       .map(byteValues)
@@ -739,7 +740,7 @@ const runAnalysis = (csv: string) => {
     const decodedValues = rawValues.map((value) => value * Number(dbcSignal.factor) + Number(dbcSignal.offset));
     const summary = summarizeDecodedValues(decodedValues);
     return [{
-      id: dbcSignal.message_id,
+      id: messageId,
       signal_name: dbcSignal.signal_name,
       unit: dbcSignal.unit || "raw",
       start_bit: dbcSignal.start_bit,
