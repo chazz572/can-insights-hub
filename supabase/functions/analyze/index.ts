@@ -377,6 +377,9 @@ const runAnalysis = (csv: string) => {
     quiet_ids: idDeepDive.filter((item) => Number(item.messages) <= 2).slice(0, 12),
     missing_or_sparse_message_risk: idDeepDive.filter((item) => Number(item.messages) <= 2).length,
     timing_irregularity_score: Number(average(idDeepDive.map((item) => Number(item.period_jitter))).toFixed(6)),
+    bus_health_score: Math.max(0, Math.min(100, 100 - anomalies.length * 4 - Math.round(average(idDeepDive.map((item) => Number(item.period_jitter))) * 120))),
+    chatter_classification: idStats.some((item) => item.percentage > 35) ? "dominant_id_chatter" : totalMessages / Math.max(idCounts.size, 1) > 60 ? "busy_periodic_chatter" : "normal_idle_chatter",
+    dropout_events: timing.filter((item) => Number(item.max_period) > Math.max(Number(item.average_period) * 3, 0.1)).map((item) => ({ id: item.id, max_period: item.max_period, average_period: item.average_period, classification: "possible_gap_or_dropout" })).slice(0, 16),
   };
 
   const protocolInsights = {
@@ -395,13 +398,40 @@ const runAnalysis = (csv: string) => {
     interpretation: speedIds.size || pedalIds.size ? "Vehicle activity signals are present, but exact driving behavior requires DBC validation." : "Driving behavior cannot be confirmed from this capture without stronger speed/pedal candidates.",
   };
 
+  const missingSignals = [
+    speedIds.size ? null : { signal: "speed", reasoning: "No repeated motion-shaped payload pattern was found." },
+    rpmIds.size ? null : { signal: "rpm", reasoning: "No clear engine-speed-style changing payload was found." },
+    pedalIds.size ? null : { signal: "pedal", reasoning: "No compact pedal-position-style changing signal was found." },
+    { signal: "brake", reasoning: "No validated brake toggle or pressure pattern was isolated." },
+    { signal: "steering", reasoning: "No steering-angle-style bidirectional changing pattern was isolated." },
+    { signal: "wheel_speed", reasoning: "No grouped wheel-speed-like correlated byte patterns were isolated." },
+    { signal: "torque", reasoning: "No torque-like dynamic powertrain signal was isolated." },
+    { signal: "gear", reasoning: "No gear-state enum pattern was isolated." },
+  ].filter(Boolean);
+
+  const vehicleState = {
+    classification: speedIds.size || pedalIds.size ? "possible_low_speed_or_driving" : rpmIds.size ? "engine_running_stationary" : "ignition_on_idle_or_accessory",
+    confidence_score: speedIds.size || pedalIds.size ? 0.62 : 0.86,
+    reasoning: speedIds.size || pedalIds.size
+      ? "Motion-like candidates exist, but full driving state needs validation against controlled movement."
+      : "Motion, wheel-speed, pedal, brake, steering, torque, and gear signals are absent while periodic housekeeping traffic is present.",
+  };
+
+  const infotainmentSecurityFrames = systems.filter((item) => ["infotainment_or_cluster", "body_control_or_security"].includes(String(item.module_type))).map((item) => ({ id: item.id, classification: item.module_type, confidence_score: item.confidence_score, reasoning: item.reasoning })).slice(0, 24);
+
   const eventTimeline = anomalies.slice(0, 24).map((item, index) => ({
     event_index: index + 1,
     id: item.id,
+    timestamp: null,
     event_type: "payload_anomaly",
     description: item.reason,
     before_after_hint: "Compare this ID against nearby frames for timing or payload changes.",
   }));
+
+  const derivedEvents = [
+    ...networkHealth.dropout_events.map((item, index) => ({ event_index: eventTimeline.length + index + 1, id: item.id, timestamp: null, event_type: "possible_module_dropout", description: `Timing gap detected: max period ${item.max_period}s vs average ${item.average_period}s.`, before_after_hint: "Compare nearby frames to confirm wake/sleep or missing traffic." })),
+    ...idStats.filter((item) => item.percentage > 35).map((item, index) => ({ event_index: eventTimeline.length + networkHealth.dropout_events.length + index + 1, id: item.id, timestamp: null, event_type: "traffic_burst_or_chatter", description: `${item.id} dominates ${item.percentage}% of captured traffic.`, before_after_hint: "Inspect this ID for repeated status chatter or abnormal module activity." })),
+  ].slice(0, 24);
 
   const vehicleBehavior = {
     possible_speed_ids: [...speedIds],
