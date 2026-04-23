@@ -8,6 +8,14 @@ const corsHeaders = {
 type JsonRecord = Record<string, unknown>;
 type CsvIndexes = { timestampIndex: number; idIndex: number; dataIndex: number };
 type ParsedRecord = { id: string; data: string; timestamp: number };
+type IdProfile = {
+  count: number;
+  lengths: Map<number, number>;
+  timestamps: number[];
+  byteCounts: Array<Map<number, number>>;
+  previousData: string | null;
+  changes: number;
+};
 
 const jsonResponse = (body: unknown) =>
   new Response(JSON.stringify(body), {
@@ -94,6 +102,11 @@ const forEachCsvRecord = (csv: string, callback: (record: ParsedRecord) => void)
 
 const cleanHex = (value: string) => value.replace(/[^a-fA-F0-9]/g, "").toUpperCase();
 const byteValues = (value: string) => cleanHex(value).match(/.{1,2}/g)?.slice(0, 8).map((byte) => Number.parseInt(byte, 16)).filter((byte) => Number.isFinite(byte)) ?? [];
+const average = (values: number[]) => values.length ? values.reduce((sum, value) => sum + value, 0) / values.length : 0;
+const standardDeviation = (values: number[]) => {
+  const mean = average(values);
+  return values.length ? Math.sqrt(average(values.map((value) => (value - mean) ** 2))) : 0;
+};
 const entropy = (values: number[]) => {
   if (!values.length) return 0;
   const counts = new Map<number, number>();
