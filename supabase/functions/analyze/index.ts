@@ -128,6 +128,48 @@ const analogCandidateScore = (values: number[]) => {
   return unique >= 12 && range >= 250 ? transitionRate * 0.45 + (smoothSteps / Math.max(values.length - 1, 1)) * 0.35 + Math.min(0.2, unique / values.length) : 0;
 };
 
+const trendStats = (values: number[]) => {
+  if (values.length < 3) return { range: 0, unique: new Set(values).size, rising: 0, falling: 0, flat: 0, reversals: 0, meanAbsDelta: 0, smoothness: 0, direction: "flat" };
+  const deltas = values.slice(1).map((value, index) => value - values[index]);
+  const nonZero = deltas.filter((delta) => delta !== 0);
+  const signs = nonZero.map((delta) => Math.sign(delta));
+  const reversals = signs.slice(1).filter((sign, index) => sign !== signs[index]).length;
+  const range = Math.max(...values) - Math.min(...values);
+  const meanAbsDelta = average(deltas.map(Math.abs));
+  const rising = deltas.filter((delta) => delta > 0).length / deltas.length;
+  const falling = deltas.filter((delta) => delta < 0).length / deltas.length;
+  const flat = deltas.filter((delta) => delta === 0).length / deltas.length;
+  const smoothSteps = deltas.filter((delta) => Math.abs(delta) > 0 && Math.abs(delta) <= Math.max(4, range * 0.22)).length / deltas.length;
+  const direction = rising > 0.55 ? "rising" : falling > 0.55 ? "falling" : reversals >= 2 ? "oscillating" : flat > 0.75 ? "flat" : "mixed";
+  return { range, unique: new Set(values).size, rising, falling, flat, reversals, meanAbsDelta, smoothness: smoothSteps, direction };
+};
+
+const pearson = (left: number[], right: number[]) => {
+  const length = Math.min(left.length, right.length);
+  if (length < 6) return 0;
+  const a = left.slice(0, length);
+  const b = right.slice(0, length);
+  const meanA = average(a);
+  const meanB = average(b);
+  const numerator = a.reduce((sum, value, index) => sum + (value - meanA) * (b[index] - meanB), 0);
+  const denominator = Math.sqrt(a.reduce((sum, value) => sum + (value - meanA) ** 2, 0) * b.reduce((sum, value) => sum + (value - meanB) ** 2, 0));
+  return denominator ? Number((numerator / denominator).toFixed(4)) : 0;
+};
+
+const classifySignal = (signal: JsonRecord) => {
+  const byteStart = Number(signal.byte_start ?? 0);
+  const maxValue = Number(signal.max_value ?? 0);
+  const range = Number(signal.range ?? 0);
+  const direction = String(signal.direction ?? "mixed");
+  if (String(signal.likely_signal_type).includes("rpm") || (maxValue > 900 && maxValue < 9000 && byteStart <= 3)) return "rpm_candidate";
+  if (range > 30 && range < 3500 && maxValue < 5000 && byteStart <= 4 && ["rising", "falling", "oscillating"].includes(direction)) return "speed_or_wheel_speed_candidate";
+  if (range > 8 && range <= 255 && maxValue <= 255) return "pedal_brake_or_steering_candidate";
+  if (range <= 16 && Number(signal.unique_values ?? 0) <= 16) return "gear_flag_or_counter_candidate";
+  return "analog_sensor_candidate";
+};
+
+const describeSignalEvidence = (signal: JsonRecord) => `ID ${signal.id} bytes ${signal.byte_start}-${Number(signal.byte_start ?? 0) + 1} ${signal.endianness} ranged ${signal.min_value}-${signal.max_value}, changed ${signal.unique_values} unique values, trended ${signal.direction}, and had ${Number(signal.smoothness ?? 0).toFixed(2)} smooth-step behavior.`;
+
 const runAnalysis = (csv: string) => {
   let totalMessages = 0;
   let extendedIds = 0;
