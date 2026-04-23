@@ -19,7 +19,7 @@ const App = () => {
         <Sonner />
         <BrowserRouter>
           <AppNav />
-          <div className="min-h-screen pb-24 md:pl-72 md:pb-0">
+          <div className="min-h-screen pb-24 pt-20 transition-colors duration-500 md:pl-72 md:pb-0">
             <Routes>
               <Route path="/" element={<Home />} />
               <Route path="/upload" element={<Upload />} />

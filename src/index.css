@@ -69,6 +69,40 @@ All colors MUST be HSL.
     --sidebar-ring: 199 96% 55%;
   }
 
+  .light {
+    --background: 210 40% 98%;
+    --foreground: 222 47% 11%;
+    --card: 0 0% 100%;
+    --card-foreground: 222 47% 11%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 222 47% 11%;
+    --primary: 199 96% 42%;
+    --primary-foreground: 210 40% 98%;
+    --secondary: 214 32% 91%;
+    --secondary-foreground: 222 47% 11%;
+    --muted: 214 32% 91%;
+    --muted-foreground: 215 16% 42%;
+    --accent: 266 75% 55%;
+    --accent-foreground: 210 40% 98%;
+    --destructive: 0 84% 55%;
+    --destructive-foreground: 210 40% 98%;
+    --border: 214 32% 84%;
+    --input: 214 32% 88%;
+    --ring: 199 96% 42%;
+    --surface: 210 40% 98%;
+    --surface-elevated: 0 0% 100%;
+    --glass: 0 0% 100% / 0.72;
+    --glass-strong: 0 0% 100% / 0.9;
+    --glass-border: 222 47% 11% / 0.1;
+    --gradient-hero: radial-gradient(circle at 18% 8%, hsl(199 96% 42% / 0.18), transparent 30%), radial-gradient(circle at 85% 0%, hsl(266 75% 55% / 0.16), transparent 34%), linear-gradient(135deg, hsl(210 40% 98%) 0%, hsl(214 32% 94%) 55%, hsl(210 40% 98%) 100%);
+    --gradient-panel: linear-gradient(145deg, hsl(var(--glass-strong)) 0%, hsl(214 32% 96% / 0.82) 100%);
+    --sidebar-background: 222 47% 10%;
+    --sidebar-foreground: 214 32% 86%;
+    --sidebar-accent: 222 36% 16%;
+    --sidebar-accent-foreground: 210 40% 98%;
+    color-scheme: light;
+  }
+
   .dark {
     --background: 216 19% 5%;
     --foreground: 210 40% 98%;
@@ -110,7 +144,7 @@ All colors MUST be HSL.
   }
 
   body {
-    @apply min-h-screen bg-background text-foreground antialiased;
+    @apply min-h-screen bg-background text-foreground antialiased transition-colors duration-500;
     font-family: Inter, ui-sans-serif, system-ui, sans-serif;
     background-image: var(--gradient-hero);
     background-attachment: fixed;

@@ -1,4 +1,4 @@
-import { AlertTriangle, BarChart3, Binary, BrainCircuit, ChevronDown, Clock, Cpu, Gauge, Hash, Layers3, MessageSquareText, Radar, Wrench } from "lucide-react";
+import { AlertTriangle, Activity, BarChart3, Binary, BrainCircuit, ChevronDown, Clock, Cpu, Gauge, Hash, Layers3, MessageSquareText, Radar, ShieldCheck, Wrench, Zap } from "lucide-react";
 import { useEffect, useState } from "react";
 import type { ReactNode } from "react";
 import { Link, useParams } from "react-router-dom";
@@ -9,6 +9,7 @@ import { JsonTable } from "@/components/JsonTable";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { analyzeFile, AnalysisResult } from "@/lib/canApi";
+import { cn } from "@/lib/utils";
 
 const renderText = (value: unknown) => {
   if (value === null || value === undefined || value === "") return "No summary returned.";
@@ -124,6 +125,70 @@ const MechanicSummary = ({ data }: { data: unknown }) => (
   </div>
 );
 
+const scoreTone = (score: number) => score >= 80 ? "text-success" : score >= 55 ? "text-warning" : "text-destructive";
+
+const InsightCard = ({ title, value, detail, icon: Icon, score }: { title: string; value: string; detail: string; icon: typeof Activity; score?: number }) => (
+  <Card className="animate-fade-up overflow-hidden">
+    <CardContent className="p-5">
+      <div className="flex items-start justify-between gap-4">
+        <div className="min-w-0">
+          <p className="text-xs font-semibold uppercase text-muted-foreground">{title}</p>
+          <p className={cn("mt-3 text-2xl font-extrabold", score === undefined ? "text-primary" : scoreTone(score))}>{value}</p>
+          <p className="mt-2 text-sm leading-6 text-muted-foreground">{detail}</p>
+        </div>
+        <span className="grid size-11 shrink-0 place-items-center rounded-lg border border-glass-border bg-glass text-primary shadow-glow backdrop-blur"><Icon className="size-5" /></span>
+      </div>
+    </CardContent>
+  </Card>
+);
+
+const BitToggleVisualization = ({ data }: { data: unknown }) => {
+  const rows = toRecordArray(data).slice(0, 64);
+  if (!rows.length) return <JsonTable data={data} />;
+  return (
+    <div className="mb-4 grid grid-cols-8 gap-2 sm:grid-cols-16">
+      {rows.map((row, index) => {
+        const activity = Math.max(0, Math.min(1, numericValue(row, ["activity", "transitions", "ones", "value"])));
+        return <div key={index} title={`bit ${renderText(row.bit ?? index)}`} className="aspect-square rounded-md border border-glass-border bg-secondary shadow-glow transition-all duration-300 hover:scale-110" style={{ opacity: 0.35 + activity * 0.65 }} />;
+      })}
+    </div>
+  );
+};
+
+const IdActivityTimeline = ({ data }: { data: unknown }) => {
+  const rows = toRecordArray(data).slice(0, 24);
+  if (!rows.length) return null;
+  const max = Math.max(...rows.map((row) => numericValue(row, ["count", "frequency", "messages", "total", "value"])), 1);
+  return (
+    <div className="grid gap-3 rounded-lg border border-glass-border bg-glass p-4 backdrop-blur">
+      {rows.map((row, index) => {
+        const count = numericValue(row, ["count", "frequency", "messages", "total", "value"]);
+        return (
+          <div key={index} className="grid grid-cols-[7rem_1fr_3rem] items-center gap-3 text-sm">
+            <span className="truncate font-mono text-muted-foreground">{renderText(row.id ?? row.key ?? index + 1)}</span>
+            <span className="h-2 overflow-hidden rounded-full bg-secondary"><span className="block h-full rounded-full bg-gradient-accent" style={{ width: `${Math.max(6, (count / max) * 100)}%` }} /></span>
+            <span className="text-right font-mono text-foreground">{count}</span>
+          </div>
+        );
+      })}
+    </div>
+  );
+};
+
+const ByteCorrelationHeatmap = ({ data }: { data: unknown }) => {
+  const rows = toRecordArray(data).slice(0, 8);
+  if (!rows.length) return null;
+  return (
+    <div className="grid grid-cols-8 gap-1 rounded-lg border border-glass-border bg-glass p-3 backdrop-blur">
+      {Array.from({ length: 64 }, (_, index) => {
+        const row = rows[index % rows.length] ?? {};
+        const strength = Math.max(0.15, Math.min(1, numericValue(row, ["entropy", "unique_values", "observed_count", "value"]) / 8));
+        return <span key={index} className="aspect-square rounded-sm bg-primary transition-transform duration-300 hover:scale-125" style={{ opacity: strength }} />;
+      })}
+    </div>
+  );
+};
+
 const MiniChart = () => (
   <div className="flex h-24 items-end gap-2 rounded-lg border border-glass-border bg-glass p-4 backdrop-blur">
     {[42, 64, 38, 78, 52, 88, 68, 96, 58, 74].map((height, index) => (
@@ -198,6 +263,10 @@ const Results = () => {
   const summary = data?.summary;
   const summaryText = summary && typeof summary === "object" && !Array.isArray(summary) ? summary.text ?? summary : summary;
   const diagnostics = data?.diagnostics ?? {};
+  const idStats = data?.id_stats ?? [];
+  const busLoad = Math.min(100, Math.round(((data?.total_messages ?? 0) / Math.max(Number(data?.unique_ids ?? 1), 1)) * 10));
+  const componentHealth = Math.max(0, Math.min(100, 100 - anomalies.length * 12));
+  const suspectIds = toRecordArray(idStats).filter((row) => numericValue(row, ["count", "frequency", "messages", "total", "value"]) > 1).length;
 
   return (
     <main className="mx-auto min-h-screen max-w-7xl px-4 py-8 sm:px-6 lg:px-10">
@@ -251,10 +320,22 @@ const Results = () => {
             <MetricCard title="Anomalies Detected" value={anomalies.length} icon={AlertTriangle} />
           </div>
 
+          <div className="grid gap-6 lg:grid-cols-4">
+            <InsightCard title="Fault Prediction" value={anomalies.length ? "Watch" : "Low risk"} detail="Derived from anomaly density and ID activity." icon={ShieldCheck} />
+            <InsightCard title="Component Health" value={`${componentHealth}/100`} detail="Heuristic score from detected anomalies." icon={Gauge} score={componentHealth} />
+            <InsightCard title="Suspect IDs" value={String(suspectIds)} detail="High-activity candidates for review." icon={Radar} />
+            <InsightCard title="CAN Bus Load" value={`${busLoad}%`} detail="Estimated from message volume per identifier." icon={Zap} score={100 - busLoad} />
+          </div>
+
+          <AnalysisCard title="Mechanic Mode" description="Simplified diagnostic summary for service workflows." icon={<Wrench className="size-5" />}>
+            <MechanicSummary data={diagnostics.mechanic_summary ?? summaryText} />
+          </AnalysisCard>
+
           <div className="grid gap-5">
             <CollapsiblePanel title="Basic View" icon={<Binary className="size-5" />} defaultOpen>
-              <FrequencyChart data={data.id_stats} />
-              <JsonTable data={data.id_stats} />
+              <FrequencyChart data={idStats} />
+              <div className="mb-4"><IdActivityTimeline data={idStats} /></div>
+              <JsonTable data={idStats} />
             </CollapsiblePanel>
 
             <CollapsiblePanel title="Diagnostics" icon={<AlertTriangle className="size-5" />} defaultOpen>
@@ -280,8 +361,8 @@ const Results = () => {
           <AnalysisCard title="Advanced Diagnostics" description="Complete diagnostics payload returned by the backend." icon={<BrainCircuit className="size-5" />}>
             <div className="grid gap-4">
               <CollapsiblePanel title="protocol" icon={<Cpu className="size-5" />} defaultOpen><JsonTable data={diagnostics.protocol} /></CollapsiblePanel>
-              <CollapsiblePanel title="byte_analysis" icon={<Layers3 className="size-5" />}><ByteEntropyHeatmap data={diagnostics.byte_analysis} /><div className="mt-4"><JsonTable data={diagnostics.byte_analysis} /></div></CollapsiblePanel>
-              <CollapsiblePanel title="bit_analysis" icon={<Binary className="size-5" />}><JsonTable data={diagnostics.bit_analysis} /></CollapsiblePanel>
+              <CollapsiblePanel title="byte_analysis" icon={<Layers3 className="size-5" />}><ByteEntropyHeatmap data={diagnostics.byte_analysis} /><div className="mt-4"><ByteCorrelationHeatmap data={diagnostics.byte_analysis} /></div><div className="mt-4"><JsonTable data={diagnostics.byte_analysis} /></div></CollapsiblePanel>
+              <CollapsiblePanel title="bit_analysis" icon={<Binary className="size-5" />}><BitToggleVisualization data={diagnostics.bit_analysis} /><JsonTable data={diagnostics.bit_analysis} /></CollapsiblePanel>
               <CollapsiblePanel title="timing" icon={<Clock className="size-5" />}><TimingLineChart data={diagnostics.timing} /><JsonTable data={diagnostics.timing} /></CollapsiblePanel>
               <CollapsiblePanel title="signals" icon={<Radar className="size-5" />}><JsonTable data={diagnostics.signals} /></CollapsiblePanel>
               <CollapsiblePanel title="systems" icon={<Gauge className="size-5" />}><SystemsBadges data={diagnostics.systems} /><div className="mt-4"><JsonTable data={diagnostics.systems} /></div></CollapsiblePanel>
