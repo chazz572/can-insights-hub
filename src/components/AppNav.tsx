@@ -116,8 +116,14 @@ export const AppNav = () => {
 
       <header className="fixed inset-x-3 bottom-3 z-40 rounded-lg border border-sidebar-border bg-sidebar/90 p-2 shadow-dashboard backdrop-blur-xl md:hidden">
         <nav className="grid grid-cols-5 gap-2">
-          {links.slice(0, 5).map((item) => (
-            <RouterNavLink key={item.label} to={item.to} className={({ isActive }) => cn(navClass({ isActive }), "justify-center px-2 py-2")} end={item.end}>
+          {[
+            links[0],  // Home
+            links[2],  // Upload
+            { ...links[4], highlight: true }, // Compare (highlighted)
+            links[3],  // Results
+            links[7],  // Fleet
+          ].map((item) => (
+            <RouterNavLink key={item.label} to={item.to} className={({ isActive }) => cn(navClass({ isActive, highlight: item.highlight }), "justify-center px-2 py-2")} end={item.end}>
               <item.icon />
               <span className="sr-only sm:not-sr-only">{item.label}</span>
             </RouterNavLink>
