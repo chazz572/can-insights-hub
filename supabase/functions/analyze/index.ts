@@ -464,6 +464,7 @@ const runAnalysis = (csv: string) => {
   const rpmSignals = analogSignals.filter((signal) => String(signal.likely_signal_type) === "rpm_candidate").slice(0, 8);
   const pedalBrakeSteeringSignals = analogSignals.filter((signal) => /pedal|brake|steering/i.test(String(signal.likely_signal_type))).slice(0, 8);
   const loadSignals = analogSignals.filter((signal) => /analog_sensor/i.test(String(signal.likely_signal_type)) && Number(signal.range ?? 0) > 500).slice(0, 8);
+  const metadataEvConfidence = Number(metadataInsights.ev_confidence_score ?? 0);
   const risingMotion = speedSignals.some((signal) => signal.direction === "rising") || pedalBrakeSteeringSignals.some((signal) => signal.direction === "rising");
   const fallingMotion = speedSignals.some((signal) => signal.direction === "falling") || pedalBrakeSteeringSignals.some((signal) => signal.direction === "falling");
   const oscillatingMotion = speedSignals.some((signal) => signal.direction === "oscillating") || pedalBrakeSteeringSignals.some((signal) => signal.direction === "oscillating");
@@ -479,7 +480,7 @@ const runAnalysis = (csv: string) => {
           : engineActive && !speedSignals.length
             ? "stationary engine activity / idle under varying load"
             : "stationary awake-module state with no defensible motion signal";
-  const behaviorConfidence = Math.min(0.94, 0.42 + speedSignals.length * 0.12 + rpmSignals.length * 0.1 + pedalBrakeSteeringSignals.length * 0.08 + (engineActive ? 0.08 : 0));
+  const behaviorConfidence = isDbcReference ? Math.max(0.82, metadataEvConfidence) : Math.min(0.94, 0.42 + speedSignals.length * 0.12 + rpmSignals.length * 0.1 + pedalBrakeSteeringSignals.length * 0.08 + (engineActive ? 0.08 : 0));
   const behavioralEvidence = [...speedSignals, ...rpmSignals, ...pedalBrakeSteeringSignals, ...loadSignals].slice(0, 12).map(describeSignalEvidence);
   const subtleAbnormalities = [
     ...timing.filter((item) => Number(item.period_jitter) > Math.max(Number(item.average_period) * 0.2, 0.003)).map((item) => ({ id: item.id, type: "timing_jitter_or_drift", severity: Number(item.period_jitter) > Math.max(Number(item.average_period) * 0.75, 0.02) ? "moderate" : "minor", evidence: `Average period ${item.average_period}s with jitter ${item.period_jitter}s; max gap ${item.max_period}s.` })),
@@ -487,14 +488,14 @@ const runAnalysis = (csv: string) => {
     ...idDeepDive.filter((item) => Number(item.messages) <= 2).map((item) => ({ id: item.id, type: "unusual_id_silence_or_sparse_frame", severity: "minor", evidence: `Only ${item.messages} frame(s) observed; this can indicate one-shot status, wake/sleep traffic, or missing expected repetition.` })),
   ].slice(0, 32);
   const driverBehavior = {
-    behavior: behaviorLabel,
+    behavior: isDbcReference ? "DBC definition map / not live driving traffic" : behaviorLabel,
     confidence_score: Number(behaviorConfidence.toFixed(3)),
     movement_confidence: speedSignals.length ? "supported_by_signal_shape" : "not_supported_by_motion_bytes",
     engine_activity_confidence: rpmSignals.length || loadSignals.length ? "supported_by_dynamic_powertrain_like_bytes" : "not_isolated",
     pedal_activity_confidence: pedalBrakeSteeringSignals.length ? "supported_by_compact_input_like_bytes" : "not_isolated",
     harsh_event_candidates: anomalies.slice(0, 12),
     evidence: behavioralEvidence.length ? behavioralEvidence : ["No byte pair showed the rising/falling motion shape required to defend speed, pedal, brake, steering, or wheel-speed claims."],
-    interpretation: `${behaviorLabel}. This conclusion is based on byte-level trend direction, smoothness, entropy, timing cadence, and cross-ID relationships rather than message counts alone.`,
+    interpretation: isDbcReference ? "This upload is a DBC definition file, so the defensible conclusion comes from decoded message and signal names rather than live timing. It strongly identifies an EV/Tesla-style network map but does not prove current vehicle motion." : `${behaviorLabel}. This conclusion is based on byte-level trend direction, smoothness, entropy, timing cadence, and cross-ID relationships rather than message counts alone.`,
   };
 
   const eventTimeline = anomalies.slice(0, 24).map((item, index) => ({
@@ -554,7 +555,8 @@ const runAnalysis = (csv: string) => {
   const enhancedNetworkHealth = { ...networkHealth, bus_health_score: Math.max(0, Math.min(100, 100 - anomalies.length * 4 - Math.round(Number(networkHealth.timing_irregularity_score) * 120))), chatter_classification: idStats.some((item) => item.percentage > 35) ? "dominant_id_chatter" : totalMessages / Math.max(idCounts.size, 1) > 60 ? "busy_periodic_chatter" : "normal_idle_chatter", dropout_events: timing.filter((item) => Number(item.max_period) > Math.max(Number(item.average_period) * 3, 0.1)).map((item) => ({ id: item.id, max_period: item.max_period, average_period: item.average_period, classification: "possible_gap_or_dropout" })).slice(0, 16) };
   const derivedEvents = enhancedNetworkHealth.dropout_events.map((item, index) => ({ event_index: eventTimeline.length + index + 1, id: item.id, timestamp: null, event_type: "possible_module_dropout", description: `Timing gap detected: max period ${item.max_period}s vs average ${item.average_period}s.`, before_after_hint: "Compare nearby frames to confirm wake/sleep or missing traffic." }));
   const whatDataShows = [
-    `The strongest defensible vehicle-state conclusion is ${behaviorLabel} at ${Math.round(behaviorConfidence * 100)}% confidence.`,
+    isDbcReference ? `This is a DBC definition map, not live CAN traffic. Its message/signal names strongly indicate ${metadataInsights.likely_oem_or_platform} and an EV architecture at ${Math.round(metadataEvConfidence * 100)}% confidence.` : `The strongest defensible vehicle-state conclusion is ${behaviorLabel} at ${Math.round(behaviorConfidence * 100)}% confidence.`,
+    metadataInsights.has_dbc_metadata ? `DBC/OEM evidence: ${metadataInsights.explanation} EV evidence IDs include ${metadataInsights.ev_evidence_ids.slice(0, 8).join(", ") || "none"}.` : "No DBC metadata was available, so EV/OEM identity relies only on traffic shape.",
     behavioralEvidence.length ? `Behavior evidence: ${behavioralEvidence.slice(0, 4).join(" ")}` : "Behavior evidence: no correlated directional speed, wheel, pedal, brake, steering, or gear-shaped byte movement was present, so motion claims are intentionally limited.",
     `Protocol behavior: ${protocolInsights.likely_protocol}; extended-ID ratio ${(protocolInsights.extended_id_ratio * 100).toFixed(1)}%, diagnostic-shaped IDs ${protocolInsights.diagnostic_id_candidates.join(", ") || "not present"}.`,
     subtleAbnormalities.length ? `Subtle abnormalities found: ${subtleAbnormalities.slice(0, 5).map((item) => `${item.type} on ${item.id}`).join("; ")}.` : "Subtle abnormality checks did not isolate jitter, drift, sparse-ID, stuck-byte, or entropy-spike evidence above the current thresholds.",
@@ -597,6 +599,7 @@ const runAnalysis = (csv: string) => {
         rpm_signal_candidates: analogSignals.filter((item) => item.likely_signal_type === "rpm_candidate"),
       },
       systems,
+      metadata_insights: metadataInsights,
       id_deep_dive: idDeepDive,
       ecu_clusters: ecuClusters,
       counter_checksum_analysis: counterChecksumAnalysis,
