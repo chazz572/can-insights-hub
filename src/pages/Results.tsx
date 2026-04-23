@@ -541,7 +541,7 @@ const Results = () => {
   const networkScore = Math.max(10, Math.min(100, Math.round(numericValue(networkHealth, ["bus_health_score"]) || (busLoad > 90 ? 68 : busLoad > 60 ? 78 : 92))));
   const componentHealth = Math.max(0, Math.min(100, 100 - anomalies.length * 12));
   const suspectIds = toRecordArray(idStats).filter((row) => numericValue(row, ["count", "frequency", "messages", "total", "value"]) > 1).length;
-  const vehicleIdentification = data && fileType !== "log" && fileType !== "dbc" ? inferVehicleIdentification(data) : null;
+  const vehicleIdentification = null;
   const partialDbcDraft = data && fileType === "log" ? buildPartialDbcDraft(generatePartialDbcCandidates(data)) : "";
   const vehicleState = diagnostics.vehicle_state && typeof diagnostics.vehicle_state === "object" ? diagnostics.vehicle_state as JsonRecord : {};
   const vehicleType = diagnostics.vehicle_type && typeof diagnostics.vehicle_type === "object" ? diagnostics.vehicle_type as JsonRecord : {};
@@ -549,7 +549,7 @@ const Results = () => {
     ? fileType === "dbc"
       ? `DBC definition file: ${data.unique_ids ?? 0} message definitions parsed. No charts, behavior, vehicle type, or health conclusions are produced because a DBC has no live traffic.`
       : fileType === "log_dbc"
-        ? `Full Power LOG + DBC: decoded signal context is available. ${toRecordArray(diagnostics.decoded_signals).length} decoded signal candidate${toRecordArray(diagnostics.decoded_signals).length === 1 ? "" : "s"} matched against DBC metadata.`
+        ? `Full Power LOG + DBC: ${toRecordArray(diagnostics.decoded_signals).length} DBC decoded signal${toRecordArray(diagnostics.decoded_signals).length === 1 ? "" : "s"} displayed without activity-threshold filtering.`
         : `Raw LOG analysis: timing, entropy, ECU activity, anomalies, and reverse-engineering hints only. No physical signal decoding is attempted without a DBC.`
     : "";
 

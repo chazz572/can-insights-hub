@@ -16,7 +16,13 @@ const jsonResponse = (body: unknown) =>
     headers: { ...corsHeaders, "Content-Type": "application/json" },
   });
 
-const cleanId = (value: string) => value.replace(/^0x/i, "").replace(/[^a-fA-F0-9]/g, "").toUpperCase().replace(/^0+(?=[0-9A-F])/, "") || "0";
+const cleanId = (value: string, base: 10 | 16 | "auto" = "auto") => {
+  const raw = value.trim().replace(/[xh]$/i, "").replace(/^0x/i, "");
+  const cleaned = raw.replace(/[^a-fA-F0-9]/g, "").toUpperCase().replace(/^0+(?=[0-9A-F])/, "") || "0";
+  const radix = base === "auto" ? (/[A-F]/i.test(cleaned) ? 16 : 10) : base;
+  const parsed = Number.parseInt(cleaned, radix);
+  return Number.isFinite(parsed) ? String(parsed) : "0";
+};
 const cleanByte = (value: string) => value.replace(/^0x/i, "").replace(/[^a-fA-F0-9]/g, "").slice(0, 2).padStart(2, "0").toUpperCase();
 const isId = (value: string) => /^[0-9a-fA-F]{1,8}[xh]?$/.test(value.replace(/^0x/i, ""));
 const isByte = (value: string) => /^(0x)?[0-9a-fA-F]{1,2}$/.test(value);
@@ -54,8 +60,8 @@ const toCsv = (frames: Frame[]) => ["timestamp,id,dlc,data,metadata", ...frames.
   csvEscape(frame.metadata ?? ""),
 ].join(","))].join("\n");
 
-const normalizeFrame = (timestamp: string, id: string, bytes: string[], dlc?: number, metadata?: string): Frame | null => {
-  const normalizedId = cleanId(id);
+const normalizeFrame = (timestamp: string, id: string, bytes: string[], dlc?: number, metadata?: string, idBase: 10 | 16 | "auto" = "auto"): Frame | null => {
+  const normalizedId = cleanId(id, idBase);
   const normalizedBytes = bytes.map(cleanByte).filter((byte) => /^[0-9A-F]{2}$/.test(byte)).slice(0, 8);
   if (!normalizedId || !normalizedBytes.length) return null;
   return { timestamp: timestamp || "0", id: normalizedId, dlc: Math.min(Number.isFinite(Number(dlc)) ? Number(dlc) : normalizedBytes.length, 8), data: normalizedBytes, metadata };
@@ -94,18 +100,18 @@ const parseCsv = (text: string, warnings: string[], format: CanFormat): Frame[] 
   return lines.slice(1).map((line, index) => {
     const values = parseCsvLine(line);
     const bytes = dataIndex >= 0 ? splitBytes(values[dataIndex] ?? "") : byteIndexes.map((byteIndex) => values[byteIndex]).filter(Boolean);
-    return normalizeFrame(timestampIndex >= 0 ? values[timestampIndex] : String(index), idIndex >= 0 ? values[idIndex] : "", bytes, dlcIndex >= 0 ? Number(values[dlcIndex]) : undefined);
+    return normalizeFrame(timestampIndex >= 0 ? values[timestampIndex] : String(index), idIndex >= 0 ? values[idIndex] : "", bytes, dlcIndex >= 0 ? Number(values[dlcIndex]) : undefined, undefined, "auto");
   }).filter((frame): frame is Frame => Boolean(frame)).map((frame) => format === "J1939 CSV" ? { ...frame, id: cleanId(frame.id) } : frame);
 };
 
 const parseCandump = (text: string) => text.split(/\r?\n/).map((line, index) => {
   const trimmed = line.trim();
   const hash = trimmed.match(/^\(?([\d.]+)\)?\s+\S+\s+([0-9a-fA-F]+)#([0-9a-fA-F]*)/);
-  if (hash) return normalizeFrame(hash[1], hash[2], splitBytes(hash[3]));
+  if (hash) return normalizeFrame(hash[1], hash[2], splitBytes(hash[3]), undefined, undefined, 16);
   const bracket = trimmed.match(/^\(?([\d.]+)\)?\s+\S+\s+([0-9a-fA-F]+)\s+\[(\d+)\]\s+(.+)$/);
-  if (bracket) return normalizeFrame(bracket[1], bracket[2], bracket[4].split(/\s+/).filter(isByte), Number(bracket[3]));
+  if (bracket) return normalizeFrame(bracket[1], bracket[2], bracket[4].split(/\s+/).filter(isByte), Number(bracket[3]), undefined, 16);
   const noTimestamp = trimmed.match(/^\S+\s+([0-9a-fA-F]+)#([0-9a-fA-F]*)/);
-  return noTimestamp ? normalizeFrame(String(index), noTimestamp[1], splitBytes(noTimestamp[2])) : null;
+  return noTimestamp ? normalizeFrame(String(index), noTimestamp[1], splitBytes(noTimestamp[2]), undefined, undefined, 16) : null;
 }).filter((frame): frame is Frame => Boolean(frame));
 
 const parseCrtd = (text: string) => text.split(/\r?\n/).map((line, index) => {
@@ -116,7 +122,7 @@ const parseCrtd = (text: string) => text.split(/\r?\n/).map((line, index) => {
   const timestamp = idIndex > 0 && /^\d+(\.\d+)?$/.test(parts[idIndex - 1]) ? parts[idIndex - 1] : String(index);
   const dlc = /^\d+$/.test(parts[idIndex + 1] ?? "") ? Number(parts[idIndex + 1]) : undefined;
   const byteStart = dlc === undefined ? idIndex + 1 : idIndex + 2;
-  return normalizeFrame(timestamp, parts[idIndex].replace(/x$/i, ""), parts.slice(byteStart).filter(isByte), dlc);
+  return normalizeFrame(timestamp, parts[idIndex].replace(/x$/i, ""), parts.slice(byteStart).filter(isByte), dlc, undefined, 16);
 }).filter((frame): frame is Frame => Boolean(frame));
 
 const parseTrc = (text: string) => text.split(/\r?\n/).map((line, index) => {
@@ -129,7 +135,7 @@ const parseTrc = (text: string) => text.split(/\r?\n/).map((line, index) => {
   const timestamp = rawTimestamp ? String(Number(rawTimestamp) / 1000) : String(index);
   const dlcIndex = parts.findIndex((part, partIndex) => partIndex > idIndex && /^\d+$/.test(part) && Number(part) <= 64);
   const byteStart = dlcIndex >= 0 ? dlcIndex + 1 : idIndex + 1;
-  return normalizeFrame(timestamp, parts[idIndex].replace(/[xh]$/i, ""), parts.slice(byteStart).filter(isByte), dlcIndex >= 0 ? Number(parts[dlcIndex]) : undefined);
+  return normalizeFrame(timestamp, parts[idIndex].replace(/[xh]$/i, ""), parts.slice(byteStart).filter(isByte), dlcIndex >= 0 ? Number(parts[dlcIndex]) : undefined, undefined, 16);
 }).filter((frame): frame is Frame => Boolean(frame));
 
 const parseAsc = (text: string) => text.split(/\r?\n/).map((line) => {
@@ -139,7 +145,7 @@ const parseAsc = (text: string) => text.split(/\r?\n/).map((line) => {
   if (idIndex < 0) return null;
   const dlcIndex = parts.findIndex((part, index) => index > idIndex && /^\d+$/.test(part) && Number(part) <= 64);
   if (dlcIndex < 0) return null;
-  return normalizeFrame(parts[0], parts[idIndex].replace(/x$/i, ""), parts.slice(dlcIndex + 1).filter(isByte), Number(parts[dlcIndex]));
+  return normalizeFrame(parts[0], parts[idIndex].replace(/x$/i, ""), parts.slice(dlcIndex + 1).filter(isByte), Number(parts[dlcIndex]), undefined, 16);
 }).filter((frame): frame is Frame => Boolean(frame));
 
 const parseDbc = (text: string, warnings: string[]) => {
@@ -150,7 +156,7 @@ const parseDbc = (text: string, warnings: string[]) => {
   for (const line of text.split(/\r?\n/)) {
     const message = line.match(/^\s*BO_\s+(\d+)\s+(\S+)\s*:\s*(\d+)\s+(\S+)/);
     if (message) {
-      currentMessageId = Number(message[1]).toString(16).toUpperCase();
+      currentMessageId = String(Number(message[1]));
       signalCounts.set(currentMessageId, 0);
       messageMetadata.set(currentMessageId, `source_file_type=dbc_definition;dbc_message=${message[2]};transmitter=${message[4]}`);
       continue;
@@ -168,7 +174,7 @@ const parseDbc = (text: string, warnings: string[]) => {
   const frames = text.split(/\r?\n/).map((line, index) => {
     const message = line.match(/^\s*BO_\s+(\d+)\s+\S+\s*:\s*(\d+)\s+\S+/);
     if (!message) return null;
-    const id = Number(message[1]).toString(16).toUpperCase();
+    const id = String(Number(message[1]));
     const dlc = Math.max(1, Math.min(Number(message[2]) || 8, 8));
     const signalCount = Math.min(signalCounts.get(id) ?? 0, 255).toString(16).padStart(2, "0");
     return normalizeFrame(String(index), id, [signalCount, ...Array.from({ length: dlc - 1 }, () => "00")], dlc, messageMetadata.get(id)?.slice(0, 1800));

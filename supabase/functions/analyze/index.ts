@@ -97,7 +97,7 @@ const forEachCsvRecord = (csv: string, callback: (record: ParsedRecord) => void)
 
     const values = parseCsvLine(line);
     callback({
-      id: cleanHex(values[indexes.idIndex] ?? "").replace(/^0+(?=[0-9A-F])/, "") || "0",
+      id: normalizeCanId(values[indexes.idIndex] ?? ""),
       data: values[indexes.dataIndex] ?? "",
       timestamp: Number(values[indexes.timestampIndex] ?? Number.NaN),
       metadata: indexes.metadataIndex >= 0 ? values[indexes.metadataIndex] ?? "" : "",
@@ -105,6 +105,12 @@ const forEachCsvRecord = (csv: string, callback: (record: ParsedRecord) => void)
   }
 };
 
+const normalizeCanId = (value: string) => {
+  const raw = value.trim().replace(/[xh]$/i, "").replace(/^0x/i, "");
+  const cleaned = raw.replace(/[^a-fA-F0-9]/g, "").toUpperCase().replace(/^0+(?=[0-9A-F])/, "") || "0";
+  const parsed = Number.parseInt(cleaned, /[A-F]/i.test(cleaned) ? 16 : 10);
+  return Number.isFinite(parsed) ? String(parsed) : "0";
+};
 const cleanHex = (value: string) => value.replace(/[^a-fA-F0-9]/g, "").toUpperCase();
 const byteValues = (value: string) => cleanHex(value).match(/.{1,2}/g)?.slice(0, 8).map((byte) => Number.parseInt(byte, 16)).filter((byte) => Number.isFinite(byte)) ?? [];
 const average = (values: number[]) => values.length ? values.reduce((sum, value) => sum + value, 0) / values.length : 0;
@@ -302,8 +308,8 @@ const summarizeMetadata = (metadataById: Map<string, string>, idCounts: Map<stri
 };
 
 const classifyModuleFromEvidence = ({ id, metadata, profile, timingRow }: { id: string; metadata: string; profile?: IdProfile; timingRow?: JsonRecord }) => {
-  const cleanIdValue = cleanHex(id);
-  const numeric = Number.parseInt(cleanIdValue, 16);
+  const numeric = Number(id);
+  const cleanIdValue = Number.isFinite(numeric) ? numeric.toString(16).toUpperCase() : cleanHex(id);
   const text = metadata.toLowerCase();
   const changeRate = profile ? profile.changes / Math.max(profile.count - 1, 1) : 0;
   const averagePeriod = Number(timingRow?.average_period ?? 0);
@@ -331,11 +337,11 @@ const classifyModuleFromEvidence = ({ id, metadata, profile, timingRow }: { id: 
   }
 
   if (/^7[0-9A-F]{2}$/i.test(cleanIdValue) || /^18DA/i.test(cleanIdValue)) {
-    return { category: "diagnostics_gateway", module_type: "uds_isotp_diagnostic_endpoint", confidence_score: 0.86, confidence: "protocol_shape", reasoning: `Identifier ${cleanIdValue} matches common UDS/ISO-TP diagnostic request/response ranges.` };
+    return { category: "diagnostics_gateway", module_type: "uds_isotp_diagnostic_endpoint", confidence_score: 0.86, confidence: "protocol_shape", reasoning: `Identifier ${id} (${cleanIdValue}h) matches common UDS/ISO-TP diagnostic request/response ranges.` };
   }
 
   if (cleanIdValue.length >= 8 && numeric >= 0x18F00000) {
-    return { category: "j1939_or_extended_network", module_type: "extended_pgn_periodic_status", confidence_score: 0.78, confidence: "extended_id_shape", reasoning: `Extended identifier ${cleanIdValue} has J1939/29-bit PGN-like shape; module role needs PGN decoding for certainty.` };
+    return { category: "j1939_or_extended_network", module_type: "extended_pgn_periodic_status", confidence_score: 0.78, confidence: "extended_id_shape", reasoning: `Extended identifier ${id} (${cleanIdValue}h) has J1939/29-bit PGN-like shape; module role needs PGN decoding for certainty.` };
   }
 
   const stableFast = averagePeriod > 0 && averagePeriod <= 0.025 && periodJitter <= Math.max(averagePeriod * 0.3, 0.003);
@@ -389,7 +395,7 @@ const runAnalysis = (csv: string) => {
     idProfiles.set(id, profile);
     if (metadata) metadataById.set(id, `${metadataById.get(id) ?? ""} ${metadata}`.trim().slice(0, 6000));
 
-    if (cleanHex(id).length > 3) extendedIds += 1;
+    if (Number(id) > 0x7ff) extendedIds += 1;
 
     const payloadLength = byteValues(data).length;
     const delta = payloadLength - meanLength;
@@ -446,7 +452,8 @@ const runAnalysis = (csv: string) => {
   const isExplicitDbcDefinition = metadataTextForRouting.includes("source_file_type=dbc_definition");
   const isExplicitLogWithDbc = metadataTextForRouting.includes("source_file_type=log_with_dbc");
   const hasRealDbcSignalMetadata = /dbc_message=|signal=.+\|start=.+\|length=/i.test(metadataTextForRouting);
-  const isDbcReference = isExplicitDbcDefinition || (hasRealDbcSignalMetadata && totalMessages === idCounts.size);
+  const rawFrameCount = [...metadataById.values()].filter((metadata) => metadata.includes("source_file_type=log_with_dbc")).length;
+  const isDbcReference = isExplicitDbcDefinition && !isExplicitLogWithDbc || (hasRealDbcSignalMetadata && totalMessages === idCounts.size && rawFrameCount === 0);
   const pipeline: PipelineKind = isDbcReference ? "dbc" : isExplicitLogWithDbc || hasRealDbcSignalMetadata ? "log_dbc" : "log";
   const pipelineLabel = pipeline === "dbc" ? "DBC definition viewer" : pipeline === "log_dbc" ? "Full Power decoded LOG + DBC analysis" : "Raw CAN log intelligence";
   const idStats = [...idCounts.entries()]
@@ -633,9 +640,9 @@ const runAnalysis = (csv: string) => {
   const protocolInsights = {
     likely_protocol: extendedIds > totalMessages / 2 ? "CAN 2.0B / extended identifiers" : "CAN 2.0A / standard identifiers",
     extended_id_ratio: totalMessages ? Number((extendedIds / totalMessages).toFixed(4)) : 0,
-    has_j1939_shape: totalMessages ? extendedIds / totalMessages > 0.55 && [...idCounts.keys()].some((id) => cleanHex(id).length >= 8) : false,
-    has_uds_or_isotp_shape: [...idCounts.keys()].some((id) => /^7[0-9A-F]{2}$/i.test(cleanHex(id)) || /^18DA/i.test(cleanHex(id))),
-    diagnostic_id_candidates: [...idCounts.keys()].filter((id) => /^7[0-9A-F]{2}$/i.test(cleanHex(id)) || /^18DA/i.test(cleanHex(id))).slice(0, 16),
+    has_j1939_shape: totalMessages ? extendedIds / totalMessages > 0.55 && [...idCounts.keys()].some((id) => Number(id) > 0x7ff) : false,
+    has_uds_or_isotp_shape: [...idCounts.keys()].some((id) => /^7[0-9A-F]{2}$/i.test(Number(id).toString(16).toUpperCase()) || /^18DA/i.test(Number(id).toString(16).toUpperCase())),
+    diagnostic_id_candidates: [...idCounts.keys()].filter((id) => /^7[0-9A-F]{2}$/i.test(Number(id).toString(16).toUpperCase()) || /^18DA/i.test(Number(id).toString(16).toUpperCase())).slice(0, 16),
   };
 
   const speedSignals = analogSignals.filter((signal) => /speed|wheel/i.test(String(signal.likely_signal_type))).slice(0, 8);
@@ -688,15 +695,7 @@ const runAnalysis = (csv: string) => {
   const evEvidence = [hasExplicitEvMetadata || hasHvAnalogEvidence ? `explicit EV/HV signal naming or voltage-range evidence on IDs ${[...metadataById.entries()].filter(([, value]) => containsAny(value.toLowerCase(), explicitEvTerms)).map(([id]) => id).slice(0, 8).join(", ") || analogSignals.filter((signal) => Number(signal.max_value ?? 0) >= 200 && Number(signal.max_value ?? 0) <= 900).map((signal) => String(signal.id)).slice(0, 8).join(", ")}` : null, hasMotorRpmEvidence ? `motor/inverter RPM evidence on IDs ${rpmSignals.filter((signal) => /motor|inverter|drive/i.test(String(metadataById.get(String(signal.id)) ?? ""))).map((signal) => String(signal.id)).join(", ")}` : null].filter(Boolean);
   const iceEvidence = [hasExplicitIceMetadata || hasEngineRpmEvidence ? `explicit ICE signal naming on IDs ${[...metadataById.entries()].filter(([, value]) => containsAny(value.toLowerCase(), explicitIceTerms)).map(([id]) => id).slice(0, 8).join(", ") || rpmSignals.filter((signal) => /engine|rpm|crank/i.test(String(metadataById.get(String(signal.id)) ?? ""))).map((signal) => String(signal.id)).join(", ")}` : null].filter(Boolean);
   const hybridEvidence = [hasExplicitHybridMetadata ? `explicit hybrid signal naming on IDs ${[...metadataById.entries()].filter(([, value]) => containsAny(value.toLowerCase(), explicitHybridTerms)).map(([id]) => id).slice(0, 8).join(", ")}` : null, evEvidence.length && iceEvidence.length ? "both HV/motor evidence and engine/ICE evidence are present in live traffic" : null].filter(Boolean);
-  const vehicleType = isDbcReference
-    ? { classification: "Vehicle type cannot be determined from this log.", confidence_score: 0, evidence: [], reasoning: "This upload is a DBC signal definition file, not a vehicle log. Message and signal names can describe network structure, but they do not prove the vehicle type or operating state." }
-    : hybridEvidence.length
-      ? { classification: "hybrid", confidence_score: 0.86, evidence: hybridEvidence, reasoning: "Hybrid classification requires both engine-side and high-voltage/motor-side evidence, or explicit hybrid ECU naming in live decoded traffic." }
-      : evEvidence.length
-        ? { classification: "EV", confidence_score: 0.82, evidence: evEvidence, reasoning: "EV classification is based only on explicit high-voltage, pack/cell, inverter, motor, or drive-unit evidence; missing RPM or fuel signals are ignored." }
-        : iceEvidence.length
-          ? { classification: "ICE", confidence_score: 0.82, evidence: iceEvidence, reasoning: "ICE classification is based only on explicit engine RPM, fuel trim, oxygen sensor, intake manifold, crankshaft, or camshaft evidence; generic ID patterns are ignored." }
-          : { classification: "Vehicle type cannot be determined from this log.", confidence_score: 0, evidence: [], reasoning: "The log lacks explicit EV indicators such as HV pack voltage/current, cell data, inverter torque, or motor RPM, and lacks explicit ICE indicators such as engine RPM, fuel trims, O2 sensors, intake manifold pressure, crankshaft, or camshaft signals." };
+  const vehicleType = { classification: "Vehicle type is not inferred.", confidence_score: 0, evidence: [], reasoning: "CJL CAN Intelligence Platform reports CAN behavior and decoded signal evidence without guessing EV, ICE, hybrid, make, model, or vehicle type." };
 
   const driverBehavior = {
     behavior: isDbcReference ? "DBC definition map / not live driving traffic" : behaviorLabel,
@@ -717,14 +716,9 @@ const runAnalysis = (csv: string) => {
     before_after_hint: "Compare this ID against nearby frames for timing or payload changes.",
   }));
 
-  const vehicleBehavior = {
-    possible_speed_ids: [...speedIds],
-    possible_rpm_ids: [...rpmIds],
-    possible_pedal_ids: [...pedalIds],
-  };
-
   const decodedSignals = pipeline === "log_dbc" ? dbcSignals.flatMap((dbcSignal) => {
-    const profile = idProfiles.get(String(dbcSignal.message_id));
+    const messageId = normalizeCanId(String(dbcSignal.message_id));
+    const profile = idProfiles.get(messageId);
     if (!profile) return [];
     const rawValues = profile.cleanSamples
       .map(byteValues)
@@ -733,7 +727,7 @@ const runAnalysis = (csv: string) => {
     const decodedValues = rawValues.map((value) => value * Number(dbcSignal.factor) + Number(dbcSignal.offset));
     const summary = summarizeDecodedValues(decodedValues);
     return [{
-      id: dbcSignal.message_id,
+      id: messageId,
       signal_name: dbcSignal.signal_name,
       unit: dbcSignal.unit || "raw",
       start_bit: dbcSignal.start_bit,
@@ -753,6 +747,31 @@ const runAnalysis = (csv: string) => {
       display_reason: "DBC-defined signal appeared in the log; preserved regardless of activity, variance, or change detection.",
     }];
   }) : [];
+
+  const decodedSpeedIds = decodedSignals.filter((signal) => /speed|wheel/i.test(String(signal.signal_name))).map((signal) => String(signal.id));
+  const decodedRpmIds = decodedSignals.filter((signal) => /rpm|engine|motor/i.test(String(signal.signal_name))).map((signal) => String(signal.id));
+  const decodedPedalIds = decodedSignals.filter((signal) => /pedal|brake|steer/i.test(String(signal.signal_name))).map((signal) => String(signal.id));
+  const vehicleBehavior = pipeline === "log_dbc" ? {
+    possible_speed_ids: [...new Set(decodedSpeedIds)],
+    possible_rpm_ids: [...new Set(decodedRpmIds)],
+    possible_pedal_ids: [...new Set(decodedPedalIds)],
+    decoded_signal_count: decodedSignals.length,
+    evidence_source: "DBC decoded signals only; raw byte heuristics suppressed.",
+  } : {
+    possible_speed_ids: [...speedIds],
+    possible_rpm_ids: [...rpmIds],
+    possible_pedal_ids: [...pedalIds],
+  };
+  const decodedDrivingEvents = decodedSignals
+    .filter((signal) => /speed|wheel|rpm|torque|pedal|brake|steer|soc|charge|temp/i.test(String(signal.signal_name)))
+    .map((signal, index) => ({
+      event_index: index + 1,
+      id: signal.id,
+      signal_name: signal.signal_name,
+      event_type: String(signal.observed_trend) === "flat" ? "decoded_static_signal" : `decoded_${String(signal.observed_trend)}_signal`,
+      description: `${signal.signal_name} decoded from DBC on ID ${signal.id}: ${signal.decoded_min}–${signal.decoded_max}${signal.unit ? ` ${signal.unit}` : ""}.`,
+      evidence_source: "dbc_decoded_signal",
+    }));
 
   const idClassifications = idDeepDive.map((item) => {
     const volatileByteCount = Array.isArray(item.volatile_bytes) ? item.volatile_bytes.length : 0;
@@ -815,14 +834,14 @@ const runAnalysis = (csv: string) => {
     "This is a definition file only, so no driving behavior, vehicle health, timing, or vehicle type is inferred.",
   ];
   const logDbcSummaryLines = [
-    `Full Power mode matched this log with DBC metadata and produced ${decodedSignals.length} decoded signal range(s).`,
+    `Full Power mode matched the merged raw log with DBC metadata and displayed ${decodedSignals.length} decoded signal${decodedSignals.length === 1 ? "" : "s"}.`,
     decodedEvents.length ? `Decoded behavior clues: ${decodedEvents.join("; ")}.` : "DBC-defined signals are displayed even when static; no decoded speed, RPM, torque, pedal, brake, steering, SOC, or temperature signal showed a changing behavior clue in this capture.",
     subtleAbnormalities.length ? `Network issues to review: ${subtleAbnormalities.slice(0, 4).map((item) => `${item.type.replace(/_/g, " ")} on ${item.id}`).join("; ")}.` : "Network timing and payload health did not show major threshold-level issues.",
     "Decoded physical signals take priority and are never filtered by activity, variance, or change detection when their DBC message appears in the log.",
   ];
   const whatDataShows = pipeline === "log_dbc" ? logDbcSummaryLines : pipeline === "dbc" ? dbcSummaryLines : logSummaryLines;
   const detailedSummary = pipeline === "log_dbc"
-    ? ["Decoded LOG + DBC Summary", ...logDbcSummaryLines.map((item) => `- ${item}`), "", "Decoded Signals", ...(decodedSignals.slice(0, 12).map((signal) => `- ${signal.signal_name} on ID ${signal.id}: ${signal.decoded_min}–${signal.decoded_max}${signal.unit ? ` ${signal.unit}` : ""}, bit ${signal.start_bit}/${signal.bit_length}`) || ["- No active decoded signal ranges found."])].join("\n")
+    ? ["Decoded LOG + DBC Summary", ...logDbcSummaryLines.map((item) => `- ${item}`), "", "Decoded Signals", ...(decodedSignals.length ? decodedSignals.slice(0, 12).map((signal) => `- ${signal.signal_name} on ID ${signal.id}: ${signal.decoded_min}–${signal.decoded_max}${signal.unit ? ` ${signal.unit}` : ""}, bit ${signal.start_bit}/${signal.bit_length}`) : ["- No DBC message IDs matched the merged log after decimal ID normalization."])].join("\n")
     : pipeline === "dbc"
       ? ["DBC Viewer Summary", ...dbcSummaryLines.map((item) => `- ${item}`)].join("\n")
       : ["Raw CAN Log Summary", ...logSummaryLines.map((item) => `- ${item}`), "", "Active ECU / Timing View", `- Active IDs: ${activeEcus || "not isolated"}.`, `- Protocol: ${protocolInsights.likely_protocol}; extended-ID ratio ${(protocolInsights.extended_id_ratio * 100).toFixed(1)}%.`].join("\n");
@@ -862,10 +881,11 @@ const runAnalysis = (csv: string) => {
       bit_analysis: bitAnalysis,
       timing,
       signals: {
-        byte_signal_candidates: byteAnalysis.filter((item) => Number(item.entropy ?? 0) > 0.5),
-        active_bit_candidates: bitAnalysis.filter((item) => Number(item.activity ?? 0) > 0.05),
-        analog_signal_candidates: analogSignals,
-        rpm_signal_candidates: analogSignals.filter((item) => /rpm_candidate/.test(String(item.likely_signal_type))),
+        byte_signal_candidates: pipeline === "log_dbc" ? [] : byteAnalysis.filter((item) => Number(item.entropy ?? 0) > 0.5),
+        active_bit_candidates: pipeline === "log_dbc" ? [] : bitAnalysis.filter((item) => Number(item.activity ?? 0) > 0.05),
+        analog_signal_candidates: pipeline === "log_dbc" ? [] : analogSignals,
+        rpm_signal_candidates: pipeline === "log_dbc" ? [] : analogSignals.filter((item) => /rpm_candidate/.test(String(item.likely_signal_type))),
+        decoded_signals: decodedSignals,
       },
       systems,
       metadata_insights: metadataInsights,
@@ -887,7 +907,7 @@ const runAnalysis = (csv: string) => {
       network_health: enhancedNetworkHealth,
       subtle_abnormalities: subtleAbnormalities,
       driver_behavior: driverBehavior,
-      event_timeline: [...eventTimeline, ...derivedEvents],
+      event_timeline: pipeline === "log_dbc" ? [...decodedDrivingEvents, ...derivedEvents] : [...eventTimeline, ...derivedEvents],
       what_the_data_actually_shows: whatDataShows,
       mechanic_summary: detailedSummary,
     },
