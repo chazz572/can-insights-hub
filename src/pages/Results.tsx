@@ -211,11 +211,11 @@ const describeVehicleState = ({ speedCandidates, rpmCandidates, pedalCandidates,
   }
 
   if (!hasMotionSignals && !hasEngineSignals && avgEntropy < 0.8 && avgBitActivity < 0.02) {
-    return "This log reads like an ignition-on, stationary, or idle-state capture. No motion-related signals were detected, and there is no evidence of acceleration, braking, or steering activity in the data that was captured.";
+    return "This is an ignition-on, stationary, or idle-state capture. No physical movement signals are present, no driver input signals are present, and no engine-speed signal is present in the captured data.";
   }
 
   if (!hasMotionSignals && !hasEngineSignals) {
-    return "The traffic pattern is active but not dynamic. The vehicle appears stationary or idling because the log lacks speed, RPM, pedal, brake, steering, and wheel-speed evidence that would normally appear during movement.";
+    return "The vehicle is stationary or idling. The network is awake and active, but the log lacks speed, RPM, pedal, brake, steering, and wheel-speed evidence that would appear during real movement.";
   }
 
   return "The log contains some changing traffic, but the strongest evidence points to a limited operating state rather than a full driving capture. Treat this as a useful module-activity snapshot, not a complete road-test recording.";
