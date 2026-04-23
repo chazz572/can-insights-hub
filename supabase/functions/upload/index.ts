@@ -7,7 +7,8 @@ const corsHeaders = {
 
 type CanFormat = "CSV" | "J1939 CSV" | "candump" | "CRTD" | "TRC" | "ASC" | "BLF" | "MDF/MF4" | "CANedge" | "DBC" | "key/value" | "generic TXT";
 type Frame = { timestamp: string; id: string; dlc: number; data: string[]; metadata?: string };
-type ConversionResult = { format: CanFormat; csv: string; frameCount: number; warnings: string[] };
+type PipelineKind = "log" | "dbc" | "log_dbc";
+type ConversionResult = { format: CanFormat; csv: string; frameCount: number; warnings: string[]; pipeline: PipelineKind };
 
 const jsonResponse = (body: unknown, status = 200) =>
   new Response(JSON.stringify(body), {
@@ -151,7 +152,7 @@ const parseDbc = (text: string, warnings: string[]) => {
     if (message) {
       currentMessageId = Number(message[1]).toString(16).toUpperCase();
       signalCounts.set(currentMessageId, 0);
-      messageMetadata.set(currentMessageId, `dbc_message=${message[2]};transmitter=${message[4]}`);
+      messageMetadata.set(currentMessageId, `source_file_type=dbc_definition;dbc_message=${message[2]};transmitter=${message[4]}`);
       continue;
     }
 
@@ -220,6 +221,29 @@ const parseBinaryBestEffort = (bytes: Uint8Array, format: CanFormat, warnings: s
   return [...parseCandump(text), ...parseAsc(text), ...parseGeneric(text)];
 };
 
+const dbcMetadataById = (dbcCsv: string) => {
+  const metadata = new Map<string, string>();
+  dbcCsv.split(/\r?\n/).slice(1).forEach((line) => {
+    const values = parseCsvLine(line);
+    const id = cleanId(values[1] ?? "");
+    if (id && values[4]) metadata.set(id, values[4].replace(/^"|"$/g, "").replace(/""/g, '"'));
+  });
+  return metadata;
+};
+
+const mergeLogWithDbcMetadata = (logCsv: string, dbcCsv: string) => {
+  const metadata = dbcMetadataById(dbcCsv);
+  const lines = logCsv.split(/\r?\n/);
+  return lines.map((line, index) => {
+    if (index === 0 || !line.trim()) return line;
+    const values = parseCsvLine(line);
+    const id = cleanId(values[1] ?? "");
+    const dbcMeta = metadata.get(id);
+    values[4] = dbcMeta ? `source_file_type=log_with_dbc;${dbcMeta}` : "source_file_type=log_with_dbc;dbc_match=none";
+    return [csvEscape(values[0] ?? ""), csvEscape(values[1] ?? ""), values[2] ?? 0, csvEscape(values[3] ?? ""), csvEscape(values[4])].join(",");
+  }).join("\n");
+};
+
 const convertFile = async (file: File): Promise<ConversionResult> => {
   const bytes = new Uint8Array(await file.arrayBuffer());
   const text = new TextDecoder("utf-8", { fatal: false }).decode(bytes);
@@ -252,7 +276,7 @@ const convertFile = async (file: File): Promise<ConversionResult> => {
   }).length;
   const malformed = meaningfulLines - deduped.length;
   if (malformed > 0 && format !== "CSV" && format !== "BLF" && format !== "MDF/MF4") warnings.push(`${malformed} line(s) were skipped because they did not look like valid CAN frames.`);
-  return { format, csv: toCsv(deduped), frameCount: deduped.length, warnings };
+  return { format, csv: toCsv(deduped), frameCount: deduped.length, warnings, pipeline: format === "DBC" ? "dbc" : "log" };
 };
 
 Deno.serve(async (req) => {
