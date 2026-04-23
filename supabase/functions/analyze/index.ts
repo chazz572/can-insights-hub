@@ -762,6 +762,16 @@ const runAnalysis = (csv: string) => {
     possible_rpm_ids: [...rpmIds],
     possible_pedal_ids: [...pedalIds],
   };
+  const decodedDrivingEvents = decodedSignals
+    .filter((signal) => /speed|wheel|rpm|torque|pedal|brake|steer|soc|charge|temp/i.test(String(signal.signal_name)))
+    .map((signal, index) => ({
+      event_index: index + 1,
+      id: signal.id,
+      signal_name: signal.signal_name,
+      event_type: String(signal.observed_trend) === "flat" ? "decoded_static_signal" : `decoded_${String(signal.observed_trend)}_signal`,
+      description: `${signal.signal_name} decoded from DBC on ID ${signal.id}: ${signal.decoded_min}–${signal.decoded_max}${signal.unit ? ` ${signal.unit}` : ""}.`,
+      evidence_source: "dbc_decoded_signal",
+    }));
 
   const idClassifications = idDeepDive.map((item) => {
     const volatileByteCount = Array.isArray(item.volatile_bytes) ? item.volatile_bytes.length : 0;
