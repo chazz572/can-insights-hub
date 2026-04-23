@@ -39,16 +39,18 @@ const Engineering = () => {
     </section>
 
     <div className="grid gap-6 lg:grid-cols-3">
-      {tools.map(([title, detail, Icon]) => (
+      {tools.map((tool) => {
+        const [title, detail, Icon] = tool;
+        return (
         <Card key={title} className="animate-fade-up overflow-hidden">
           <CardContent className="p-6">
             <span className="grid size-12 place-items-center rounded-lg border border-glass-border bg-glass text-primary shadow-glow"><Icon className="size-6" /></span>
             <h2 className="mt-5 text-xl font-bold">{title}</h2>
             <p className="mt-2 text-sm leading-6 text-muted-foreground">{detail}</p>
-            <Button className="mt-5 w-full" variant={activeTool[0] === title ? "analyzer" : "outline"} size="sm" onClick={() => setActiveTool([title, detail, Icon])}><SlidersHorizontal className="size-4" /> {activeTool[0] === title ? "Tool Active" : "Open Tool"}</Button>
+            <Button className="mt-5 w-full" variant={activeTool[0] === title ? "analyzer" : "outline"} size="sm" onClick={() => setActiveTool(tool)}><SlidersHorizontal className="size-4" /> {activeTool[0] === title ? "Tool Active" : "Open Tool"}</Button>
           </CardContent>
         </Card>
-      ))}
+      );})}
     </div>
 
     <Card className="mt-6 animate-fade-up overflow-hidden">
