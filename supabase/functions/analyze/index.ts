@@ -122,11 +122,10 @@ const hintedIdBase = (value: string, metadata = ""): 10 | 16 | "auto" => {
 };
 const canIdAliases = (id: string, metadata = "") => {
   const raw = metadataValue(metadata, "raw_can_id") || id;
-  const aliases = new Set<string>([normalizeCanId(id, hintedIdBase(id, metadata)), normalizeCanId(raw, hintedIdBase(raw, metadata))]);
-  if (hintedIdBase(raw, metadata) === 16) aliases.add(normalizeCanId(raw, 16));
-  if (metadataValue(metadata, "id_base") === "16" && /^\d+$/.test(raw)) {
-    aliases.add(normalizeCanId(raw, 10));
-  }
+  const rawBase = hintedIdBase(raw, metadata);
+  const aliases = new Set<string>([normalizeCanId(id, 10), normalizeCanId(raw, rawBase)]);
+  if (rawBase === 16) aliases.add(normalizeCanId(raw, 16));
+  if (rawBase === "auto" && /^\d+$/.test(raw)) aliases.add(normalizeCanId(raw, 10));
   [...aliases].forEach((alias) => {
     const numeric = Number(alias);
     if (Number.isFinite(numeric) && numeric > 0x1fffffff) aliases.add(String(numeric & 0x1fffffff));
