@@ -143,18 +143,23 @@ const parseAsc = (text: string) => text.split(/\r?\n/).map((line) => {
 
 const parseDbc = (text: string, warnings: string[]) => {
   const signalCounts = new Map<string, number>();
+  const messageMetadata = new Map<string, string>();
   let currentMessageId = "";
 
   for (const line of text.split(/\r?\n/)) {
-    const message = line.match(/^\s*BO_\s+(\d+)\s+\S+\s*:\s*(\d+)\s+\S+/);
+    const message = line.match(/^\s*BO_\s+(\d+)\s+(\S+)\s*:\s*(\d+)\s+(\S+)/);
     if (message) {
       currentMessageId = Number(message[1]).toString(16).toUpperCase();
       signalCounts.set(currentMessageId, 0);
+      messageMetadata.set(currentMessageId, `dbc_message=${message[2]};transmitter=${message[4]}`);
       continue;
     }
 
-    if (currentMessageId && /^\s*SG_\s+\S+\s*:/.test(line)) {
+    const signal = line.match(/^\s*SG_\s+(\S+)\s*:/);
+    if (currentMessageId && signal) {
       signalCounts.set(currentMessageId, (signalCounts.get(currentMessageId) ?? 0) + 1);
+      const existing = messageMetadata.get(currentMessageId) ?? "";
+      messageMetadata.set(currentMessageId, `${existing};signal=${signal[1]}`);
     }
   }
 
@@ -164,10 +169,10 @@ const parseDbc = (text: string, warnings: string[]) => {
     const id = Number(message[1]).toString(16).toUpperCase();
     const dlc = Math.max(1, Math.min(Number(message[2]) || 8, 8));
     const signalCount = Math.min(signalCounts.get(id) ?? 0, 255).toString(16).padStart(2, "0");
-    return normalizeFrame(String(index), id, [signalCount, ...Array.from({ length: dlc - 1 }, () => "00")], dlc);
+    return normalizeFrame(String(index), id, [signalCount, ...Array.from({ length: dlc - 1 }, () => "00")], dlc, messageMetadata.get(id)?.slice(0, 1800));
   }).filter((frame): frame is Frame => Boolean(frame));
 
-  if (frames.length) warnings.push("DBC files contain message definitions, not live traffic. CANAI created one reference row per DBC message so the IDs and signal map can be reviewed.");
+  if (frames.length) warnings.push("DBC files contain message definitions, not live traffic. CANAI preserved message and signal names as metadata so EV/OEM/system intelligence can be inferred from the DBC map.");
   return frames;
 };
 
