@@ -37,6 +37,7 @@ export const inferVehicleIdentification = (analysis: AnalysisResult): VehicleIde
   const vehicleState = analysis.diagnostics?.vehicle_state as JsonRecord | undefined;
   const missingSignals = rows(analysis.diagnostics?.missing_physical_signals);
   const moduleTypes = rows(analysis.diagnostics?.module_type_heuristics).length ? rows(analysis.diagnostics?.module_type_heuristics) : systems;
+  const metadataInsights = analysis.diagnostics?.metadata_insights as JsonRecord | undefined;
   const extendedRatio = Number(protocol?.extended_id_ratio ?? 0);
   const hasJ1939 = Boolean(protocol?.has_j1939_shape) || extendedRatio > 0.55;
   const hasDiagnostics = Boolean(protocol?.has_uds_or_isotp_shape) || idStats.some((row) => /^7|18DA/i.test(text(row.id ?? row.key)));
@@ -54,12 +55,13 @@ export const inferVehicleIdentification = (analysis: AnalysisResult): VehicleIde
   const rpmIds = analysis.vehicle_behavior?.possible_rpm_ids?.length ?? 0;
   const pedalIds = analysis.vehicle_behavior?.possible_pedal_ids?.length ?? 0;
   const hasMotionEvidence = speedIds > 0 || rpmIds > 0 || pedalIds > 0 || dynamicIds >= 4;
-  const hasEvHints = moduleTypes.some((row) => /battery|bms|inverter|ev/i.test(`${text(row.category)} ${text(row.module_type)} ${text(row.id)}`)) || (idStats.some((row) => /18DA|18F/i.test(cleanId(row.id ?? row.key))) && highEntropyBytes >= 4);
+  const metadataEvConfidence = Number(metadataInsights?.ev_confidence_score ?? 0);
+  const hasEvHints = metadataEvConfidence > 0.65 || moduleTypes.some((row) => /battery|bms|inverter|ev|motor|charger|traction/i.test(`${text(row.category)} ${text(row.module_type)} ${text(row.id)}`)) || (idStats.some((row) => /18DA|18F/i.test(cleanId(row.id ?? row.key))) && highEntropyBytes >= 4);
 
   const category = hasJ1939
     ? { label: "heavy-duty / J1939-style vehicle", confidence: clamp(74 + extendedRatio * 22) }
     : hasEvHints
-      ? { label: "EV or hybrid candidate", confidence: clamp(56 + highEntropyBytes * 4 + dynamicIds) }
+      ? { label: metadataInsights?.likely_oem_or_platform && text(metadataInsights.likely_oem_or_platform) !== "unknown from metadata" ? `${text(metadataInsights.likely_oem_or_platform)} EV network` : "EV or hybrid candidate", confidence: clamp(Math.max(56 + highEntropyBytes * 4 + dynamicIds, metadataEvConfidence * 100)) }
       : standardRatio > 0.9 && lowIdRatio > 0.45 && hasBody
         ? { label: "passenger car / light-duty 11-bit CAN", confidence: clamp(68 + dynamicIds + (hasMotionEvidence ? 8 : 0)) }
         : hasPowertrain && hasBody
@@ -75,7 +77,7 @@ export const inferVehicleIdentification = (analysis: AnalysisResult): VehicleIde
         : { label: "CAN 2.0A standard 11-bit identifiers", confidence: clamp(78 + standardRatio * 15 - extendedRatio * 20) };
 
   const oemStyle = hasEvHints
-    ? { label: "modern EV / hybrid-like network", confidence: clamp(44 + highEntropyBytes * 5) }
+    ? { label: metadataInsights?.likely_oem_or_platform && text(metadataInsights.likely_oem_or_platform) !== "unknown from metadata" ? text(metadataInsights.likely_oem_or_platform) : "modern EV / hybrid-like network", confidence: clamp(Math.max(44 + highEntropyBytes * 5, metadataEvConfidence * 100)) }
     : hasJ1939
       ? { label: "heavy-duty OEM-like", confidence: 70 }
       : standardRatio > 0.9 && lowIdRatio > 0.55 && hasClusterSecurity
@@ -86,12 +88,13 @@ export const inferVehicleIdentification = (analysis: AnalysisResult): VehicleIde
 
   const missingText = missingSignals.length ? `Missing physical signals reported: ${missingSignals.map((row) => text(row.signal)).slice(0, 6).join(", ")}.` : "No explicit missing-signal list was available.";
   const stateText = vehicleState ? `Vehicle-state classifier says ${text(vehicleState.classification)} at ${Math.round(num(vehicleState, ["confidence_score"]) * 100)}% confidence.` : "Vehicle-state classifier was not available.";
+  const metadataText = metadataInsights?.has_dbc_metadata ? `DBC metadata says ${text(metadataInsights.likely_oem_or_platform)} with ${Math.round(metadataEvConfidence * 100)}% EV confidence.` : "No DBC metadata was available.";
 
   return {
     category,
     protocol: protocolGuess,
     oemStyle,
-    explanation: `Fingerprint evidence: ${idStats.length} active IDs, ${Math.round(standardRatio * 100)}% standard 11-bit IDs, ${Math.round(extendedRatio * 100)}% extended IDs, ${dynamicIds} dynamic IDs, ${staticIds} static/status IDs, ${highEntropyBytes} high-entropy byte positions, and ${activeBits} active bit candidates. ${stateText} ${missingText} OEM style is intentionally heuristic and should be treated as network-shape guidance, not a certified manufacturer match.`,
+    explanation: `Fingerprint evidence: ${idStats.length} active IDs, ${Math.round(standardRatio * 100)}% standard 11-bit IDs, ${Math.round(extendedRatio * 100)}% extended IDs, ${dynamicIds} dynamic IDs, ${staticIds} static/status IDs, ${highEntropyBytes} high-entropy byte positions, and ${activeBits} active bit candidates. ${metadataText} ${stateText} ${missingText} OEM style is intentionally heuristic unless DBC metadata provides explicit platform labels.`,
   };
 };
 
