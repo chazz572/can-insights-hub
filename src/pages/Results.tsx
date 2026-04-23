@@ -514,6 +514,8 @@ const Results = () => {
   const summary = data?.summary;
   const summaryText = summary && typeof summary === "object" && !Array.isArray(summary) ? summary.text ?? summary : summary;
   const diagnostics = data?.diagnostics ?? {};
+  const fileType = String(data?.file_type ?? diagnostics.file_routing && typeof diagnostics.file_routing === "object" ? (diagnostics.file_routing as JsonRecord).file_type ?? "log" : "log");
+  const pipelineLabel = String(data?.analysis_pipeline ?? diagnostics.file_routing && typeof diagnostics.file_routing === "object" ? (diagnostics.file_routing as JsonRecord).analysis_pipeline ?? "Raw CAN log intelligence" : "Raw CAN log intelligence");
   const idStats = data?.id_stats ?? [];
   const networkHealth = diagnostics.network_health && typeof diagnostics.network_health === "object" ? diagnostics.network_health as JsonRecord : {};
   const timingRows = toRecordArray(diagnostics.timing);
@@ -621,6 +623,7 @@ const Results = () => {
           <div className="grid gap-6 xl:grid-cols-[1.25fr_0.75fr]">
             <AnalysisCard title="Summary" icon={<MessageSquareText className="size-5" />}>
               <div className="grid gap-4">
+                <PipelineBadge type={fileType} label={pipelineLabel} />
                 <div className="min-w-0 max-w-full overflow-hidden break-all rounded-lg border border-primary/30 bg-gradient-subtle p-3 text-xs font-medium leading-6 text-foreground shadow-glow backdrop-blur [overflow-wrap:anywhere] sm:break-words sm:p-4 sm:text-sm">{shortPlainSummary}</div>
                 <details className="group min-w-0 overflow-hidden rounded-lg border border-glass-border bg-glass backdrop-blur">
                   <summary className="flex cursor-pointer list-none items-center justify-between gap-3 p-4 text-sm font-semibold text-foreground">
@@ -634,9 +637,17 @@ const Results = () => {
               </div>
             </AnalysisCard>
             <AnalysisCard title="Signal Activity" description="Live telemetry intensity preview." icon={<BarChart3 className="size-5" />}>
-              <MiniChart />
+              {fileType === "dbc" ? <p className="text-sm leading-6 text-muted-foreground">DBC files define signals and scaling only, so activity charts are intentionally disabled.</p> : <MiniChart />}
             </AnalysisCard>
           </div>
+
+          {fileType === "dbc" ? <DbcViewer diagnostics={diagnostics} /> : <>
+
+          {fileType === "log_dbc" ? (
+            <AnalysisCard title="Decoded Signal Dashboard" description="Full Power Mode: DBC-matched real-value signal candidates and decoded context." icon={<Gauge className="size-5" />}>
+              <JsonTable data={diagnostics.decoded_signals} />
+            </AnalysisCard>
+          ) : null}
 
           {vehicleIdentification ? (
             <AnalysisCard title="Vehicle Identification" description="Heuristic AVI fingerprint from ID ranges, protocol shape, timing, entropy, and diagnostic patterns." icon={<Car className="size-5" />}>
