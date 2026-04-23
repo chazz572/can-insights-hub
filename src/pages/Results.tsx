@@ -32,6 +32,26 @@ const renderList = (value: unknown) => {
   );
 };
 
+const DiagnosticBlock = ({ field, value, collapsible = false }: { field: string; value: unknown; collapsible?: boolean }) => {
+  if (collapsible) {
+    return (
+      <details className="group rounded-lg border border-glass-border bg-glass p-4 backdrop-blur transition-all duration-300 hover:shadow-glow">
+        <summary className="cursor-pointer list-none font-mono text-sm font-semibold text-primary transition-colors group-open:mb-4">
+          {field}
+        </summary>
+        <JsonTable data={value} />
+      </details>
+    );
+  }
+
+  return (
+    <div className="space-y-3 rounded-lg border border-glass-border bg-glass p-4 backdrop-blur transition-all duration-300 hover:shadow-glow">
+      <h3 className="font-mono text-sm font-semibold text-primary">{field}</h3>
+      <JsonTable data={value} />
+    </div>
+  );
+};
+
 const MiniChart = () => (
   <div className="flex h-24 items-end gap-2 rounded-lg border border-glass-border bg-glass p-4 backdrop-blur">
     {[42, 64, 38, 78, 52, 88, 68, 96, 58, 74].map((height, index) => (
@@ -105,6 +125,7 @@ const Results = () => {
   const vehicleBehavior = data?.vehicle_behavior ?? {};
   const summary = data?.summary;
   const summaryText = summary && typeof summary === "object" && !Array.isArray(summary) ? summary.text ?? summary : summary;
+  const diagnostics = data?.diagnostics ?? {};
 
   return (
     <main className="mx-auto min-h-screen max-w-7xl px-4 py-8 sm:px-6 lg:px-10">
@@ -184,7 +205,15 @@ const Results = () => {
           </AnalysisCard>
 
           <AnalysisCard title="Advanced Diagnostics" description="Complete diagnostics payload returned by the backend." icon={<BrainCircuit className="size-5" />}>
-            <JsonTable data={data.diagnostics} />
+            <div className="grid gap-4">
+              <DiagnosticBlock field="diagnostics.protocol" value={diagnostics.protocol} />
+              <DiagnosticBlock field="diagnostics.byte_analysis" value={diagnostics.byte_analysis} collapsible />
+              <DiagnosticBlock field="diagnostics.bit_analysis" value={diagnostics.bit_analysis} collapsible />
+              <DiagnosticBlock field="diagnostics.timing" value={diagnostics.timing} />
+              <DiagnosticBlock field="diagnostics.signals" value={diagnostics.signals} />
+              <DiagnosticBlock field="diagnostics.systems" value={diagnostics.systems} />
+              <DiagnosticBlock field="diagnostics.mechanic_summary" value={diagnostics.mechanic_summary} />
+            </div>
           </AnalysisCard>
         </div>
       ) : null}
