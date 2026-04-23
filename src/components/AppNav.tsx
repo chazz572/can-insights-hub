@@ -66,22 +66,19 @@ export const AppNav = () => {
   return (
     <>
       {/* Toolbox sidebar */}
-      <aside className="fixed inset-y-0 left-0 z-40 hidden w-72 flex-col border-r-2 border-primary/30 bg-sidebar md:flex">
-        {/* Hazard stripe header */}
-        <div className="hazard-stripe h-2 w-full" />
-
-        <div className="flex flex-col gap-4 p-4">
-          <Link to="/" className="group flex items-center gap-3 rounded-sm border border-glass-border bg-card/60 p-3 brushed-steel">
+      <aside className="fixed inset-y-0 left-0 z-40 hidden w-72 flex-col border-r border-sidebar-border bg-sidebar md:flex">
+        <div className="flex flex-col gap-4 p-4 pt-5">
+          <Link to="/" className="group flex items-center gap-3 rounded-sm border border-sidebar-border bg-sidebar-accent/40 p-3">
             <span className="grid size-12 place-items-center rounded-sm bg-primary font-display text-lg font-bold text-primary-foreground shadow-[inset_0_-2px_0_hsl(0_0%_0%/0.5)]">
               CJL
             </span>
             <span className="min-w-0">
-              <span className="block font-display text-base font-bold leading-tight text-foreground">CAN INTELLIGENCE</span>
-              <span className="block font-mono text-[10px] uppercase tracking-widest text-primary">Service Bay · v2.0</span>
+              <span className="block font-display text-base font-bold leading-tight text-sidebar-accent-foreground">CAN INTELLIGENCE</span>
+              <span className="block font-mono text-[10px] uppercase tracking-widest text-sidebar-foreground/70">Service Bay · v2.0</span>
             </span>
           </Link>
 
-          <div className="flex items-center justify-between rounded-sm border border-glass-border bg-background/60 px-3 py-2 font-mono text-xs uppercase tracking-wider text-muted-foreground">
+          <div className="flex items-center justify-between rounded-sm border border-sidebar-border bg-sidebar-accent/40 px-3 py-2 font-mono text-xs uppercase tracking-wider text-sidebar-foreground">
             <span className="flex items-center gap-2">
               <span className="status-led" />
               SYS ONLINE
@@ -91,7 +88,7 @@ export const AppNav = () => {
         </div>
 
         <div className="px-4 pb-2">
-          <p className="stencil text-[10px] text-muted-foreground">— Service Stations —</p>
+          <p className="stencil text-[10px] text-sidebar-foreground/60">— Service Stations —</p>
         </div>
 
         <nav className="flex-1 space-y-0.5 overflow-y-auto px-3 pr-2">
@@ -106,9 +103,9 @@ export const AppNav = () => {
           ))}
         </nav>
 
-        <div className="m-3 rounded-sm border-2 border-warning/50 bg-warning/10 p-3">
+        <div className="m-3 rounded-sm border border-sidebar-border bg-sidebar-accent/40 p-3">
           <div className="flex items-center gap-2">
-            <span className="grid size-9 place-items-center rounded-sm bg-warning text-warning-foreground">
+            <span className="grid size-9 place-items-center rounded-sm border border-sidebar-border bg-sidebar text-sidebar-foreground">
               <Wrench className="size-4" />
             </span>
             <div className="min-w-0">
@@ -117,12 +114,10 @@ export const AppNav = () => {
             </div>
           </div>
         </div>
-
-        <div className="hazard-stripe h-2 w-full" />
       </aside>
 
       {/* Top status bar — looks like a shop control panel */}
-      <header className="fixed inset-x-0 top-0 z-30 border-b-2 border-primary/30 bg-card/95 px-4 py-2.5 backdrop-blur md:left-72 md:px-6">
+      <header className="fixed inset-x-0 top-0 z-30 border-b border-glass-border bg-card/95 px-4 py-2.5 backdrop-blur md:left-72 md:px-6">
         <div className="flex items-center justify-between gap-4">
           <div className="flex min-w-0 items-center gap-3">
             <span className="status-led shrink-0" />
@@ -155,8 +150,7 @@ export const AppNav = () => {
       </header>
 
       {/* Mobile bottom toolbar */}
-      <header className="fixed inset-x-2 bottom-2 z-40 rounded-sm border-2 border-primary/30 bg-sidebar/98 p-1.5 backdrop-blur md:hidden">
-        <div className="hazard-stripe absolute inset-x-0 -top-1 h-1 rounded-t-sm" />
+      <header className="fixed inset-x-2 bottom-2 z-40 rounded-sm border border-sidebar-border bg-sidebar/98 p-1.5 backdrop-blur md:hidden">
         <nav className="grid grid-cols-5 gap-1">
           {[
             links[0],

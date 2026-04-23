@@ -35,7 +35,6 @@ const Workspace = () => {
     <main className="mx-auto min-h-screen max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
       {/* Service bay command header */}
       <section className="data-panel riveted relative mb-5 overflow-hidden">
-        <div className="hazard-stripe h-2 w-full" />
         <div className="p-5 sm:p-7">
           <div className="flex items-center gap-2">
             <span className="status-led" />
@@ -151,7 +150,6 @@ const Workspace = () => {
       <div className="mt-5 grid gap-3 lg:grid-cols-3">
         {[["Analyze", "Upload any supported CAN artifact and route it to the correct pipeline.", ScanLine], ["Operate", "Use fleet and comparison workflows to track vehicle readiness.", Route], ["Deliver", "Generate customer-safe reports and integration-ready outputs.", FileText]].map(([title, text, Icon]) => (
           <div key={String(title)} className="data-panel relative overflow-hidden p-5">
-            <div className="absolute right-0 top-0 h-full w-1 bg-primary" />
             <Icon className="mb-3 size-6 text-primary" />
             <h2 className="font-display text-lg font-bold uppercase tracking-wider">{String(title)}</h2>
             <p className="mt-1.5 font-sans text-sm leading-6 text-muted-foreground">{String(text)}</p>
@@ -172,7 +170,7 @@ const Workspace = () => {
         </div>
       </div>
 
-      <div className="mt-6 flex items-center justify-between rounded-sm border-2 border-primary/40 bg-primary/5 p-4">
+      <div className="data-panel mt-6 flex items-center justify-between p-4">
         <div className="flex items-center gap-3">
           <Wrench className="size-5 text-primary" />
           <p className="font-display text-sm font-bold uppercase tracking-wider text-foreground">Ready to start a job?</p>
