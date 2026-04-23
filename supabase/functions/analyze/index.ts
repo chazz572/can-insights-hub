@@ -169,7 +169,8 @@ const classifySignal = (signal: JsonRecord, metadata = "") => {
   if (/(wheel[^a-z0-9]*speed|vehicle[^a-z0-9]*speed|road[^a-z0-9]*speed)/.test(text)) return "speed_or_wheel_speed_candidate";
   if (/(accelerator|pedal|brake[^a-z0-9]*(pressure|position)|steering[^a-z0-9]*(angle|torque))/.test(text)) return "pedal_brake_or_steering_candidate";
   if (range <= 16 && Number(signal.unique_values ?? 0) <= 16) return "gear_flag_or_counter_candidate";
-  if (!text && range > 8 && maxValue <= 255 && ["rising", "falling"].includes(direction)) return "compact_changing_byte_candidate";
+  if (!text && range > 8 && maxValue <= 255 && ["rising", "falling"].includes(direction)) return "compact_input_or_state_candidate";
+  if (!text && range >= 250 && ["rising", "falling", "oscillating"].includes(direction)) return "load_or_motion_candidate_unvalidated";
   return "analog_sensor_candidate";
 };
 
