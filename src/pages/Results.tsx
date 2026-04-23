@@ -185,7 +185,9 @@ const SystemsBadges = ({ data }: { data: unknown }) => {
 
 const MechanicSummary = ({ data }: { data: unknown }) => (
   <div className="rounded-lg border border-primary/30 bg-gradient-subtle p-5 shadow-glow backdrop-blur">
-    <p className="whitespace-pre-wrap text-sm leading-7 text-foreground">{renderText(data)}</p>
+    <div className="min-w-0 max-w-full overflow-hidden whitespace-pre-wrap break-words text-sm leading-7 text-foreground [overflow-wrap:anywhere]">
+      {renderText(data)}
+    </div>
   </div>
 );
 
@@ -586,12 +588,14 @@ const Results = () => {
             <AnalysisCard title="Summary" icon={<MessageSquareText className="size-5" />}>
               <div className="grid gap-4">
                 <div className="break-words rounded-lg border border-primary/30 bg-gradient-subtle p-4 text-sm font-medium leading-6 text-foreground shadow-glow backdrop-blur">{shortPlainSummary}</div>
-                <details className="group overflow-hidden rounded-lg border border-glass-border bg-glass backdrop-blur">
+                <details className="group min-w-0 overflow-hidden rounded-lg border border-glass-border bg-glass backdrop-blur">
                   <summary className="flex cursor-pointer list-none items-center justify-between gap-3 p-4 text-sm font-semibold text-foreground">
                     Detailed evidence
                     <ChevronDown className="size-4 shrink-0 text-muted-foreground transition-transform group-open:rotate-180" />
                   </summary>
-                  <pre className="max-h-[22rem] overflow-y-auto whitespace-pre-wrap break-words border-t border-glass-border p-4 text-xs leading-6 text-foreground sm:text-sm sm:leading-7">{renderText(summaryText)}</pre>
+                  <div className="min-w-0 max-w-full overflow-x-hidden overflow-y-auto border-t border-glass-border p-3 text-[11px] leading-5 text-foreground sm:p-4 sm:text-sm sm:leading-7">
+                    <div className="whitespace-pre-wrap break-words font-sans [overflow-wrap:anywhere]">{renderText(summaryText)}</div>
+                  </div>
                 </details>
               </div>
             </AnalysisCard>
