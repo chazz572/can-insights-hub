@@ -1,4 +1,4 @@
-import { AlertTriangle, Activity, BarChart3, Binary, BrainCircuit, ChevronDown, Clock, Cpu, Gauge, Hash, Layers3, MessageSquareText, Radar, ShieldCheck, Wrench, Zap } from "lucide-react";
+import { AlertTriangle, Activity, BarChart3, Binary, BrainCircuit, ChevronDown, Clock, Cpu, Download, Gauge, Hash, Layers3, Loader2, MessageSquareText, Radar, Save, ShieldCheck, Sparkles, Wrench, Zap } from "lucide-react";
 import { useEffect, useState } from "react";
 import type { ReactNode } from "react";
 import { Link, useParams } from "react-router-dom";
@@ -9,6 +9,7 @@ import { JsonTable } from "@/components/JsonTable";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { analyzeFile, AnalysisResult } from "@/lib/canApi";
+import { requestAiInsight, saveAnalysisSnapshot, type AiInsightKind } from "@/lib/saasApi";
 import { cn } from "@/lib/utils";
 
 const renderText = (value: unknown) => {
@@ -222,6 +223,9 @@ const Results = () => {
   const fileId = file_id ?? id;
   const [analysis, setAnalysis] = useState<AnalysisResult | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [actionMessage, setActionMessage] = useState<string | null>(null);
+  const [aiInsight, setAiInsight] = useState<string | null>(null);
+  const [aiLoading, setAiLoading] = useState<AiInsightKind | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
@@ -268,6 +272,40 @@ const Results = () => {
   const componentHealth = Math.max(0, Math.min(100, 100 - anomalies.length * 12));
   const suspectIds = toRecordArray(idStats).filter((row) => numericValue(row, ["count", "frequency", "messages", "total", "value"]) > 1).length;
 
+  const saveSnapshot = async () => {
+    if (!fileId || !data) return;
+    try {
+      await saveAnalysisSnapshot({ fileId, result: data });
+      setActionMessage("Analysis saved to your workspace.");
+    } catch (saveError) {
+      setActionMessage(saveError instanceof Error ? saveError.message : "Unable to save analysis.");
+    }
+  };
+
+  const runAi = async (kind: AiInsightKind) => {
+    if (!data) return;
+    setAiLoading(kind);
+    setAiInsight(null);
+    try {
+      setAiInsight(await requestAiInsight({ kind, analysis: data }));
+    } catch (aiError) {
+      setAiInsight(aiError instanceof Error ? aiError.message : "AI insight failed.");
+    } finally {
+      setAiLoading(null);
+    }
+  };
+
+  const downloadReport = () => {
+    if (!data) return;
+    const report = `CANAI Vehicle Health Report\n\nFile ID: ${fileId}\nTotal messages: ${data.total_messages ?? "—"}\nUnique IDs: ${data.unique_ids ?? "—"}\nAnomalies: ${anomalies.length}\nComponent health: ${componentHealth}/100\nCAN bus load: ${busLoad}%\n\nMechanic Summary:\n${renderText(diagnostics.mechanic_summary ?? summaryText)}`;
+    const url = URL.createObjectURL(new Blob([report], { type: "text/plain" }));
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `canai-health-report-${fileId}.txt`;
+    link.click();
+    URL.revokeObjectURL(url);
+  };
+
   return (
     <main className="mx-auto min-h-screen max-w-7xl px-4 py-8 sm:px-6 lg:px-10">
       <div className="mb-8 flex flex-col justify-between gap-4 sm:flex-row sm:items-end">
@@ -279,10 +317,13 @@ const Results = () => {
           <h1 className="mt-4 text-4xl font-extrabold tracking-tight sm:text-5xl">CAN analysis</h1>
           <p className="mt-3 max-w-2xl text-muted-foreground">File ID: <span className="font-mono text-foreground">{fileId ?? "—"}</span></p>
         </div>
-        <Button asChild variant="outline">
-          <Link to="/upload">Analyze another CSV</Link>
-        </Button>
+        <div className="flex flex-wrap gap-3">
+          <Button type="button" variant="outline" onClick={saveSnapshot}><Save className="size-4" /> Save analysis</Button>
+          <Button type="button" variant="outline" onClick={downloadReport}><Download className="size-4" /> Health report</Button>
+          <Button asChild variant="outline"><Link to="/upload">Analyze another CSV</Link></Button>
+        </div>
       </div>
+      {actionMessage ? <div className="mb-6 rounded-lg border border-glass-border bg-glass p-3 text-sm text-muted-foreground shadow-glow backdrop-blur">{actionMessage}</div> : null}
 
       {isLoading ? (
         <Card className="animate-fade-up overflow-hidden">
@@ -329,6 +370,26 @@ const Results = () => {
 
           <AnalysisCard title="Mechanic Mode" description="Simplified diagnostic summary for service workflows." icon={<Wrench className="size-5" />}>
             <MechanicSummary data={diagnostics.mechanic_summary ?? summaryText} />
+          </AnalysisCard>
+
+          <AnalysisCard title="AI Diagnostic Copilot" description="Plain-English mechanic, reverse-engineering, repair, signal naming, and byte decoding guidance." icon={<Sparkles className="size-5" />}>
+            <div className="flex flex-wrap gap-2">
+              {([
+                ["mechanic", "AI Mechanic"],
+                ["reverse", "AI Reverse Engineer"],
+                ["repair", "Repair Suggestions"],
+                ["signal", "Signal Naming"],
+                ["decoder", "Byte Decoder"],
+              ] as Array<[AiInsightKind, string]>).map(([kind, label]) => (
+                <Button key={kind} type="button" variant="outline" size="sm" onClick={() => runAi(kind)} disabled={Boolean(aiLoading)}>
+                  {aiLoading === kind ? <Loader2 className="animate-spin" /> : <Sparkles className="size-4" />}
+                  {label}
+                </Button>
+              ))}
+            </div>
+            <div className="mt-4 rounded-lg border border-glass-border bg-glass p-5 text-sm leading-7 text-foreground backdrop-blur">
+              <pre className="whitespace-pre-wrap font-sans">{aiInsight ?? "Choose an AI mode to generate professional diagnostic guidance from this analysis."}</pre>
+            </div>
           </AnalysisCard>
 
           <div className="grid gap-5">

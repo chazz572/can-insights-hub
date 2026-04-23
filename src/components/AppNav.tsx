@@ -1,4 +1,4 @@
-import { BarChart3, Bell, Home, Moon, Settings, Sun, UploadCloud, UserCircle } from "lucide-react";
+import { BarChart3, Bell, Car, GitCompareArrows, Home, LayoutDashboard, Moon, Settings, Sun, UploadCloud, UserCircle } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Link, NavLink as RouterNavLink, useLocation } from "react-router-dom";
 
@@ -40,8 +40,11 @@ export const AppNav = () => {
 
   const links = [
     { to: "/", label: "Home", icon: Home, end: true },
+    { to: "/workspace", label: "Workspace", icon: LayoutDashboard },
     { to: "/upload", label: "Upload", icon: UploadCloud },
     { to: resultsPath, label: "Results", icon: BarChart3 },
+    { to: "/compare", label: "Compare", icon: GitCompareArrows },
+    { to: "/fleet", label: "Fleet", icon: Car },
   ];
 
   return (
@@ -67,7 +70,7 @@ export const AppNav = () => {
         </nav>
 
         <div className="mt-8 space-y-2 border-t border-glass-border pt-5">
-          {["Diagnostics", "Engineering", "Fleet"].map((section) => (
+          {["Diagnostics", "Engineering", "Fleet", "AI", "SaaS"].map((section) => (
             <div key={section} className="rounded-lg px-4 py-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground transition-colors hover:text-primary">
               {section}
             </div>
@@ -96,16 +99,16 @@ export const AppNav = () => {
             <button type="button" aria-label="Settings" className="hidden size-10 place-items-center rounded-lg border border-glass-border bg-glass text-foreground backdrop-blur transition-all duration-300 hover:border-primary/40 hover:shadow-glow sm:grid">
               <Settings className="size-4" />
             </button>
-            <div className="flex items-center gap-2 rounded-lg border border-glass-border bg-glass px-3 py-2 text-sm font-semibold text-foreground backdrop-blur">
+            <RouterNavLink to="/auth" className="flex items-center gap-2 rounded-lg border border-glass-border bg-glass px-3 py-2 text-sm font-semibold text-foreground backdrop-blur transition-all duration-300 hover:border-primary/40 hover:shadow-glow">
               <UserCircle className="size-4 text-primary" />
-              <span className="hidden sm:inline">Workspace</span>
-            </div>
+              <span className="hidden sm:inline">Account</span>
+            </RouterNavLink>
           </div>
         </div>
       </header>
 
       <header className="fixed inset-x-3 bottom-3 z-40 rounded-lg border border-sidebar-border bg-sidebar/90 p-2 shadow-dashboard backdrop-blur-xl md:hidden">
-        <nav className="grid grid-cols-3 gap-2">
+        <nav className="grid grid-cols-5 gap-2">
           {links.map((item) => (
             <RouterNavLink key={item.label} to={item.to} className={({ isActive }) => cn(navClass({ isActive }), "justify-center px-2 py-2")} end={item.end}>
               <item.icon />
