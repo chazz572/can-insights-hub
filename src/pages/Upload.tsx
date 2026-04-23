@@ -1,4 +1,4 @@
-import { ChangeEvent, DragEvent, FormEvent, useEffect, useMemo, useState } from "react";
+import { ChangeEvent, DragEvent, FormEvent, useEffect, useState } from "react";
 import { AlertTriangle, CheckCircle2, FileArchive, FileCode2, FileText, Files, Loader2, UploadCloud } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 
@@ -37,8 +37,6 @@ const Upload = () => {
   const [isComplete, setIsComplete] = useState(false);
 
   const hasBatch = files.length > 1;
-  const acceptedTypes = useMemo(() => ".csv,.log,.txt,.trc,.crtd,.asc,.blf,.mf4,.mdf,.jsonl,.dbc,text/csv,text/plain", []);
-
   useEffect(() => {
     if (!isLoading) return;
     setProgress(10);
@@ -142,8 +140,8 @@ const Upload = () => {
                   {isComplete ? <CheckCircle2 className="size-10 text-success" /> : files.length > 1 ? <Files className="size-10" /> : files.length ? <FileText className="size-10" /> : <UploadCloud className="size-10" />}
                 </span>
                 <span className="mt-6 text-xl font-bold text-foreground">{files.length ? `${files.length} File${files.length > 1 ? "s" : ""} Ready` : "Drop Any CAN Log Format Here"}</span>
-                <span className="mt-2 max-w-md text-sm leading-6 text-muted-foreground">Batch upload up to 12 files. Each file is detected, validated, converted, stored as normalized CSV, and analyzed independently.</span>
-                <Input id="can-files" className="sr-only" type="file" multiple accept={acceptedTypes} onChange={handleFileChange} disabled={isLoading} />
+                <span className="mt-2 max-w-md text-sm leading-6 text-muted-foreground">Batch upload up to 12 files from Files, iCloud, Drive, or local storage. Each file is detected, validated, converted, stored as normalized CSV, and analyzed independently.</span>
+                <Input id="can-files" className="sr-only" type="file" multiple onChange={handleFileChange} disabled={isLoading} />
               </Label>
             </div>
 
