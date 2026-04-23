@@ -35,6 +35,10 @@ const canIdAliases = (storedId: string, metadata = "") => {
   const raw = metadataValue(metadata, "raw_can_id") || storedId;
   aliases.add(cleanId(raw, hintedIdBase(raw, metadata)));
   if (hintedIdBase(raw, metadata) === 16) aliases.add(cleanId(raw, 16));
+  if (/^\d+$/.test(raw)) {
+    aliases.add(cleanId(raw, 10));
+    aliases.add(cleanId(raw, 16));
+  }
   [...aliases].forEach((id) => {
     const numeric = Number(id);
     if (Number.isFinite(numeric) && numeric > 0x1fffffff) aliases.add(String(numeric & 0x1fffffff));
@@ -282,7 +286,7 @@ const mergeLogWithDbcMetadata = (logCsv: string, dbcCsv: string) => {
     const values = parseCsvLine(line);
     const existingMetadata = values[4]?.replace(/^"|"$/g, "").replace(/""/g, '"') ?? "";
     const dbcMeta = canIdAliases(values[1] ?? "", existingMetadata).map((id) => metadata.get(id)).find(Boolean);
-    values[4] = dbcMeta ? `source_file_type=log_with_dbc;${dbcMeta}` : "source_file_type=log_with_dbc;dbc_match=none";
+    values[4] = dbcMeta ? ["source_file_type=log_with_dbc", existingMetadata, dbcMeta].filter(Boolean).join(";") : ["source_file_type=log_with_dbc", existingMetadata, "dbc_match=none"].filter(Boolean).join(";");
     return [csvEscape(values[0] ?? ""), csvEscape(values[1] ?? ""), values[2] ?? 0, csvEscape(values[3] ?? ""), csvEscape(values[4])].join(",");
   }).join("\n");
 };
