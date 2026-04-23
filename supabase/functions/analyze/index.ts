@@ -434,12 +434,12 @@ const runAnalysis = (csv: string) => {
   }) as JsonRecord[];
 
   analogSignals.forEach((signal) => {
-    signal.likely_signal_type = classifySignal(signal);
+    signal.likely_signal_type = classifySignal(signal, String(metadataById.get(String(signal.id)) ?? ""));
     signal.evidence = describeSignalEvidence(signal);
   });
 
   analogSignals.filter((signal) => String(signal.likely_signal_type).includes("speed") || String(signal.likely_signal_type).includes("wheel")).forEach((signal) => speedIds.add(String(signal.id)));
-  analogSignals.filter((signal) => signal.likely_signal_type === "rpm_candidate").forEach((signal) => rpmIds.add(String(signal.id)));
+  analogSignals.filter((signal) => /rpm_candidate/.test(String(signal.likely_signal_type))).forEach((signal) => rpmIds.add(String(signal.id)));
   analogSignals.filter((signal) => /pedal|brake|steering/i.test(String(signal.likely_signal_type))).forEach((signal) => pedalIds.add(String(signal.id)));
 
   const networkHealth = {
@@ -468,7 +468,10 @@ const runAnalysis = (csv: string) => {
   const fallingMotion = speedSignals.some((signal) => signal.direction === "falling") || pedalBrakeSteeringSignals.some((signal) => signal.direction === "falling");
   const oscillatingMotion = speedSignals.some((signal) => signal.direction === "oscillating") || pedalBrakeSteeringSignals.some((signal) => signal.direction === "oscillating");
   const engineActive = rpmSignals.length > 0 || loadSignals.length > 0;
-  const behaviorLabel = risingMotion && !fallingMotion
+  const hasDefensibleMotion = speedSignals.length > 0 || pedalBrakeSteeringSignals.length > 0;
+  const behaviorLabel = !hasDefensibleMotion
+    ? "awake periodic CAN traffic with no defensible vehicle-motion conclusion"
+    : risingMotion && !fallingMotion
     ? "accelerating or increasing load"
     : fallingMotion && !risingMotion
       ? "decelerating, braking, or load dropping"
@@ -476,10 +479,8 @@ const runAnalysis = (csv: string) => {
         ? "transient driving with acceleration and deceleration phases"
         : oscillatingMotion
           ? "turning, pedal modulation, or low-speed maneuvering"
-          : engineActive && !speedSignals.length
-            ? "stationary engine activity / idle under varying load"
-            : "stationary awake-module state with no defensible motion signal";
-  const behaviorConfidence = isDbcReference ? Math.max(0.82, metadataEvConfidence) : Math.min(0.94, 0.42 + speedSignals.length * 0.12 + rpmSignals.length * 0.1 + pedalBrakeSteeringSignals.length * 0.08 + (engineActive ? 0.08 : 0));
+            : "awake periodic CAN traffic with no defensible vehicle-motion conclusion";
+  const behaviorConfidence = isDbcReference ? 0 : !hasDefensibleMotion ? 0.22 : Math.min(0.86, 0.42 + speedSignals.length * 0.12 + pedalBrakeSteeringSignals.length * 0.08);
   const behavioralEvidence = [...speedSignals, ...rpmSignals, ...pedalBrakeSteeringSignals, ...loadSignals].slice(0, 12).map(describeSignalEvidence);
   const subtleAbnormalities = [
     ...timing.filter((item) => Number(item.period_jitter) > Math.max(Number(item.average_period) * 0.2, 0.003)).map((item) => ({ id: item.id, type: "timing_jitter_or_drift", severity: Number(item.period_jitter) > Math.max(Number(item.average_period) * 0.75, 0.02) ? "moderate" : "minor", evidence: `Average period ${item.average_period}s with jitter ${item.period_jitter}s; max gap ${item.max_period}s.` })),
