@@ -172,6 +172,40 @@ const classifySignal = (signal: JsonRecord) => {
 
 const describeSignalEvidence = (signal: JsonRecord) => `ID ${signal.id} bytes ${signal.byte_start}-${Number(signal.byte_start ?? 0) + 1} ${signal.endianness} ranged ${signal.min_value}-${signal.max_value}, changed ${signal.unique_values} unique values, trended ${signal.direction}, and had ${Number(signal.smoothness ?? 0).toFixed(2)} smooth-step behavior.`;
 
+const metadataTokens = (value: string) => value.toLowerCase().split(/[^a-z0-9]+/).filter(Boolean);
+const containsAny = (text: string, terms: string[]) => terms.some((term) => text.includes(term));
+const summarizeMetadata = (metadataById: Map<string, string>, idCounts: Map<string, number>) => {
+  const rows = [...metadataById.entries()].map(([id, metadata]) => ({ id, metadata, text: metadata.toLowerCase(), tokens: metadataTokens(metadata) }));
+  const scoreRows = (terms: string[]) => rows.filter((row) => containsAny(row.text, terms));
+  const evTerms = ["battery", "bms", "inverter", "drive", "regen", "charge", "charger", "hv", "dc", "thermal", "motor", "torque", "tesla", "model3", "autopilot", "brake", "steering", "pedal"];
+  const oemTerms = ["tesla", "model3", "autopilot", "partybus", "vehiclebus", "chassisbus", "ui_", "di_", "bms_", "ibst_", "epas_", "esp_"];
+  const domainTerms = {
+    battery_energy: ["battery", "bms", "hv", "charge", "charger", "soc", "cell", "pack", "voltage", "current"],
+    traction_inverter_motor: ["inverter", "motor", "drive", "di_", "torque", "regen", "powertrain"],
+    chassis_brake_steering: ["brake", "steering", "epas", "esp", "wheel", "speed", "abs"],
+    body_ui_autopilot: ["autopilot", "camera", "ui_", "display", "gps", "cell", "wifi", "radar", "adas"],
+    thermal: ["thermal", "temperature", "coolant", "pump", "fan", "heat", "ac"]
+  };
+  const matchedEvRows = scoreRows(evTerms);
+  const matchedOemRows = scoreRows(oemTerms);
+  const domains = Object.entries(domainTerms).map(([domain, terms]) => {
+    const matches = scoreRows(terms);
+    return { domain, ids: matches.map((row) => row.id).slice(0, 12), evidence_terms: [...new Set(matches.flatMap((row) => row.tokens.filter((token) => terms.some((term) => token.includes(term.replace(/_$/, ""))))))].slice(0, 16), count: matches.length };
+  }).filter((item) => item.count > 0).sort((a, b) => b.count - a.count);
+  const likelyOem = containsAny(rows.map((row) => row.text).join(" "), ["tesla", "model3", "autopilot", "partybus", "vehiclebus", "chassisbus"]) ? "Tesla Model 3 / Tesla-style DBC" : "unknown from metadata";
+  const evConfidence = Math.min(0.99, 0.35 + matchedEvRows.length * 0.035 + domains.length * 0.06 + (likelyOem.includes("Tesla") ? 0.28 : 0));
+  return {
+    has_dbc_metadata: rows.length > 0,
+    likely_oem_or_platform: likelyOem,
+    ev_confidence_score: Number(evConfidence.toFixed(3)),
+    ev_evidence_ids: matchedEvRows.map((row) => row.id).slice(0, 20),
+    oem_evidence_ids: matchedOemRows.map((row) => row.id).slice(0, 20),
+    domains,
+    metadata_id_coverage: idCounts.size ? Number((rows.length / idCounts.size).toFixed(3)) : 0,
+    explanation: rows.length ? `Metadata names include ${domains.map((item) => item.domain.replace(/_/g, " ")).join(", ") || "system labels"}; ${likelyOem !== "unknown from metadata" ? `${likelyOem} naming is present` : "no explicit OEM naming was found"}.` : "No DBC/message metadata was available in the normalized file.",
+  };
+};
+
 const runAnalysis = (csv: string) => {
   let totalMessages = 0;
   let extendedIds = 0;
