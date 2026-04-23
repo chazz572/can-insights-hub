@@ -33,22 +33,44 @@ const renderList = (value: unknown) => {
   );
 };
 
-const DiagnosticBlock = ({ field, value, collapsible = false }: { field: string; value: unknown; collapsible?: boolean }) => {
-  if (collapsible) {
-    return (
-      <details className="group rounded-lg border border-glass-border bg-glass p-4 backdrop-blur transition-all duration-300 hover:shadow-glow">
-        <summary className="cursor-pointer list-none font-mono text-sm font-semibold text-primary transition-colors group-open:mb-4">
-          {field}
-        </summary>
-        <JsonTable data={value} />
-      </details>
-    );
-  }
+const toRecordArray = (value: unknown): Array<Record<string, unknown>> => {
+  if (Array.isArray(value)) return value.map((item, index) => (item && typeof item === "object" && !Array.isArray(item) ? item as Record<string, unknown> : { item: index + 1, value: item }));
+  if (value && typeof value === "object") return Object.entries(value as Record<string, unknown>).map(([key, item]) => (item && typeof item === "object" && !Array.isArray(item) ? { key, ...(item as Record<string, unknown>) } : { key, value: item }));
+  return [];
+};
 
+const numericValue = (row: Record<string, unknown>, keys: string[]) => {
+  const value = keys.map((key) => row[key]).find((item) => typeof item === "number" || (typeof item === "string" && !Number.isNaN(Number(item))));
+  return value === undefined ? 0 : Number(value);
+};
+
+const CollapsiblePanel = ({ title, icon, children, defaultOpen = false }: { title: string; icon: React.ReactNode; children: React.ReactNode; defaultOpen?: boolean }) => (
+  <details open={defaultOpen} className="group overflow-hidden rounded-lg border border-glass-border bg-glass backdrop-blur-xl transition-all duration-300 hover:border-primary/30 hover:shadow-glow">
+    <summary className="flex cursor-pointer list-none items-center justify-between gap-4 p-5">
+      <span className="flex items-center gap-3 text-lg font-bold text-foreground">
+        <span className="grid size-10 place-items-center rounded-lg border border-glass-border bg-gradient-subtle text-primary shadow-glow">{icon}</span>
+        {title}
+      </span>
+      <ChevronDown className="size-5 text-muted-foreground transition-transform duration-300 group-open:rotate-180" />
+    </summary>
+    <div className="border-t border-glass-border p-5 animate-fade-up">{children}</div>
+  </details>
+);
+
+const FrequencyChart = ({ data }: { data: unknown }) => {
+  const rows = toRecordArray(data).map((row, index) => ({ name: String(row.id ?? row.can_id ?? row.arbitration_id ?? row.identifier ?? row.key ?? index + 1), count: numericValue(row, ["count", "frequency", "messages", "total", "value"]) }));
+  if (!rows.length) return null;
   return (
-    <div className="space-y-3 rounded-lg border border-glass-border bg-glass p-4 backdrop-blur transition-all duration-300 hover:shadow-glow">
-      <h3 className="font-mono text-sm font-semibold text-primary">{field}</h3>
-      <JsonTable data={value} />
+    <div className="mb-4 h-56 rounded-lg border border-glass-border bg-glass p-4 backdrop-blur">
+      <ResponsiveContainer width="100%" height="100%">
+        <BarChart data={rows.slice(0, 16)}>
+          <CartesianGrid stroke="hsl(var(--glass-border))" vertical={false} />
+          <XAxis dataKey="name" stroke="hsl(var(--muted-foreground))" tick={{ fontSize: 11 }} />
+          <YAxis stroke="hsl(var(--muted-foreground))" tick={{ fontSize: 11 }} />
+          <Tooltip cursor={{ fill: "hsl(var(--secondary) / 0.45)" }} contentStyle={{ background: "hsl(var(--card))", border: "1px solid hsl(var(--glass-border))", borderRadius: "12px" }} />
+          <Bar dataKey="count" fill="hsl(var(--primary))" radius={[8, 8, 0, 0]} />
+        </BarChart>
+      </ResponsiveContainer>
     </div>
   );
 };
