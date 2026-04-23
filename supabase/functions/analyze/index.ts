@@ -308,6 +308,34 @@ const runAnalysis = (csv: string) => {
     };
   }).sort((a, b) => Number(b.messages) - Number(a.messages));
 
+  const analogSignals = [...idProfiles.entries()].flatMap(([id, profile]) => {
+    const samples = profile.cleanSamples.map(byteValues).filter((bytes) => bytes.length >= 2);
+    if (samples.length < 20) return [];
+    return Array.from({ length: 7 }, (_, byte_start) => {
+      const bigEndian = samples.filter((bytes) => bytes.length > byte_start + 1).map((bytes) => bytes[byte_start] * 256 + bytes[byte_start + 1]);
+      const littleEndian = samples.filter((bytes) => bytes.length > byte_start + 1).map((bytes) => bytes[byte_start] + bytes[byte_start + 1] * 256);
+      const beScore = analogCandidateScore(bigEndian);
+      const leScore = analogCandidateScore(littleEndian);
+      const score = Math.max(beScore, leScore);
+      const values = beScore >= leScore ? bigEndian : littleEndian;
+      return score > 0.48 ? {
+        id,
+        byte_start,
+        bit_start: byte_start * 8,
+        bit_length: 16,
+        endianness: beScore >= leScore ? "big_endian_candidate" : "little_endian_candidate",
+        min_value: Math.min(...values),
+        max_value: Math.max(...values),
+        unique_values: new Set(values).size,
+        confidence_score: Number(Math.min(0.96, score).toFixed(3)),
+        likely_signal_type: byte_start <= 2 && Math.max(...values) > 900 && Math.max(...values) < 9000 ? "rpm_candidate" : "analog_signal_candidate",
+        reasoning: "Smooth changing 16-bit byte pair with enough range and transitions to resemble an analog engine/sensor signal.",
+      } : null;
+    }).filter(Boolean);
+  }) as JsonRecord[];
+
+  analogSignals.filter((signal) => signal.likely_signal_type === "rpm_candidate").forEach((signal) => rpmIds.add(String(signal.id)));
+
   const networkHealth = {
     estimated_bus_load_score: Math.min(100, Math.round((totalMessages / Math.max(idCounts.size, 1)) * 10)),
     dominant_ids: idStats.filter((item) => item.percentage > 10).slice(0, 8),
