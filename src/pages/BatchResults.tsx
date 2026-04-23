@@ -41,7 +41,7 @@ const BatchResults = () => {
       <div className="grid gap-6 lg:grid-cols-2">
         {items.map((item) => (
           <Card key={item.filename} className="animate-fade-up overflow-hidden">
-            <CardHeader><CardTitle className="flex items-center justify-between gap-3"><span className="truncate">{item.filename}</span><span className="rounded-lg bg-secondary px-3 py-1 text-xs text-secondary-foreground">{item.detected_format}</span></CardTitle></CardHeader>
+            <CardHeader><CardTitle className="flex flex-wrap items-center justify-between gap-3"><span className="break-words">{item.filename}</span><span className="rounded-lg bg-secondary px-3 py-1 text-xs text-secondary-foreground">{item.detected_format}</span></CardTitle></CardHeader>
             <CardContent>
               {item.analysis ? (
                 <div className="grid gap-4">
