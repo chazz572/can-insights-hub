@@ -781,7 +781,7 @@ export const generateSample = (req: SampleRequest): SampleOutput => {
     durationSec: duration,
     avgRateHz: messageCount / duration,
   };
-  const summary = buildSummary(req, frames, stats, topSpeedKph);
+  const summary = buildSummary(req, frames, stats, vehicle);
   return { dbc, log, summary, stats };
 };
 
