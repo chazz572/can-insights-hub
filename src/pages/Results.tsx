@@ -495,6 +495,7 @@ const Results = () => {
   const [aiInsight, setAiInsight] = useState<string | null>(null);
   const [aiLoading, setAiLoading] = useState<AiInsightKind | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [speedUnit, setSpeedUnit] = useSpeedUnit();
 
   useEffect(() => {
     let isMounted = true;
