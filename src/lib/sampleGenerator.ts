@@ -1136,130 +1136,12 @@ const buildCommonFrames = (): FrameDef[] => [
       { name: "Checksum_100", startBit: 56, length: 8, factor: 1, offset: 0, min: 0, max: 255, unit: "" },
     ],
     shape: (t, ctx) => {
-      const d = ctx.duration;
-      const r = ctx.rand;
-      const v = ctx.vehicle;
-      let speed = 0;
-      let pedal = 0;
-      let brake = 0;
-      let gear = 1;
-      // Vehicle-aware acceleration constants
-      // tau60 ~ time constant fitted so 0->100 km/h matches v.zeroTo100Sec for an exponential approach to vMax.
-      // For exponential v(t)=Vmax*(1-exp(-t/tau)): t100 = -tau*ln(1-100/Vmax)
-      const vMax = Math.max(80, v.topSpeedKph);
-      const fracToHundred = Math.min(0.95, 100 / vMax);
-      const tau60 = Math.max(0.6, v.zeroTo100Sec / -Math.log(1 - fracToHundred));
-      const gearTopIdx = Math.max(1, v.gearCount);
-      switch (ctx.state) {
-        case "launch_0_60": {
-          // Accurate 0->100 km/h profile per spec, then ease off accelerator
-          const accelPhase = Math.min(1, t / Math.max(0.5, v.zeroTo100Sec));
-          speed = 100 * (1 - Math.exp(-3.0 * accelPhase));
-          // small drift after hitting ~100
-          if (t > v.zeroTo100Sec) {
-            const extra = Math.min(20, (t - v.zeroTo100Sec) * 4);
-            speed = Math.min(vMax, 100 + extra);
-          }
-          pedal = t < v.zeroTo100Sec ? 95 + (r() - 0.5) * 2 : 35 + (r() - 0.5) * 4;
-          brake = 0;
-          gear = Math.min(gearTopIdx, 1 + Math.floor((speed / 110) * Math.min(6, gearTopIdx)));
-          break;
-        }
-        case "top_speed_run": {
-          // Exponential approach to manufacturer-style top speed
-          speed = vMax * (1 - Math.exp(-t / tau60));
-          pedal = 100 - Math.max(0, (speed / vMax) * 4) + (r() - 0.5) * 0.6;
-          brake = 0;
-          gear = Math.min(gearTopIdx, 1 + Math.min(gearTopIdx - 1, Math.floor((speed / vMax) * gearTopIdx)));
-          break;
-        }
-        case "idle_ac_on":
-          speed = 0;
-          pedal = 0;
-          brake = 1 + (r() - 0.5) * 0.4;
-          gear = 0;
-          break;
-        case "regen_braking": {
-          if (!v.hasRegen) {
-            // ICE coasts/brakes — use service brake harder, no negative torque
-            const k = Math.min(1, t / d);
-            speed = Math.max(0, 80 - k * 75);
-            pedal = 0;
-            brake = 18 + (r() - 0.5) * 2;
-            gear = Math.max(2, Math.min(gearTopIdx, gearTopIdx - 2));
-          } else {
-            const k = Math.min(1, t / d);
-            speed = Math.max(0, 80 - k * 75);
-            pedal = 0;
-            brake = 5 + (r() - 0.5);
-            gear = Math.max(1, Math.min(gearTopIdx, Math.floor(gearTopIdx * 0.6)));
-          }
-          break;
-        }
-        case "highway_cruise":
-          speed = v.cruiseKph + Math.sin(t * 0.4) * 1.2 + (r() - 0.5) * 0.6;
-          pedal = 18 + Math.sin(t * 0.3) * 2 + (r() - 0.5);
-          brake = 0;
-          gear = gearTopIdx;
-          break;
-        case "charging_20_80":
-          speed = 0;
-          pedal = 0;
-          brake = 0;
-          gear = 0;
-          break;
-        case "city_stop_go": {
-          const phase = (t % 30) / 30;
-          if (phase < 0.4) speed = phase * 2.5 * 35;
-          else if (phase < 0.7) speed = 35 + Math.sin(phase * 10) * 3;
-          else speed = Math.max(0, 35 - (phase - 0.7) * 116);
-          pedal = speed > 5 ? 18 + (r() - 0.5) * 4 : 0;
-          brake = speed < 5 && phase > 0.7 ? 8 : 0;
-          gear = Math.min(gearTopIdx, speed > 25 ? 3 : speed > 10 ? 2 : 1);
-          break;
-        }
-        case "burnout":
-          // Stationary, launch-control like — driven wheels handled in VEH_Wheels via slip
-          speed = 0 + (r() - 0.5) * 0.4;
-          pedal = 60 + (Math.sin(t * 3) + 1) * 18;
-          brake = 18 + (r() - 0.5) * 2; // brake torque holding car
-          gear = 1;
-          break;
-        case "drag_pass": {
-          const accelPhase = Math.min(1, t / Math.max(0.5, v.zeroTo100Sec * 2.4));
-          speed = (vMax * 0.6) * (1 - Math.exp(-2.6 * accelPhase));
-          pedal = 100;
-          brake = 0;
-          gear = Math.min(gearTopIdx, 1 + Math.floor((speed / vMax) * gearTopIdx));
-          break;
-        }
-        case "track_lap": {
-          const lap = (t % 25) / 25;
-          if (lap < 0.4) speed = lap * 2.5 * (vMax * 0.85);
-          else if (lap < 0.55) speed = vMax * 0.85 - (lap - 0.4) * 6 * (vMax * 0.5);
-          else if (lap < 0.85) speed = 80 + Math.sin(lap * 12) * 30;
-          else speed = Math.max(0, (1 - lap) * 6 * (vMax * 0.5));
-          pedal = lap < 0.4 ? 95 : lap < 0.55 ? 5 : 60 + Math.sin(lap * 8) * 30;
-          brake = lap >= 0.4 && lap < 0.55 ? 60 + (r() - 0.5) * 6 : 0;
-          gear = Math.min(gearTopIdx, 1 + Math.floor((speed / vMax) * gearTopIdx));
-          break;
-        }
-        default:
-          speed = 40 + Math.sin(t * 0.5) * 10;
-          pedal = 20;
-          brake = 0;
-          gear = Math.min(gearTopIdx, 3);
-      }
-      // Apply drag-aware top-speed squeeze and small pedal/brake jitter + quantization
-      const dragSqueeze = speed > vMax * 0.6 ? 1 - 0.12 * Math.pow(speed / vMax, 3) : 1;
-      const speedFinal = Math.max(0, speed * dragSqueeze + gauss(r, 0.05));
-      const pedalFinal = Math.max(0, Math.min(100, pedal + gauss(r, 0.25)));
-      const brakeFinal = Math.max(0, brake + gauss(r, 0.08));
+      const motion = computeVehicleMotion(t, ctx);
       return {
-        VehicleSpeed: quantize(speedFinal, 0.01),
-        AcceleratorPedal: quantize(pedalFinal, 0.4),
-        BrakePressure: quantize(brakeFinal, 0.1),
-        GearPosition: gear,
+        VehicleSpeed: quantize(motion.speedKph, 0.01),
+        AcceleratorPedal: quantize(motion.accelPedal, 0.4),
+        BrakePressure: quantize(motion.brakeBar, 0.1),
+        GearPosition: motion.gear,
       };
     },
   },
@@ -1277,58 +1159,17 @@ const buildCommonFrames = (): FrameDef[] => [
     shape: (t, ctx) => {
       const r = ctx.rand;
       const v = ctx.vehicle;
-      const vMax = Math.max(80, v.topSpeedKph);
-      const fracToHundred = Math.min(0.95, 100 / vMax);
-      const tau60 = Math.max(0.6, v.zeroTo100Sec / -Math.log(1 - fracToHundred));
-      // mirror VEH_Speed
-      let base = 0;
-      switch (ctx.state) {
-        case "idle_ac_on":
-        case "charging_20_80":
-          base = 0; break;
-        case "highway_cruise":
-          base = v.cruiseKph; break;
-        case "launch_0_60":
-          base = 100 * (1 - Math.exp(-3.0 * Math.min(1, t / Math.max(0.5, v.zeroTo100Sec)))) +
-            (t > v.zeroTo100Sec ? Math.min(20, (t - v.zeroTo100Sec) * 4) : 0);
-          break;
-        case "top_speed_run":
-          base = vMax * (1 - Math.exp(-t / tau60)); break;
-        case "regen_braking":
-          base = Math.max(0, 80 - (t / ctx.duration) * 75); break;
-        case "burnout":
-          base = 0; break;
-        case "drag_pass": {
-          const accelPhase = Math.min(1, t / Math.max(0.5, v.zeroTo100Sec * 2.4));
-          base = (vMax * 0.6) * (1 - Math.exp(-2.6 * accelPhase));
-          break;
-        }
-        case "track_lap": {
-          const lap = (t % 25) / 25;
-          if (lap < 0.4) base = lap * 2.5 * (vMax * 0.85);
-          else if (lap < 0.55) base = vMax * 0.85 - (lap - 0.4) * 6 * (vMax * 0.5);
-          else if (lap < 0.85) base = 80 + Math.sin(lap * 12) * 30;
-          else base = Math.max(0, (1 - lap) * 6 * (vMax * 0.5));
-          break;
-        }
-        default:
-          base = 30 + Math.sin(t * 0.5) * 10;
-      }
-      // Per-wheel small jitter; left/right divergence under load
+      const motion = computeVehicleMotion(t, ctx);
+      const base = motion.speedKph;
       const driveAxle = v.drivetrain;
       let slipDriven = 0;
       if (ctx.state === "burnout") slipDriven = 80 + Math.sin(t * 5) * 20;
-      else if (ctx.state === "launch_0_60" && t < v.zeroTo100Sec * 0.5)
-        slipDriven = Math.max(0, (10 - base * 0.15));
-      else if (ctx.state === "drag_pass" && t < v.zeroTo100Sec * 0.6)
-        slipDriven = Math.max(0, (8 - base * 0.1));
-      // Traction-control oscillation at ~12-15 Hz when slip > 0
+      else if (ctx.state === "launch_0_60" && t < v.zeroTo100Sec * 0.5) slipDriven = launchSlipKph(v, t, 2.2);
+      else if (ctx.state === "drag_pass" && t < v.zeroTo100Sec * 0.6) slipDriven = launchSlipKph(v, t, 1.8);
       const tc = slipDriven > 0.5 ? wobble(t, 13.5, slipDriven * 0.18) : 0;
-      // High-speed micro-slip on driven axle
-      const microSlip = base > vMax * 0.7 ? wobble(t, 7, 0.4) : 0;
-      // Left/right divergence (camber/road crown bias)
+      const microSlip = base > v.topSpeedKph * 0.7 ? wobble(t, 7, 0.35) : 0;
       const lrBias = base * 0.0015;
-      const j = (sigma = 0.15) => gauss(r, sigma);
+      const j = (sigma = 0.12) => gauss(r, sigma);
       const drivenAdd = slipDriven + tc + microSlip;
       const fl = base + j() - lrBias + (driveAxle === "fwd" || driveAxle === "awd" ? drivenAdd * 0.5 : 0);
       const fr = base + j() + lrBias + (driveAxle === "fwd" || driveAxle === "awd" ? drivenAdd * 0.5 : 0);
