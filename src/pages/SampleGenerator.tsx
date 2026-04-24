@@ -318,7 +318,7 @@ const SampleGenerator = () => {
               <Button
                 variant="secondary"
                 size="sm"
-                onClick={() => downloadText(`${baseName}.log`, result.log, "text/plain")}
+                onClick={() => downloadText(`${baseName}.log`, result.log, "application/octet-stream")}
               >
                 <Download className="mr-1.5 size-3.5" /> Download .log
               </Button>
