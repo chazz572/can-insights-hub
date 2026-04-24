@@ -1099,7 +1099,17 @@ const buildCommonFrames = (): FrameDef[] => [
           brake = 0;
           gear = Math.min(gearTopIdx, 3);
       }
-      return { VehicleSpeed: speed, AcceleratorPedal: pedal, BrakePressure: brake, GearPosition: gear };
+      // Apply drag-aware top-speed squeeze and small pedal/brake jitter + quantization
+      const dragSqueeze = speed > vMax * 0.6 ? 1 - 0.12 * Math.pow(speed / vMax, 3) : 1;
+      const speedFinal = Math.max(0, speed * dragSqueeze + gauss(r, 0.05));
+      const pedalFinal = Math.max(0, Math.min(100, pedal + gauss(r, 0.25)));
+      const brakeFinal = Math.max(0, brake + gauss(r, 0.08));
+      return {
+        VehicleSpeed: quantize(speedFinal, 0.01),
+        AcceleratorPedal: quantize(pedalFinal, 0.4),
+        BrakePressure: quantize(brakeFinal, 0.1),
+        GearPosition: gear,
+      };
     },
   },
   {
