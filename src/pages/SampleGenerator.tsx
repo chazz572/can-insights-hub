@@ -21,16 +21,55 @@ const slug = (s: string) =>
     .replace(/^_+|_+$/g, "")
     .slice(0, 40) || "sample";
 
-const downloadText = (filename: string, contents: string, mime: string) => {
+const downloadText = async (filename: string, contents: string, mime: string) => {
   const blob = new Blob([contents], { type: mime });
+
+  // Try Web Share API first (works best on mobile, especially iOS)
+  try {
+    const file = new File([blob], filename, { type: mime });
+    const nav = navigator as Navigator & {
+      canShare?: (data: { files: File[] }) => boolean;
+      share?: (data: { files: File[]; title?: string }) => Promise<void>;
+    };
+    if (nav.canShare && nav.share && nav.canShare({ files: [file] })) {
+      await nav.share({ files: [file], title: filename });
+      return;
+    }
+  } catch (err) {
+    // user cancelled or share failed — fall through to download
+    if ((err as Error)?.name === "AbortError") return;
+  }
+
+  // Fallback: classic anchor download (desktop + Android Chrome)
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
   a.href = url;
   a.download = filename;
+  a.rel = "noopener";
+  a.target = "_blank";
   document.body.appendChild(a);
   a.click();
   document.body.removeChild(a);
-  URL.revokeObjectURL(url);
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+
+  // Last-resort fallback for iOS Safari: open data URL in a new tab
+  const ua = navigator.userAgent;
+  const isIOS = /iPad|iPhone|iPod/.test(ua) && !(window as unknown as { MSStream?: unknown }).MSStream;
+  if (isIOS) {
+    const reader = new FileReader();
+    reader.onload = () => {
+      const dataUrl = reader.result as string;
+      const win = window.open();
+      if (win) {
+        win.document.write(
+          `<title>${filename}</title><pre style="white-space:pre-wrap;font-family:monospace;font-size:12px;padding:12px;">${contents.replace(/[<>&]/g, (c) => ({ "<": "&lt;", ">": "&gt;", "&": "&amp;" }[c] as string))}</pre>`,
+        );
+        win.document.title = filename;
+      }
+      void dataUrl;
+    };
+    reader.readAsDataURL(blob);
+  }
 };
 
 const SampleGenerator = () => {
