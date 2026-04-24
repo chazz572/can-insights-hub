@@ -277,7 +277,7 @@ const computeRpmPerKphTable = (
 };
 
 // Build a fictional-but-plausible profile from the user's description.
-const buildVehicleProfile = (desc: string): VehicleProfile => {
+const buildVehicleProfile = (desc: string, override?: VehicleSpecOverride): VehicleProfile => {
   const s = desc.toLowerCase();
   const has = (re: RegExp) => re.test(s);
 
