@@ -751,16 +751,16 @@ const computeVehicleMotion = (t: number, ctx: ShapeCtx): MotionSnapshot => {
       throttle = 15 + Math.sin(t * 0.3) * 3;
       brakeBar = 0;
       load = 26 + Math.max(0, speedKph - v.cruiseKph) * 0.06;
-      gear = selectGear(v, speedKph).gear;
-      rpm = selectGear(v, speedKph).rpm;
+      gear = selectGear(v, speedKph, loadHint).gear;
+      rpm = selectGear(v, speedKph, loadHint).rpm;
       break;
     case "regen_braking":
       accelPedal = 0;
       throttle = 0;
       brakeBar = v.hasRegen ? 5 : 18;
       load = 4;
-      gear = Math.max(1, Math.min(v.gearCount, selectGear(v, Math.max(speedKph, 20)).gear));
-      rpm = speedKph > 4 ? selectGear(v, Math.max(speedKph, 8)).rpm : v.idleRpm;
+      gear = Math.max(1, Math.min(v.gearCount, selectGear(v, Math.max(speedKph, 20), loadHint).gear));
+      rpm = speedKph > 4 ? selectGear(v, Math.max(speedKph, 8), loadHint).rpm : v.idleRpm;
       break;
     case "idle_ac_on":
       accelPedal = 0;
@@ -785,7 +785,7 @@ const computeVehicleMotion = (t: number, ctx: ShapeCtx): MotionSnapshot => {
       brakeBar = speedKph < 5 && phase > 0.7 ? 8 : 0;
       load = speedKph > 5 ? 18 + Math.max(0, accelMps2) * 18 : 8;
       gear = Math.min(v.gearCount, speedKph > 25 ? 3 : speedKph > 10 ? 2 : 1);
-      rpm = selectGear(v, Math.max(speedKph, 8)).rpm;
+      rpm = selectGear(v, Math.max(speedKph, 8), loadHint).rpm;
       break;
     }
     default:
@@ -794,7 +794,7 @@ const computeVehicleMotion = (t: number, ctx: ShapeCtx): MotionSnapshot => {
       brakeBar = 0;
       load = 26;
       gear = Math.min(v.gearCount, 3);
-      rpm = selectGear(v, Math.max(speedKph, 20)).rpm;
+      rpm = selectGear(v, Math.max(speedKph, 20), loadHint).rpm;
   }
 
   if (state !== "burnout" && state !== "idle_ac_on" && state !== "charging_20_80") {
