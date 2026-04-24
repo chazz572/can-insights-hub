@@ -1557,7 +1557,7 @@ const buildSummary = (
 export const generateSample = (req: SampleRequest): SampleOutput => {
   const seed = req.seed ?? Math.floor(Math.random() * 2 ** 31);
   const rand = mulberry32(seed);
-  const vehicle = buildVehicleProfile(req.vehicleDescription);
+  const vehicle = buildVehicleProfile(req.vehicleDescription, req.specOverride);
   const frames = buildFrames(vehicle);
   const duration = Math.max(2, Math.min(120, req.durationSec));
   const dbc = buildDbc(frames, req.vehicleDescription);
