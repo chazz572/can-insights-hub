@@ -911,6 +911,32 @@ const buildCommonFrames = (): FrameDef[] => [
           gear = Math.min(gearTopIdx, speed > 25 ? 3 : speed > 10 ? 2 : 1);
           break;
         }
+        case "burnout":
+          // Stationary, launch-control like — driven wheels handled in VEH_Wheels via slip
+          speed = 0 + (r() - 0.5) * 0.4;
+          pedal = 60 + (Math.sin(t * 3) + 1) * 18;
+          brake = 18 + (r() - 0.5) * 2; // brake torque holding car
+          gear = 1;
+          break;
+        case "drag_pass": {
+          const accelPhase = Math.min(1, t / Math.max(0.5, v.zeroTo100Sec * 2.4));
+          speed = (vMax * 0.6) * (1 - Math.exp(-2.6 * accelPhase));
+          pedal = 100;
+          brake = 0;
+          gear = Math.min(gearTopIdx, 1 + Math.floor((speed / vMax) * gearTopIdx));
+          break;
+        }
+        case "track_lap": {
+          const lap = (t % 25) / 25;
+          if (lap < 0.4) speed = lap * 2.5 * (vMax * 0.85);
+          else if (lap < 0.55) speed = vMax * 0.85 - (lap - 0.4) * 6 * (vMax * 0.5);
+          else if (lap < 0.85) speed = 80 + Math.sin(lap * 12) * 30;
+          else speed = Math.max(0, (1 - lap) * 6 * (vMax * 0.5));
+          pedal = lap < 0.4 ? 95 : lap < 0.55 ? 5 : 60 + Math.sin(lap * 8) * 30;
+          brake = lap >= 0.4 && lap < 0.55 ? 60 + (r() - 0.5) * 6 : 0;
+          gear = Math.min(gearTopIdx, 1 + Math.floor((speed / vMax) * gearTopIdx));
+          break;
+        }
         default:
           speed = 40 + Math.sin(t * 0.5) * 10;
           pedal = 20;
