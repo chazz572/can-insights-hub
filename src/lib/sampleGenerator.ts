@@ -461,8 +461,8 @@ const buildIceFrames = (): FrameDef[] => [
     shape: (t, ctx) => {
       const r = ctx.rand;
       const v = ctx.vehicle;
-      const idleRpm = /(diesel|cummins|duramax|powerstroke|tdi)/.test(v.description.toLowerCase()) ? 750 : 850;
-      const redline = v.topSpeedKph >= 320 ? 8500 : v.topSpeedKph >= 280 ? 8000 : v.topSpeedKph >= 240 ? 7200 : 6500;
+      const idleRpm = v.idleRpm;
+      const redline = v.redlineRpm;
       const gearTopIdx = Math.max(1, v.gearCount);
       let rpm = idleRpm;
       let throttle = 0;
