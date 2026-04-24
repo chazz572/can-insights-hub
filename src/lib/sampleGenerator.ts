@@ -902,49 +902,12 @@ const buildIceFramesAll = (): FrameDef[] => [
       { name: "MAF", startBit: 40, length: 16, factor: 0.05, offset: 0, min: 0, max: 600, unit: "g/s" },
     ],
     shape: (t, ctx) => {
-      const v = ctx.vehicle;
-      const r = ctx.rand;
-      let rate = 1.5;
-      let lambda = 1.0;
-      let maf = 4;
-      switch (ctx.state) {
-        case "launch_0_60":
-        case "top_speed_run":
-          rate = 35 + (v.peakMotorTorqueNm / 100);
-          lambda = 0.86 + (r() - 0.5) * 0.02;
-          maf = 220 + Math.sin(t * 2) * 20;
-          break;
-        case "highway_cruise":
-          rate = 8 + Math.sin(t * 0.3);
-          lambda = 1.0;
-          maf = 25 + Math.sin(t * 0.3) * 2;
-          break;
-        case "idle_ac_on":
-          rate = 1.4;
-          lambda = 1.0;
-          maf = 3.5;
-          break;
-        case "regen_braking":
-          rate = 0.6;
-          lambda = 1.05;
-          maf = 1.5;
-          break;
-        case "charging_20_80":
-          rate = 0;
-          lambda = 1.0;
-          maf = 0;
-          break;
-        case "city_stop_go":
-          rate = 5 + Math.sin(t * 0.5) * 3;
-          lambda = 1.0;
-          maf = 12 + Math.sin(t * 0.5) * 6;
-          break;
-      }
+      const motion = computeVehicleMotion(t, ctx);
       return {
-        FuelRate: rate,
-        FuelLevel: Math.max(0, 72 - (t / ctx.duration) * 0.2),
-        AFR_Lambda: lambda,
-        MAF: maf,
+        FuelRate: quantize(motion.fuelRateLph, 0.05),
+        FuelLevel: quantize(motion.fuelLevelPct, 0.4),
+        AFR_Lambda: quantize(motion.lambda, 0.001),
+        MAF: quantize(motion.maf, 0.05),
       };
     },
   },
@@ -961,37 +924,13 @@ const buildIceFramesAll = (): FrameDef[] => [
       { name: "ExhaustGasTemp", startBit: 32, length: 16, factor: 1, offset: 0, min: 0, max: 1100, unit: "C" },
     ],
     shape: (t, ctx) => {
-      const r = ctx.rand;
-      const v = ctx.vehicle;
-      // Heat load by scenario (0..1)
-      const heat =
-        ctx.state === "drag_pass" || ctx.state === "burnout" ? 1.1 :
-        ctx.state === "track_lap" ? 0.9 :
-        ctx.state === "launch_0_60" || ctx.state === "top_speed_run" ? 1 :
-        ctx.state === "highway_cruise" ? 0.4 : 0.1;
-      // Diesel runs cooler EGT but higher coolant under load
-      const egtBase = v.powertrain === "diesel" ? 320 : 420;
-      const egtSpan = v.powertrain === "diesel" ? 380 : 480;
-      const k = Math.min(1, t / ctx.duration);
-      // Cumulative thermal rise — temps integrate over time, not just k of duration
-      const tempRiseRate = heat * 0.4; // °C per second under load
-      // Realism: 1st-order thermal integrator with cooldown after lift; oil lags coolant.
-      // loadFactor 0..1, scenario-specific.
-      const isHighLoad = ctx.state === "launch_0_60" || ctx.state === "top_speed_run" || ctx.state === "drag_pass" || ctx.state === "burnout";
-      const isMid = ctx.state === "track_lap" || ctx.state === "highway_cruise";
-      const loadFactor = isHighLoad ? 0.95 : isMid ? (ctx.state === "track_lap" ? 0.75 : 0.35) : 0.08;
-      const coolantRise = thermalIntegral(loadFactor, t, 28) * 28; // up to ~+28°C
-      const oilRise = thermalIntegral(loadFactor, t, 55) * 50; // slower, larger ceiling
-      const iatRise = thermalIntegral(loadFactor, t, 6) * (v.induction !== "na" ? 38 : 18);
-      const egtRise = thermalIntegral(loadFactor, t, 4) * egtSpan;
-      // Slight cooldown after burst — if we're not at peak load and t > 5s, decay
-      const cooldown = !isHighLoad && t > 5 ? Math.exp(-(t - 5) / 30) : 1;
+      const motion = computeVehicleMotion(t, ctx);
       return {
-        CoolantTemp: quantize(88 + coolantRise * cooldown + gauss(r, 0.15), 0.5),
-        OilTemp: quantize(95 + oilRise * cooldown + gauss(r, 0.2), 0.5),
-        OilPressure: quantize(3.2 + loadFactor * 1.4 + gauss(r, 0.05), 0.05),
-        IntakeAirTemp: quantize(32 + iatRise + gauss(r, 0.2), 0.5),
-        ExhaustGasTemp: quantize(egtBase + egtRise + gauss(r, 4), 1),
+        CoolantTemp: quantize(motion.coolantC, 1),
+        OilTemp: quantize(motion.oilC, 1),
+        OilPressure: quantize(motion.oilPressureBar, 0.05),
+        IntakeAirTemp: quantize(motion.iatC, 1),
+        ExhaustGasTemp: quantize(motion.egtC, 1),
       };
     },
   },
@@ -1007,37 +946,11 @@ const buildIceFramesAll = (): FrameDef[] => [
       { name: "Counter_D8", startBit: 48, length: 8, factor: 1, offset: 0, min: 0, max: 255, unit: "" },
     ],
     shape: (t, ctx) => {
-      const v = ctx.vehicle;
-      const r = ctx.rand;
-      const boosted = v.induction === "turbo" || v.induction === "twin_turbo" || v.induction === "supercharged";
-      if (!boosted) {
-        return { BoostPressure: 0, WastegateDuty: 0, TurboShaftRpm: 0 };
-      }
-      const peakBoost = v.induction === "twin_turbo" ? 220 : v.induction === "supercharged" ? 130 : 180;
-      let load = 0;
-      switch (ctx.state) {
-        case "launch_0_60":
-        case "drag_pass":
-        case "top_speed_run":
-        case "burnout":
-          load = 0.95; break;
-        case "track_lap": {
-          const lap = (t % 25) / 25;
-          load = lap < 0.4 ? 0.9 : lap < 0.55 ? 0.05 : 0.5;
-          break;
-        }
-        case "highway_cruise": load = 0.15; break;
-        case "city_stop_go": load = 0.3 + Math.sin(t * 0.5) * 0.2; break;
-        default: load = 0.05;
-      }
-      // Lag: superchargers respond instantly, turbos lag 0.4s
-      const lag = v.induction === "supercharged" ? 0 : 0.4;
-      const effLoad = Math.max(0, Math.min(1, load * (1 - Math.exp(-Math.max(0.01, t) / Math.max(0.01, lag)))));
-      const boost = effLoad * peakBoost + (r() - 0.5) * 3;
+      const motion = computeVehicleMotion(t, ctx);
       return {
-        BoostPressure: boost,
-        WastegateDuty: load > 0.8 ? 80 + (r() - 0.5) * 5 : 30 * load,
-        TurboShaftRpm: effLoad * 180000,
+        BoostPressure: quantize(motion.boostKpa, 0.01),
+        WastegateDuty: quantize(motion.wastegateDutyPct, 0.5),
+        TurboShaftRpm: quantize(motion.turboShaftRpm, 10),
       };
     },
   },
