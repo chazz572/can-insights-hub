@@ -1308,9 +1308,28 @@ const buildSummary = (
     case "city_stop_go":
       lines.push("- Repeated accel/coast/brake cycles, occasional turn signals, varying gear and steering inputs.");
       break;
+    case "burnout":
+      lines.push(
+        `- Stationary chassis with brake torque held; driven (${vehicle.drivetrain.toUpperCase()}) wheels spin to ~80–100 km/h indicated while non-driven wheels read ~0. Throttle stabs cycle RPM near ${Math.round(vehicle.redlineRpm * 0.85)}.`,
+      );
+      break;
+    case "drag_pass":
+      lines.push(
+        `- Quarter-mile style: hard launch, full pedal, sequential redline shifts through ${vehicle.gearCount} gears, peak HP near ${vehicle.peakPowerHp} hp, trap speed approaching ${Math.round(vehicle.topSpeedKph * 0.6)} km/h (~${mph(Math.round(vehicle.topSpeedKph * 0.6))} mph).`,
+      );
+      break;
+    case "track_lap":
+      lines.push(
+        `- ~25 s lap loop: full-throttle straight, hard braking event, mid-corner throttle modulation with steering oscillations. Coolant/oil temps climb under sustained load.`,
+      );
+      break;
     default:
       lines.push("- Custom mixed behavior with stable plausible payload patterns.");
   }
+  if (vehicle.induction === "turbo" || vehicle.induction === "twin_turbo" || vehicle.induction === "supercharged") {
+    lines.push(`- Forced induction (${vehicle.induction.replace("_", " ")}): boost rises with throttle, EGT and IAT climb under sustained load.`);
+  }
+  lines.push(`- Drivetrain: ${vehicle.drivetrain.toUpperCase()} · Tire radius: ${vehicle.tireRadiusM.toFixed(3)} m · Redline: ${vehicle.redlineRpm} rpm`);
   lines.push("");
   lines.push("All signals are fictional and not derived from any OEM, vendor, or proprietary database.");
   return lines.join("\n");
