@@ -636,14 +636,71 @@ const buildIceFrames = (): FrameDef[] => [
     ],
     shape: (t, ctx) => {
       const r = ctx.rand;
-      const heat = ctx.state === "launch_0_60" || ctx.state === "top_speed_run" ? 1 : ctx.state === "highway_cruise" ? 0.4 : 0.1;
+      const v = ctx.vehicle;
+      // Heat load by scenario (0..1)
+      const heat =
+        ctx.state === "drag_pass" || ctx.state === "burnout" ? 1.1 :
+        ctx.state === "track_lap" ? 0.9 :
+        ctx.state === "launch_0_60" || ctx.state === "top_speed_run" ? 1 :
+        ctx.state === "highway_cruise" ? 0.4 : 0.1;
+      // Diesel runs cooler EGT but higher coolant under load
+      const egtBase = v.powertrain === "diesel" ? 320 : 420;
+      const egtSpan = v.powertrain === "diesel" ? 380 : 480;
       const k = Math.min(1, t / ctx.duration);
+      // Cumulative thermal rise — temps integrate over time, not just k of duration
+      const tempRiseRate = heat * 0.4; // °C per second under load
       return {
-        CoolantTemp: 88 + heat * 8 * k + (r() - 0.5) * 0.6,
-        OilTemp: 95 + heat * 18 * k + (r() - 0.5) * 0.6,
+        CoolantTemp: 88 + Math.min(22, t * tempRiseRate * 0.25) + (r() - 0.5) * 0.6,
+        OilTemp: 95 + Math.min(45, t * tempRiseRate * 0.5) + (r() - 0.5) * 0.6,
         OilPressure: 3.2 + heat * 1.4 + (r() - 0.5) * 0.1,
-        IntakeAirTemp: 32 + heat * 12 * k + (r() - 0.5) * 0.5,
-        ExhaustGasTemp: 420 + heat * 480 * k + (r() - 0.5) * 8,
+        IntakeAirTemp: 32 + heat * 12 * k + (v.induction !== "na" ? heat * 14 * k : 0) + (r() - 0.5) * 0.5,
+        ExhaustGasTemp: egtBase + heat * egtSpan * k + (r() - 0.5) * 8,
+      };
+    },
+  },
+  {
+    id: 0x0D8,
+    name: "ENG_Boost",
+    dlc: 8,
+    cycleMs: 50,
+    signals: [
+      { name: "BoostPressure", startBit: 0, length: 16, factor: 0.01, offset: -100, min: -100, max: 350, unit: "kPa" },
+      { name: "WastegateDuty", startBit: 16, length: 8, factor: 0.5, offset: 0, min: 0, max: 100, unit: "%" },
+      { name: "TurboShaftRpm", startBit: 24, length: 16, factor: 10, offset: 0, min: 0, max: 250000, unit: "rpm" },
+      { name: "Counter_D8", startBit: 48, length: 8, factor: 1, offset: 0, min: 0, max: 255, unit: "" },
+    ],
+    shape: (t, ctx) => {
+      const v = ctx.vehicle;
+      const r = ctx.rand;
+      const boosted = v.induction === "turbo" || v.induction === "twin_turbo" || v.induction === "supercharged";
+      if (!boosted) {
+        return { BoostPressure: 0, WastegateDuty: 0, TurboShaftRpm: 0 };
+      }
+      const peakBoost = v.induction === "twin_turbo" ? 220 : v.induction === "supercharged" ? 130 : 180;
+      let load = 0;
+      switch (ctx.state) {
+        case "launch_0_60":
+        case "drag_pass":
+        case "top_speed_run":
+        case "burnout":
+          load = 0.95; break;
+        case "track_lap": {
+          const lap = (t % 25) / 25;
+          load = lap < 0.4 ? 0.9 : lap < 0.55 ? 0.05 : 0.5;
+          break;
+        }
+        case "highway_cruise": load = 0.15; break;
+        case "city_stop_go": load = 0.3 + Math.sin(t * 0.5) * 0.2; break;
+        default: load = 0.05;
+      }
+      // Lag: superchargers respond instantly, turbos lag 0.4s
+      const lag = v.induction === "supercharged" ? 0 : 0.4;
+      const effLoad = Math.max(0, Math.min(1, load * (1 - Math.exp(-Math.max(0.01, t) / Math.max(0.01, lag)))));
+      const boost = effLoad * peakBoost + (r() - 0.5) * 3;
+      return {
+        BoostPressure: boost,
+        WastegateDuty: load > 0.8 ? 80 + (r() - 0.5) * 5 : 30 * load,
+        TurboShaftRpm: effLoad * 180000,
       };
     },
   },
