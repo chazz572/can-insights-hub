@@ -964,25 +964,57 @@ const buildCommonFrames = (): FrameDef[] => [
       const fracToHundred = Math.min(0.95, 100 / vMax);
       const tau60 = Math.max(0.6, v.zeroTo100Sec / -Math.log(1 - fracToHundred));
       // mirror VEH_Speed
-      const base =
-        ctx.state === "idle_ac_on" || ctx.state === "charging_20_80"
-          ? 0
-          : ctx.state === "highway_cruise"
-            ? v.cruiseKph
-            : ctx.state === "launch_0_60"
-              ? 100 * (1 - Math.exp(-3.0 * Math.min(1, t / Math.max(0.5, v.zeroTo100Sec)))) +
-                (t > v.zeroTo100Sec ? Math.min(20, (t - v.zeroTo100Sec) * 4) : 0)
-              : ctx.state === "top_speed_run"
-                ? vMax * (1 - Math.exp(-t / tau60))
-                : ctx.state === "regen_braking"
-                  ? Math.max(0, 80 - (t / ctx.duration) * 75)
-                  : 30 + Math.sin(t * 0.5) * 10;
+      let base = 0;
+      switch (ctx.state) {
+        case "idle_ac_on":
+        case "charging_20_80":
+          base = 0; break;
+        case "highway_cruise":
+          base = v.cruiseKph; break;
+        case "launch_0_60":
+          base = 100 * (1 - Math.exp(-3.0 * Math.min(1, t / Math.max(0.5, v.zeroTo100Sec)))) +
+            (t > v.zeroTo100Sec ? Math.min(20, (t - v.zeroTo100Sec) * 4) : 0);
+          break;
+        case "top_speed_run":
+          base = vMax * (1 - Math.exp(-t / tau60)); break;
+        case "regen_braking":
+          base = Math.max(0, 80 - (t / ctx.duration) * 75); break;
+        case "burnout":
+          base = 0; break;
+        case "drag_pass": {
+          const accelPhase = Math.min(1, t / Math.max(0.5, v.zeroTo100Sec * 2.4));
+          base = (vMax * 0.6) * (1 - Math.exp(-2.6 * accelPhase));
+          break;
+        }
+        case "track_lap": {
+          const lap = (t % 25) / 25;
+          if (lap < 0.4) base = lap * 2.5 * (vMax * 0.85);
+          else if (lap < 0.55) base = vMax * 0.85 - (lap - 0.4) * 6 * (vMax * 0.5);
+          else if (lap < 0.85) base = 80 + Math.sin(lap * 12) * 30;
+          else base = Math.max(0, (1 - lap) * 6 * (vMax * 0.5));
+          break;
+        }
+        default:
+          base = 30 + Math.sin(t * 0.5) * 10;
+      }
       const j = () => (r() - 0.5) * 0.4;
+      // Wheel slip: driven wheels spin faster than non-driven during launch/burnout
+      const driveAxle = v.drivetrain;
+      let slipDriven = 0;
+      if (ctx.state === "burnout") slipDriven = 80 + Math.sin(t * 5) * 20; // huge slip
+      else if (ctx.state === "launch_0_60" && t < v.zeroTo100Sec * 0.5)
+        slipDriven = Math.max(0, (10 - base * 0.15)); // brief launch slip
+      else if (ctx.state === "drag_pass" && t < v.zeroTo100Sec * 0.6)
+        slipDriven = Math.max(0, (8 - base * 0.1));
+      const fl = base + j() + (driveAxle === "fwd" || driveAxle === "awd" ? slipDriven * 0.5 : 0);
+      const fr = base + j() + (driveAxle === "fwd" || driveAxle === "awd" ? slipDriven * 0.5 : 0);
+      const rl = base + j() + (driveAxle === "rwd" || driveAxle === "awd" ? slipDriven : 0);
+      const rr = base + j() + (driveAxle === "rwd" || driveAxle === "awd" ? slipDriven : 0);
       return {
-        WheelSpeed_FL: Math.max(0, base + j()),
-        WheelSpeed_FR: Math.max(0, base + j()),
-        WheelSpeed_RL: Math.max(0, base + j()),
-        WheelSpeed_RR: Math.max(0, base + j()),
+        WheelSpeed_FL: Math.max(0, fl),
+        WheelSpeed_FR: Math.max(0, fr),
+        WheelSpeed_RL: Math.max(0, rl),
+        WheelSpeed_RR: Math.max(0, rr),
       };
     },
   },
