@@ -62,25 +62,157 @@ interface FrameDef {
   shape: (t: number, ctx: ShapeCtx) => Record<string, number>;
 }
 
+export type Powertrain = "bev" | "phev" | "hybrid" | "ice" | "diesel";
+
+export interface VehicleProfile {
+  description: string;
+  powertrain: Powertrain;
+  topSpeedKph: number;
+  zeroTo100Sec: number; // 0->100 km/h
+  gearCount: number; // 1 for most BEVs, 5-10 for ICE
+  packKwh: number; // 0 for pure ICE
+  nominalPackVolts: number; // ~400 typical, ~800 for high-perf EV
+  peakMotorTorqueNm: number;
+  curbWeightKg: number;
+  cruiseKph: number; // typical highway cruise
+  hvacIdleAmps: number;
+  hasRegen: boolean;
+}
+
 interface ShapeCtx {
   state: DrivingState;
   duration: number;
   rand: () => number;
+  vehicle: VehicleProfile;
+  // legacy alias kept for any older references
   topSpeedKph: number;
 }
 
-// Heuristic — fully fictional; just maps loose vehicle keywords to a plausible top speed.
-const inferTopSpeedKph = (desc: string): number => {
+// Build a fictional-but-plausible profile from the user's description.
+const buildVehicleProfile = (desc: string): VehicleProfile => {
   const s = desc.toLowerCase();
-  if (/(hyper|bugatti|chiron|veyron|koenig|jesko)/.test(s)) return 420;
-  if (/(super|lambo|huracan|aventador|ferrari|mclaren|gt3|gt2|911 turbo|porsche.*turbo)/.test(s)) return 330;
-  if (/(plaid|model s plaid|taycan turbo|amg|m3|m5|rs[ -]?\d|sport sedan|performance)/.test(s)) return 280;
-  if (/(model s|model 3|model y|ev sedan|ev hatchback|ev crossover|polestar|lucid|ev sport)/.test(s)) return 250;
-  if (/(truck|f-?150|silverado|ram|pickup|suv|crossover|minivan|van)/.test(s)) return 180;
-  if (/(econ|compact|hatch|civic|corolla|sedan|generic ev sedan|generic)/.test(s)) return 210;
-  if (/(motorcycle|bike|sport bike)/.test(s)) return 290;
-  return 220;
+  const has = (re: RegExp) => re.test(s);
+
+  // Powertrain detection
+  let powertrain: Powertrain = "ice";
+  if (has(/\b(bev|electric|ev\b|model [sy3x]|plaid|taycan|lucid|polestar|ioniq|i[345x]\b|mach-?e|rivian|cybertruck|leaf|bolt|kona electric|niro ev|id\.\d)/)) powertrain = "bev";
+  else if (has(/\b(phev|plug-?in)\b/)) powertrain = "phev";
+  else if (has(/\b(hybrid|prius|hev)\b/)) powertrain = "hybrid";
+  else if (has(/\b(diesel|tdi|duramax|cummins|powerstroke)\b/)) powertrain = "diesel";
+
+  // Top speed buckets (km/h)
+  let topSpeedKph = 220;
+  if (has(/(bugatti|chiron|veyron|koenig|jesko|hennessey|tuatara|hypercar)/)) topSpeedKph = 430;
+  else if (has(/(plaid|model s plaid)/)) topSpeedKph = 322;
+  else if (has(/(taycan turbo s|taycan turbo)/)) topSpeedKph = 260;
+  else if (has(/(911 turbo s|911 turbo|gt2|gt3 rs)/)) topSpeedKph = 330;
+  else if (has(/(huracan|aventador|ferrari|mclaren|sf90|296|f8|720s|765lt|revuelto|temerario)/)) topSpeedKph = 325;
+  else if (has(/(amg gt|m5 cs|m5|m3 cs|m3|m4|rs[ -]?[6-7]|rs[ -]?e-?tron|e63|c63|s63)/)) topSpeedKph = 290;
+  else if (has(/(supercar|super sport|performance coupe)/)) topSpeedKph = 305;
+  else if (has(/(corvette|c8|z06|gt500|hellcat|trackhawk|demon)/)) topSpeedKph = 310;
+  else if (has(/(sport sedan|performance sedan|m340|s4|rs3|cts-?v|ats-?v)/)) topSpeedKph = 250;
+  else if (has(/(model s|model 3 performance|polestar|lucid air|i4 m50|ev sport)/)) topSpeedKph = 250;
+  else if (has(/(model y|model x|mach-?e|ioniq 5|ioniq 6|ev[6-9]|id\.\d|ariya|kia ev|enyaq)/)) topSpeedKph = 200;
+  else if (has(/(truck|f-?150|silverado|ram\b|sierra|tundra|titan|pickup|cybertruck|lightning|rivian r1t)/)) topSpeedKph = 180;
+  else if (has(/(suv|crossover|tahoe|suburban|expedition|escalade|x7|gls|q7|q8|range rover|cayenne)/)) topSpeedKph = 210;
+  else if (has(/(van|minivan|sienna|odyssey|pacifica|carnival|transit|sprinter)/)) topSpeedKph = 170;
+  else if (has(/(motorcycle|sport bike|hayabusa|ninja h2|panigale|s1000rr)/)) topSpeedKph = 300;
+  else if (has(/(econ|compact|hatch|civic|corolla|fit|yaris|spark|mirage|versa)/)) topSpeedKph = 200;
+  else if (has(/(sedan|camry|accord|altima|sonata|passat|jetta)/)) topSpeedKph = 215;
+
+  // 0->100 km/h (seconds)
+  let zeroTo100Sec = 8.5;
+  if (topSpeedKph >= 400) zeroTo100Sec = 2.4;
+  else if (has(/(plaid|chiron|tuatara|nevera|rimac)/)) zeroTo100Sec = 2.1;
+  else if (has(/(911 turbo s|sf90|revuelto|gt2 rs|765lt|trackhawk|demon)/)) zeroTo100Sec = 2.7;
+  else if (topSpeedKph >= 320) zeroTo100Sec = 2.9;
+  else if (has(/(m5|e63|s63|amg gt|rs[ -]?[6-7]|gt500|hellcat|corvette|model s long|taycan)/)) zeroTo100Sec = 3.5;
+  else if (topSpeedKph >= 290) zeroTo100Sec = 3.6;
+  else if (has(/(m3|m4|c63|rs[ -]?[3-5]|model 3 performance|i4 m50|polestar 2 dual|ev6 gt)/)) zeroTo100Sec = 4.2;
+  else if (has(/(model y performance|mach-?e gt|ioniq 5 n|ev6)/)) zeroTo100Sec = 5.0;
+  else if (has(/(sport sedan|performance|gti|si\b|st\b)/)) zeroTo100Sec = 6.2;
+  else if (has(/(truck|pickup|f-?150|silverado|ram|sierra|tundra)/)) zeroTo100Sec = 7.5;
+  else if (has(/(lightning|cybertruck|rivian)/)) zeroTo100Sec = 4.5;
+  else if (has(/(suv|crossover|tahoe|suburban)/)) zeroTo100Sec = 8.0;
+  else if (has(/(van|minivan|sprinter|transit)/)) zeroTo100Sec = 10.5;
+  else if (has(/(econ|compact|hatch|civic|corolla|fit|yaris|spark|mirage|versa)/)) zeroTo100Sec = 9.8;
+  else if (has(/(motorcycle|sport bike|hayabusa|ninja h2|panigale)/)) zeroTo100Sec = 2.8;
+
+  // Gearbox
+  let gearCount = 6;
+  if (powertrain === "bev") gearCount = has(/(taycan|audi e-?tron gt)/) ? 2 : 1;
+  else if (has(/(cvt)/)) gearCount = 1;
+  else if (has(/(10[- ]?speed|f-?150|raptor|silverado|ram|sierra)/)) gearCount = 10;
+  else if (has(/(8[- ]?speed|bmw|audi|mercedes|amg|m3|m5|m4|range rover)/)) gearCount = 8;
+  else if (has(/(7[- ]?speed|pdk|dct|gtr)/)) gearCount = 7;
+  else if (has(/(manual|stick|6[- ]?speed)/)) gearCount = 6;
+  else if (has(/(corolla|civic|fit|yaris|hatch|econ)/)) gearCount = 6;
+
+  // Battery pack (kWh) and pack voltage
+  let packKwh = 0;
+  let nominalPackVolts = 12;
+  if (powertrain === "bev") {
+    if (has(/(plaid|model s|lucid air|ev9|cybertruck|hummer ev|rivian r1[ts])/)) packKwh = 100;
+    else if (has(/(taycan|e-?tron gt|i7|eqs)/)) { packKwh = 93; nominalPackVolts = 800; }
+    else if (has(/(model 3 long|model y long|ioniq 5|ioniq 6|ev6|polestar 2|mach-?e|id\.\d)/)) packKwh = 77;
+    else if (has(/(model 3|model y|leaf|bolt|kona|niro)/)) packKwh = 60;
+    else packKwh = 70;
+    if (nominalPackVolts === 12) nominalPackVolts = has(/(800v|porsche|hyundai e-?gmp|ioniq|ev6|lucid)/) ? 800 : 400;
+  } else if (powertrain === "phev") {
+    packKwh = 16;
+    nominalPackVolts = 350;
+  } else if (powertrain === "hybrid") {
+    packKwh = 1.5;
+    nominalPackVolts = 270;
+  }
+
+  // Peak motor / engine torque (Nm) — fictional but scaled
+  let peakMotorTorqueNm = 350;
+  if (topSpeedKph >= 400) peakMotorTorqueNm = 1600;
+  else if (has(/(plaid|nevera|rimac)/)) peakMotorTorqueNm = 1400;
+  else if (powertrain === "bev" && topSpeedKph >= 250) peakMotorTorqueNm = 900;
+  else if (powertrain === "bev") peakMotorTorqueNm = 600;
+  else if (has(/(diesel|cummins|duramax|powerstroke)/)) peakMotorTorqueNm = 1200;
+  else if (has(/(truck|f-?150|silverado|ram|sierra|tundra)/)) peakMotorTorqueNm = 700;
+  else if (topSpeedKph >= 320) peakMotorTorqueNm = 800;
+  else if (topSpeedKph >= 290) peakMotorTorqueNm = 600;
+  else if (has(/(econ|compact|hatch|civic|corolla)/)) peakMotorTorqueNm = 200;
+
+  // Curb weight (kg)
+  let curbWeightKg = 1600;
+  if (has(/(truck|f-?150|silverado|ram|sierra|tundra|cybertruck|hummer)/)) curbWeightKg = 2500;
+  else if (has(/(suv|tahoe|suburban|expedition|escalade|range rover|x7|gls)/)) curbWeightKg = 2400;
+  else if (has(/(van|minivan|sprinter|transit)/)) curbWeightKg = 2100;
+  else if (powertrain === "bev" && topSpeedKph >= 250) curbWeightKg = 2200;
+  else if (powertrain === "bev") curbWeightKg = 1900;
+  else if (has(/(econ|compact|hatch|civic|corolla|fit|yaris)/)) curbWeightKg = 1250;
+  else if (topSpeedKph >= 320) curbWeightKg = 1500;
+  else if (has(/(motorcycle|bike|hayabusa|ninja|panigale)/)) curbWeightKg = 220;
+
+  // Cruise speed bias (km/h)
+  const cruiseKph = Math.min(135, Math.max(95, Math.round(topSpeedKph * 0.45)));
+
+  // HVAC idle current (amps on 12V or HV bus depending — kept as simple metric)
+  const hvacIdleAmps = powertrain === "bev" ? 14 : 6;
+
+  return {
+    description: desc,
+    powertrain,
+    topSpeedKph,
+    zeroTo100Sec,
+    gearCount,
+    packKwh,
+    nominalPackVolts,
+    peakMotorTorqueNm,
+    curbWeightKg,
+    cruiseKph,
+    hvacIdleAmps,
+    hasRegen: powertrain === "bev" || powertrain === "phev" || powertrain === "hybrid",
+  };
 };
+
+// Backwards-compatible helper
+const inferTopSpeedKph = (desc: string): number => buildVehicleProfile(desc).topSpeedKph;
 
 // Generic, safe, fictional frame catalog
 const buildFrames = (): FrameDef[] => [
