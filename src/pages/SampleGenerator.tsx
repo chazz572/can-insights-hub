@@ -80,7 +80,7 @@ const SampleGenerator = () => {
   const [durationText, setDurationText] = useState("15");
   const [busy, setBusy] = useState(false);
   const [result, setResult] = useState<SampleOutput | null>(null);
-  const [speedUnit] = useSpeedUnit();
+  const [speedUnit, setSpeedUnit] = useSpeedUnit();
 
   const displaySummary = useMemo(
     () => (result ? convertSpeedsInText(result.summary, speedUnit) : ""),
@@ -229,17 +229,36 @@ const SampleGenerator = () => {
             description={`${result.stats.messages.toLocaleString()} messages · ${result.stats.uniqueIds} IDs · ${result.stats.avgRateHz.toFixed(0)} msg/s`}
             icon={<FileText className="size-5" />}
           >
-            <div className="flex items-center justify-end gap-2 pb-2">
-              <Button variant="secondary" size="sm" onClick={() => copy("Summary", displaySummary)}>
-                <Copy className="mr-1.5 size-3.5" /> Copy
-              </Button>
-              <Button
-                variant="secondary"
-                size="sm"
-                onClick={() => downloadText(`${baseName}__summary.txt`, displaySummary, "text/plain")}
-              >
-                <Download className="mr-1.5 size-3.5" /> Download
-              </Button>
+            <div className="flex flex-wrap items-center justify-between gap-2 pb-2">
+              <div className="inline-flex items-center gap-1 rounded-sm border border-glass-border bg-background/60 p-1 font-mono text-[10px] uppercase tracking-wider">
+                <span className="px-2 text-muted-foreground">Units</span>
+                <button
+                  type="button"
+                  onClick={() => setSpeedUnit("kph")}
+                  className={`rounded-sm px-2 py-1 transition-colors ${speedUnit === "kph" ? "bg-primary text-primary-foreground" : "text-foreground hover:bg-secondary"}`}
+                >
+                  km/h
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setSpeedUnit("mph")}
+                  className={`rounded-sm px-2 py-1 transition-colors ${speedUnit === "mph" ? "bg-primary text-primary-foreground" : "text-foreground hover:bg-secondary"}`}
+                >
+                  mph
+                </button>
+              </div>
+              <div className="flex items-center gap-2">
+                <Button variant="secondary" size="sm" onClick={() => copy("Summary", displaySummary)}>
+                  <Copy className="mr-1.5 size-3.5" /> Copy
+                </Button>
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  onClick={() => downloadText(`${baseName}__summary.txt`, displaySummary, "text/plain")}
+                >
+                  <Download className="mr-1.5 size-3.5" /> Download
+                </Button>
+              </div>
             </div>
             <pre className="max-h-72 overflow-auto rounded-md border border-glass-border bg-background/60 p-3 font-mono text-xs leading-relaxed text-foreground">
               {displaySummary}
