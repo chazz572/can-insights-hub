@@ -95,31 +95,40 @@ const SampleGenerator = () => {
     [vehicle, state],
   );
 
-  const handleGenerate = (event: FormEvent) => {
+  const handleGenerate = async (event: FormEvent) => {
     event.preventDefault();
     if (!vehicle.trim()) {
       toast.error("Enter a vehicle description.");
       return;
     }
     setBusy(true);
-    // Defer to next tick so the button shows busy state on big logs
-    window.setTimeout(() => {
+    const desc = vehicle.trim();
+    try {
+      // Look up realistic specs for this vehicle (cached). Falls back to built-in
+      // matching when AI is unavailable or returns nothing.
+      let specs = null as Awaited<ReturnType<typeof fetchVehicleSpecs>>;
       try {
-        const out = generateSample({
-          vehicleDescription: vehicle.trim(),
-          drivingState: state,
-          customStateNotes: notes.trim() || undefined,
-          durationSec: Number(durationText) || 15,
-        });
-        setResult(out);
-        toast.success(`Generated ${out.stats.messages.toLocaleString()} synthetic CAN messages.`);
+        specs = await fetchVehicleSpecs(desc);
       } catch (err) {
-        console.error(err);
-        toast.error("Generator failed. Try a shorter duration.");
-      } finally {
-        setBusy(false);
+        console.warn("Vehicle spec lookup failed, using built-in profile.", err);
       }
-    }, 30);
+
+      const out = generateSample({
+        vehicleDescription: desc,
+        drivingState: state,
+        customStateNotes: notes.trim() || undefined,
+        durationSec: Number(durationText) || 15,
+        specOverride: specs?.override,
+      });
+      setResult(out);
+      const tag = specs?.canonicalName ? ` (${specs.canonicalName})` : "";
+      toast.success(`Generated ${out.stats.messages.toLocaleString()} synthetic CAN messages${tag}.`);
+    } catch (err) {
+      console.error(err);
+      toast.error("Generator failed. Try a shorter duration.");
+    } finally {
+      setBusy(false);
+    }
   };
 
   const copy = async (label: string, text: string) => {
