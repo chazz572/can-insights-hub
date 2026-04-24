@@ -187,10 +187,10 @@ const SystemsBadges = ({ data }: { data: unknown }) => {
   return <div className="flex flex-wrap gap-2">{rows.map((row, index) => <span key={index} className="max-w-full break-words rounded-lg border border-glass-border bg-secondary px-3 py-2 text-sm font-semibold leading-5 text-secondary-foreground shadow-glow">{renderText(row.category ?? row.key ?? row.system ?? row.value)}</span>)}</div>;
 };
 
-const MechanicSummary = ({ data }: { data: unknown }) => (
+const MechanicSummary = ({ data, unit = "kph" }: { data: unknown; unit?: SpeedUnit }) => (
   <div className="min-w-0 max-w-full overflow-hidden rounded-lg border border-primary/30 bg-gradient-subtle p-3 shadow-glow backdrop-blur sm:p-5">
     <div className="block min-w-0 max-w-full overflow-hidden whitespace-pre-wrap break-all text-xs leading-6 text-foreground [overflow-wrap:anywhere] sm:break-words sm:text-sm sm:leading-7">
-      {renderText(data)}
+      {renderTextU(data, unit)}
     </div>
   </div>
 );
