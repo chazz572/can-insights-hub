@@ -225,6 +225,7 @@ const NAMED_VEHICLES: NamedSpec[] = [
   { match: /(gr corolla|gr yaris)/i, powertrain: "ice", topSpeedKph: 230, zeroTo100Sec: 4.9, redlineRpm: 7000, gearCount: 6, peakPowerHp: 300, peakMotorTorqueNm: 370, curbWeightKg: 1474, induction: "turbo", drivetrain: "awd", tireRadiusM: 0.327 },
   { match: /(civic type r|type r)/i, powertrain: "ice", topSpeedKph: 275, zeroTo100Sec: 5.4, redlineRpm: 7000, gearCount: 6, peakPowerHp: 315, peakMotorTorqueNm: 420, curbWeightKg: 1429, induction: "turbo", drivetrain: "fwd", tireRadiusM: 0.337 },
   { match: /(sti|wrx sti)/i, powertrain: "ice", topSpeedKph: 255, zeroTo100Sec: 4.9, redlineRpm: 6700, gearCount: 6, peakPowerHp: 310, peakMotorTorqueNm: 393, curbWeightKg: 1568, induction: "turbo", drivetrain: "awd", tireRadiusM: 0.327 },
+  { match: /\b(wrx|impreza wrx|subaru wrx)\b/i, powertrain: "ice", topSpeedKph: 240, zeroTo100Sec: 5.4, redlineRpm: 6500, gearCount: 6, peakPowerHp: 271, peakMotorTorqueNm: 350, curbWeightKg: 1565, induction: "turbo", drivetrain: "awd", tireRadiusM: 0.327 },
   { match: /(gtr|nissan gt-?r|r35)/i, powertrain: "ice", topSpeedKph: 315, zeroTo100Sec: 2.9, redlineRpm: 7100, gearCount: 6, peakPowerHp: 565, peakMotorTorqueNm: 633, curbWeightKg: 1755, induction: "twin_turbo", drivetrain: "awd", tireRadiusM: 0.347 },
   { match: /(civic\b|corolla\b)/i, powertrain: "ice", topSpeedKph: 200, zeroTo100Sec: 8.5, redlineRpm: 6800, gearCount: 6, peakPowerHp: 158, peakMotorTorqueNm: 187, curbWeightKg: 1300, induction: "na", drivetrain: "fwd", tireRadiusM: 0.317 },
 
