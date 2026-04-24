@@ -406,6 +406,11 @@ const buildFrames = (): FrameDef[] => [
     ],
     shape: (t, ctx) => {
       const r = ctx.rand;
+      const v = ctx.vehicle;
+      const isEv = v.powertrain === "bev" || v.powertrain === "phev";
+      const packV = isEv ? v.nominalPackVolts : 12.6;
+      // Approx peak pack current scales with peak motor torque (very rough)
+      const peakPackAmps = isEv ? Math.max(120, Math.min(1500, v.peakMotorTorqueNm * 1.4)) : 120;
       let soc = 70;
       let current = 0;
       let temp = 28;
@@ -413,40 +418,51 @@ const buildFrames = (): FrameDef[] => [
         case "charging_20_80": {
           const k = Math.min(1, t / ctx.duration);
           soc = 20 + k * 60;
-          current = -120 + (r() - 0.5) * 4; // negative = into battery
+          // Higher-power packs (e.g. 800V hyperEVs) draw more current during DC fast charge
+          current = isEv ? -Math.min(peakPackAmps * 0.6, 250) + (r() - 0.5) * 4 : -10;
           temp = 30 + k * 6;
           break;
         }
         case "launch_0_60":
-          soc = 78 - (t / ctx.duration) * 0.4;
-          current = 240 + (r() - 0.5) * 10;
+          soc = 78 - (t / ctx.duration) * (isEv ? 0.4 : 0.05);
+          current = isEv ? Math.min(peakPackAmps, 280 + v.peakMotorTorqueNm * 0.2) + (r() - 0.5) * 10 : 30;
           temp = 32 + (t / ctx.duration) * 3;
           break;
+        case "top_speed_run":
+          soc = 78 - (t / ctx.duration) * (isEv ? 1.5 : 0.1);
+          current = isEv ? Math.min(peakPackAmps, peakPackAmps * 0.8) + (r() - 0.5) * 12 : 40;
+          temp = 35 + (t / ctx.duration) * 8;
+          break;
         case "regen_braking":
-          soc = 65 + (t / ctx.duration) * 0.3;
-          current = -80 + (r() - 0.5) * 6;
+          soc = 65 + (t / ctx.duration) * (v.hasRegen ? 0.3 : 0.0);
+          current = v.hasRegen ? -Math.min(peakPackAmps * 0.4, 100) + (r() - 0.5) * 6 : 5;
           temp = 30;
           break;
         case "highway_cruise":
           soc = 72 - (t / ctx.duration) * 0.6;
-          current = 60 + (r() - 0.5) * 4;
+          current = isEv ? 60 + (r() - 0.5) * 4 : 18;
           temp = 32;
           break;
         case "idle_ac_on":
           soc = 80 - (t / ctx.duration) * 0.05;
-          current = 12 + (r() - 0.5);
+          current = v.hvacIdleAmps + (r() - 0.5);
           temp = 29;
           break;
         case "city_stop_go":
-          soc = 70 - (t / ctx.duration) * 0.4;
-          current = 30 + Math.sin(t) * 20;
+          soc = 70 - (t / ctx.duration) * (isEv ? 0.4 : 0.08);
+          current = isEv ? 30 + Math.sin(t) * 20 : 15 + Math.sin(t) * 5;
           temp = 31;
           break;
         default:
           soc = 70;
-          current = 20;
+          current = isEv ? 20 : 12;
       }
-      return { BatterySOC: soc, BatteryVoltage: 396 + (r() - 0.5) * 2, BatteryCurrent: current, BatteryTemp: temp };
+      return {
+        BatterySOC: soc,
+        BatteryVoltage: packV + (r() - 0.5) * (isEv ? 2 : 0.2),
+        BatteryCurrent: current,
+        BatteryTemp: temp,
+      };
     },
   },
   {
