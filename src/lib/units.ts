@@ -74,7 +74,7 @@ export const convertSpeedsInText = (text: string, unit: SpeedUnit): string => {
   });
 
   // 3) Restore the protected km/h tokens
-  out = out.replaceAll(SENTINEL, "km/h");
+  out = out.split(SENTINEL).join("km/h");
 
   // Re-label the canonical 0–100 km/h benchmark (now "0–62 mph") to the
   // customary "0–60 mph" equivalent. Handles both en-dash and hyphen.
