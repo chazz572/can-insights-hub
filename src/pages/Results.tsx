@@ -16,13 +16,13 @@ import { requestAiInsight, saveAnalysisSnapshot, type AiInsightKind } from "@/li
 import { cn } from "@/lib/utils";
 import { convertSpeedsInText, type SpeedUnit, useSpeedUnit } from "@/lib/units";
 
-const renderText = (value: unknown, unit: SpeedUnit = "kph") => {
+const renderText = (value: unknown) => {
   if (value === null || value === undefined || value === "") return "No summary returned.";
-  if (typeof value === "string" || typeof value === "number" || typeof value === "boolean") {
-    return convertSpeedsInText(String(value), unit);
-  }
-  return convertSpeedsInText(JSON.stringify(value, null, 2), unit);
+  if (typeof value === "string" || typeof value === "number" || typeof value === "boolean") return String(value);
+  return JSON.stringify(value, null, 2);
 };
+
+const renderTextU = (value: unknown, unit: SpeedUnit) => convertSpeedsInText(renderText(value), unit);
 
 const renderList = (value: unknown) => {
   const items = Array.isArray(value) ? value : value === undefined || value === null ? [] : [value];
