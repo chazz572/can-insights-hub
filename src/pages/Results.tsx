@@ -14,11 +14,14 @@ import { analyzeFile, AnalysisResult, type JsonRecord } from "@/lib/canApi";
 import { buildPartialDbcDraft, generatePartialDbcCandidates, inferVehicleIdentification } from "@/lib/intelligence";
 import { requestAiInsight, saveAnalysisSnapshot, type AiInsightKind } from "@/lib/saasApi";
 import { cn } from "@/lib/utils";
+import { convertSpeedsInText, type SpeedUnit, useSpeedUnit } from "@/lib/units";
 
-const renderText = (value: unknown) => {
+const renderText = (value: unknown, unit: SpeedUnit = "kph") => {
   if (value === null || value === undefined || value === "") return "No summary returned.";
-  if (typeof value === "string" || typeof value === "number" || typeof value === "boolean") return String(value);
-  return JSON.stringify(value, null, 2);
+  if (typeof value === "string" || typeof value === "number" || typeof value === "boolean") {
+    return convertSpeedsInText(String(value), unit);
+  }
+  return convertSpeedsInText(JSON.stringify(value, null, 2), unit);
 };
 
 const renderList = (value: unknown) => {
