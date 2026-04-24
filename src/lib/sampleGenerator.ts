@@ -567,7 +567,7 @@ const launchSlipKph = (v: VehicleProfile, t: number, scenarioPeak: number): numb
 const inferTopSpeedKph = (desc: string): number => buildVehicleProfile(desc).topSpeedKph;
 
 // ICE-specific frames: engine, fuel, thermals
-const buildIceFrames = (): FrameDef[] => [
+const buildIceFramesAll = (): FrameDef[] => [
   {
     id: 0x0C0,
     name: "ENG_Status",
@@ -1287,7 +1287,23 @@ const buildCommonFrames = (): FrameDef[] => [
   },
 ];
 
-// Powertrain-aware frame selector
+// Powertrain-aware frame selector.
+// STRICT RULE: never emit signals/frames that don't physically exist on the vehicle.
+//   - NA engines: omit ENG_Boost entirely (no zeroed turbo signals).
+//   - Pure BEV: omit all ICE thermal/boost/fuel frames.
+//   - Hybrids/PHEVs: include EV pack + only ICE frames matching their induction.
+const buildIceFrames = (vehicle: VehicleProfile): FrameDef[] => {
+  const all = buildIceFramesAll();
+  const boosted =
+    vehicle.induction === "turbo" ||
+    vehicle.induction === "twin_turbo" ||
+    vehicle.induction === "supercharged";
+  return all.filter((f) => {
+    if (f.name === "ENG_Boost" && !boosted) return false; // NA: no boost/turbo signals at all
+    return true;
+  });
+};
+
 const buildFrames = (vehicle: VehicleProfile): FrameDef[] => {
   const common = buildCommonFrames();
   switch (vehicle.powertrain) {
@@ -1295,10 +1311,10 @@ const buildFrames = (vehicle: VehicleProfile): FrameDef[] => {
       return [...common, ...buildEvFrames()];
     case "ice":
     case "diesel":
-      return [...common, ...buildIceFrames()];
+      return [...common, ...buildIceFrames(vehicle)];
     case "hybrid":
     case "phev":
-      return [...common, ...buildEvFrames(), ...buildIceFrames()];
+      return [...common, ...buildEvFrames(), ...buildIceFrames(vehicle)];
     default:
       return common;
   }
