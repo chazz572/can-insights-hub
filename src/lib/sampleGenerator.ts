@@ -798,7 +798,7 @@ const computeVehicleMotion = (t: number, ctx: ShapeCtx): MotionSnapshot => {
   }
 
   if (state !== "burnout" && state !== "idle_ac_on" && state !== "charging_20_80") {
-    const selected = selectGear(v, Math.max(speedKph, speedKph > 0 ? 4 : 0));
+    const selected = selectGear(v, Math.max(speedKph, speedKph > 0 ? 4 : 0), loadHint);
     gear = speedKph < 0.5 && v.powertrain !== "bev" ? 1 : selected.gear;
     rpm = selected.rpm;
   }
