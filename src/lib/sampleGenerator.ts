@@ -250,13 +250,14 @@ const matchNamedSpec = (desc: string): NamedSpec | null => {
 const computeRpmPerKphTable = (
   gearRatios: number[] | undefined,
   finalDrive: number | undefined,
+  powertrain: Powertrain,
   tireRadiusM: number,
   fallbackGearCount: number,
   redlineRpm: number,
   topSpeedKph: number,
 ): number[] => {
   const r = tireRadiusM;
-  const fd = finalDrive ?? 3.5;
+  const fd = finalDrive ?? (powertrain === "bev" ? 1 : 3.5);
   if (gearRatios && gearRatios.length > 0) {
     return gearRatios.map((gr) => {
       const wheelRpmPerKph = (1000 / 3600) / (2 * Math.PI * r) * 60;
@@ -389,7 +390,7 @@ const buildVehicleProfile = (desc: string, override?: VehicleSpecOverride): Vehi
   let redlineRpm = topSpeedKph >= 320 ? 8500 : topSpeedKph >= 280 ? 8000 : topSpeedKph >= 240 ? 7200 : 6500;
   if (powertrain === "diesel") redlineRpm = 4500;
   if (powertrain === "bev") redlineRpm = 18000;
-  let idleRpm = powertrain === "diesel" ? 700 : 800;
+  let idleRpm = powertrain === "bev" ? 0 : powertrain === "diesel" ? 700 : 800;
   let peakPowerHp = Math.round(peakMotorTorqueNm * 0.6);
   let induction: VehicleProfile["induction"] = powertrain === "bev" ? "electric" : has(/(turbo|tt|biturbo)/) ? "turbo" : has(/(supercharg|whipple|kompressor)/) ? "supercharged" : "na";
   let drivetrain: VehicleProfile["drivetrain"] = has(/\bawd\b|quattro|4matic|x-?drive|sh-?awd|all[- ]wheel/) ? "awd" : has(/\bfwd\b|front[- ]wheel/) ? "fwd" : "rwd";
@@ -443,7 +444,7 @@ const buildVehicleProfile = (desc: string, override?: VehicleSpecOverride): Vehi
     cruiseKph = Math.min(135, Math.max(95, Math.round(topSpeedKph * 0.45)));
   }
 
-  const rpmPerKphByGear = computeRpmPerKphTable(gearRatios, finalDrive, tireRadiusM, gearCount, redlineRpm, topSpeedKph);
+  const rpmPerKphByGear = computeRpmPerKphTable(gearRatios, finalDrive, powertrain, tireRadiusM, gearCount, redlineRpm, topSpeedKph);
 
   return {
     description: desc,
@@ -473,16 +474,20 @@ const buildVehicleProfile = (desc: string, override?: VehicleSpecOverride): Vehi
 // and below redline*0.95.
 const selectGear = (v: VehicleProfile, speedKph: number): { gear: number; rpm: number } => {
   if (v.rpmPerKphByGear.length <= 1) {
-    const rpm = Math.max(v.idleRpm, v.rpmPerKphByGear[0] * speedKph);
+    const minRpm = v.powertrain === "bev" ? 0 : v.idleRpm;
+    const rpm = Math.max(minRpm, v.rpmPerKphByGear[0] * speedKph);
     return { gear: 1, rpm: Math.min(v.redlineRpm, rpm) };
   }
   for (let g = v.rpmPerKphByGear.length; g >= 1; g--) {
     const rpm = v.rpmPerKphByGear[g - 1] * speedKph;
-    if (rpm <= v.redlineRpm * 0.95 && (g === 1 || rpm >= v.idleRpm * 1.6)) {
-      return { gear: g, rpm: Math.max(v.idleRpm, rpm) };
+    const minCruiseRpm = v.powertrain === "bev" ? 0 : v.idleRpm * 1.6;
+    const minRpm = v.powertrain === "bev" ? 0 : v.idleRpm;
+    if (rpm <= v.redlineRpm * 0.95 && (g === 1 || rpm >= minCruiseRpm)) {
+      return { gear: g, rpm: Math.max(minRpm, rpm) };
     }
   }
-  return { gear: 1, rpm: Math.max(v.idleRpm, v.rpmPerKphByGear[0] * speedKph) };
+  const minRpm = v.powertrain === "bev" ? 0 : v.idleRpm;
+  return { gear: 1, rpm: Math.max(minRpm, v.rpmPerKphByGear[0] * speedKph) };
 };
 
 // ============================================================================
@@ -506,6 +511,32 @@ interface ShiftInfo {
   shiftBlend: number; // 0..1 — how "mid-shift" we are
   inShift: boolean;
 }
+
+interface MotionSnapshot {
+  speedKph: number;
+  accelPedal: number;
+  brakeBar: number;
+  gear: number;
+  rpm: number;
+  throttle: number;
+  load: number;
+  shiftBlend: number;
+  inShift: boolean;
+  maf: number;
+  lambda: number;
+  fuelRateLph: number;
+  fuelLevelPct: number;
+  coolantC: number;
+  oilC: number;
+  oilPressureBar: number;
+  iatC: number;
+  egtC: number;
+  boostKpa: number;
+  wastegateDutyPct: number;
+  turboShaftRpm: number;
+  packCurrentA: number;
+}
+
 const computeShiftEvent = (
   v: VehicleProfile,
   speedKph: number,
@@ -549,6 +580,272 @@ const thermalIntegral = (
   return loadFactor * (1 - Math.exp(-Math.max(0, t) / Math.max(0.1, tau)));
 };
 
+const clamp = (value: number, min: number, max: number) => Math.max(min, Math.min(max, value));
+
+const lerp = (a: number, b: number, t: number) => a + (b - a) * t;
+
+const litersPer100KmAtFullLoad = (v: VehicleProfile) => {
+  const bsfc = v.powertrain === "diesel" ? 205 : 255;
+  const density = v.powertrain === "diesel" ? 0.832 : 0.745;
+  const litersPerHourAtPeak = (v.peakPowerHp * 0.7457 * bsfc) / (density * 1000);
+  return litersPerHourAtPeak;
+};
+
+const inferTankSizeLiters = (v: VehicleProfile) => {
+  const baseline = v.curbWeightKg < 1450 ? 48 : v.curbWeightKg < 1800 ? 60 : v.curbWeightKg < 2300 ? 72 : 95;
+  return baseline + (v.powertrain === "diesel" ? 10 : 0);
+};
+
+const scenarioSpeedKph = (state: DrivingState, t: number, duration: number, v: VehicleProfile) => {
+  const vMax = Math.max(80, v.topSpeedKph);
+  const fracToHundred = Math.min(0.95, 100 / vMax);
+  const tau60 = Math.max(0.6, v.zeroTo100Sec / -Math.log(1 - fracToHundred));
+
+  switch (state) {
+    case "launch_0_60": {
+      const accelPhase = Math.min(1, t / Math.max(0.5, v.zeroTo100Sec));
+      let speed = 100 * (1 - Math.exp(-3.0 * accelPhase));
+      if (t > v.zeroTo100Sec) speed = Math.min(vMax, 100 + Math.min(20, (t - v.zeroTo100Sec) * 4));
+      return speed;
+    }
+    case "top_speed_run":
+      return dragLimitedSpeed(vMax, t, tau60);
+    case "regen_braking": {
+      const k = Math.min(1, t / duration);
+      return Math.max(0, 80 - k * 75);
+    }
+    case "highway_cruise":
+      return v.cruiseKph;
+    case "city_stop_go": {
+      const phase = (t % 30) / 30;
+      if (phase < 0.4) return phase * 2.5 * 35;
+      if (phase < 0.7) return 35 + Math.sin(phase * 10) * 3;
+      return Math.max(0, 35 - (phase - 0.7) * 116);
+    }
+    case "burnout":
+      return 0;
+    case "drag_pass": {
+      const accelPhase = Math.min(1, t / Math.max(0.5, v.zeroTo100Sec * 2.4));
+      return (vMax * 0.6) * (1 - Math.exp(-2.6 * accelPhase));
+    }
+    case "track_lap": {
+      const lap = (t % 25) / 25;
+      if (lap < 0.4) return lap * 2.5 * (vMax * 0.85);
+      if (lap < 0.55) return vMax * 0.85 - (lap - 0.4) * 6 * (vMax * 0.5);
+      if (lap < 0.85) return 80 + Math.sin(lap * 12) * 30;
+      return Math.max(0, (1 - lap) * 6 * (vMax * 0.5));
+    }
+    case "idle_ac_on":
+    case "charging_20_80":
+      return 0;
+    default:
+      return 40 + Math.sin(t * 0.5) * 10;
+  }
+};
+
+const computeVehicleMotion = (t: number, ctx: ShapeCtx): MotionSnapshot => {
+  const { state, duration, vehicle: v, rand: r } = ctx;
+  const sampleDt = 0.02;
+  const rawSpeed = scenarioSpeedKph(state, t, duration, v);
+  const prevSpeed = scenarioSpeedKph(state, Math.max(0, t - sampleDt), duration, v);
+  const nextSpeed = scenarioSpeedKph(state, Math.min(duration, t + sampleDt), duration, v);
+  const speedKph = Math.max(0, rawSpeed + gauss(r, 0.05));
+  const accelMps2 = ((nextSpeed - prevSpeed) / (2 * sampleDt)) / 3.6;
+  const shift = computeShiftEvent(v, Math.max(0, rawSpeed), Math.max(0, prevSpeed));
+  const boosted = v.induction === "turbo" || v.induction === "twin_turbo" || v.induction === "supercharged";
+  const tankLiters = inferTankSizeLiters(v);
+  const fullLoadFuelLph = litersPer100KmAtFullLoad(v);
+
+  let accelPedal = 0;
+  let brakeBar = 0;
+  let throttle = 0;
+  let load = 0;
+  let rpm = shift.rpm;
+  let gear = shift.gear;
+
+  switch (state) {
+    case "launch_0_60": {
+      const onThrottle = t <= v.zeroTo100Sec + 0.2;
+      accelPedal = onThrottle ? 96 : 34;
+      throttle = onThrottle ? 93 : 24;
+      load = onThrottle ? 92 : 28;
+      brakeBar = 0;
+      break;
+    }
+    case "top_speed_run": {
+      const speedFrac = clamp(speedKph / Math.max(1, v.topSpeedKph), 0, 1);
+      accelPedal = clamp(100 - speedFrac * 2.5, 96, 100);
+      throttle = clamp(88 + speedFrac * 10, 88, 100);
+      load = clamp(90 + speedFrac * 9, 90, 99);
+      brakeBar = 0;
+      break;
+    }
+    case "drag_pass": {
+      accelPedal = 100;
+      throttle = 100;
+      load = 99;
+      brakeBar = 0;
+      break;
+    }
+    case "burnout": {
+      const swing = (Math.sin(t * 3) + 1) / 2;
+      accelPedal = 62 + swing * 34;
+      throttle = 58 + swing * 38;
+      load = 74 + swing * 22;
+      brakeBar = 18;
+      gear = 1;
+      rpm = clamp(v.idleRpm + swing * (v.redlineRpm - v.idleRpm) * 0.82, v.idleRpm, v.redlineRpm * 0.96);
+      break;
+    }
+    case "track_lap": {
+      const lap = (t % 25) / 25;
+      accelPedal = lap < 0.4 ? 97 : lap < 0.55 ? 0 : 38 + Math.max(0, Math.sin(lap * 8)) * 44;
+      throttle = lap < 0.4 ? 94 : lap < 0.55 ? 4 : 36 + Math.max(0, Math.sin(lap * 8)) * 46;
+      brakeBar = lap >= 0.4 && lap < 0.55 ? 58 : 0;
+      load = lap < 0.4 ? 95 : lap < 0.55 ? 8 : 46 + Math.max(0, Math.sin(lap * 7)) * 38;
+      break;
+    }
+    case "highway_cruise":
+      accelPedal = 17 + Math.sin(t * 0.3) * 2;
+      throttle = 15 + Math.sin(t * 0.3) * 3;
+      brakeBar = 0;
+      load = 26 + Math.max(0, speedKph - v.cruiseKph) * 0.06;
+      gear = selectGear(v, speedKph).gear;
+      rpm = selectGear(v, speedKph).rpm;
+      break;
+    case "regen_braking":
+      accelPedal = 0;
+      throttle = 0;
+      brakeBar = v.hasRegen ? 5 : 18;
+      load = 4;
+      gear = Math.max(1, Math.min(v.gearCount, selectGear(v, Math.max(speedKph, 20)).gear));
+      rpm = speedKph > 4 ? selectGear(v, Math.max(speedKph, 8)).rpm : v.idleRpm;
+      break;
+    case "idle_ac_on":
+      accelPedal = 0;
+      throttle = 0;
+      brakeBar = 1;
+      gear = 0;
+      rpm = v.powertrain === "bev" ? 0 : v.idleRpm + Math.sin(t * 2) * 25;
+      load = 10;
+      break;
+    case "charging_20_80":
+      accelPedal = 0;
+      throttle = 0;
+      brakeBar = 0;
+      gear = 0;
+      rpm = 0;
+      load = 0;
+      break;
+    case "city_stop_go": {
+      const phase = (t % 30) / 30;
+      accelPedal = speedKph > 5 && phase < 0.6 ? 18 + Math.max(0, accelMps2) * 8 : 0;
+      throttle = speedKph > 5 && phase < 0.6 ? 16 + Math.max(0, accelMps2) * 10 : 0;
+      brakeBar = speedKph < 5 && phase > 0.7 ? 8 : 0;
+      load = speedKph > 5 ? 18 + Math.max(0, accelMps2) * 18 : 8;
+      gear = Math.min(v.gearCount, speedKph > 25 ? 3 : speedKph > 10 ? 2 : 1);
+      rpm = selectGear(v, Math.max(speedKph, 8)).rpm;
+      break;
+    }
+    default:
+      accelPedal = 20;
+      throttle = 18;
+      brakeBar = 0;
+      load = 26;
+      gear = Math.min(v.gearCount, 3);
+      rpm = selectGear(v, Math.max(speedKph, 20)).rpm;
+  }
+
+  if (state !== "burnout" && state !== "idle_ac_on" && state !== "charging_20_80") {
+    const selected = selectGear(v, Math.max(speedKph, speedKph > 0 ? 4 : 0));
+    gear = speedKph < 0.5 && v.powertrain !== "bev" ? 1 : selected.gear;
+    rpm = selected.rpm;
+  }
+
+  if (shift.shiftBlend > 0 && speedKph > 5 && gear > 1) {
+    const prevGearRpm = v.rpmPerKphByGear[Math.max(0, gear - 2)] * speedKph;
+    const nextGearRpm = v.rpmPerKphByGear[gear - 1] * speedKph;
+    rpm = lerp(prevGearRpm, nextGearRpm, 0.82);
+    throttle *= 0.62;
+    load *= 0.82;
+  }
+
+  rpm = v.powertrain === "bev" ? 0 : clamp(rpm + gauss(r, 8), speedKph < 0.5 ? v.idleRpm : v.idleRpm * 0.9, v.redlineRpm);
+  accelPedal = clamp(accelPedal + gauss(r, 0.3), 0, 100);
+  throttle = clamp(throttle + gauss(r, 0.35), 0, 100);
+  brakeBar = clamp(brakeBar + gauss(r, 0.08), 0, 200);
+  load = clamp(load + gauss(r, 0.5), 0, 100);
+
+  const powerFraction = clamp((throttle / 100) * (load / 100) * Math.max(0.18, rpm / Math.max(v.redlineRpm, 1)), 0, 1.05);
+  const mafBase = v.powertrain === "diesel" ? 7 : 4.5;
+  const mafPeak = clamp(v.peakPowerHp * (v.powertrain === "diesel" ? 0.42 : 0.55), 55, v.powertrain === "diesel" ? 720 : 600);
+  const maf = v.powertrain === "bev"
+    ? 0
+    : clamp(mafBase + powerFraction * mafPeak + Math.max(0, accelMps2) * 6 + gauss(r, 1.4), mafBase, v.powertrain === "diesel" ? 720 : 600);
+  const lambdaBase = state === "highway_cruise" || state === "idle_ac_on" ? 1.0 : powerFraction > 0.7 ? (boosted ? 0.79 : 0.86) : powerFraction > 0.4 ? 0.92 : 1.0;
+  const lambda = v.powertrain === "bev" ? 1 : clamp(lambdaBase + gauss(r, 0.006), 0.7, 1.15);
+  const fuelRateLph = v.powertrain === "bev"
+    ? 0
+    : clamp(fullLoadFuelLph * Math.pow(powerFraction, 0.92) * (v.powertrain === "diesel" ? 0.92 : 1) + Math.max(0, accelMps2) * 0.7 + (state === "idle_ac_on" ? 1.2 : 0), 0, 130);
+  const fuelLevelDropPct = v.powertrain === "bev" ? 0 : (fuelRateLph * Math.max(0, t)) / 3600 / tankLiters * 100;
+  const fuelLevelPct = v.powertrain === "bev" ? 0 : clamp(72 - fuelLevelDropPct, 0, 100);
+
+  const thermalLoad = clamp(powerFraction * (state === "track_lap" ? 0.92 : state === "highway_cruise" ? 0.42 : state === "idle_ac_on" ? 0.12 : 1), 0, 1);
+  const coolantBase = state === "idle_ac_on" ? 88 : 86;
+  const coolantC = v.powertrain === "bev" ? 0 : clamp(coolantBase + thermalIntegral(thermalLoad, t, 34) * (state === "top_speed_run" ? 20 : 16) + gauss(r, 0.15), 70, 118);
+  const oilC = v.powertrain === "bev" ? 0 : clamp(90 + thermalIntegral(thermalLoad, t, 52) * (state === "top_speed_run" || state === "track_lap" ? 34 : 24) + gauss(r, 0.18), 72, 155);
+  const oilPressureBar = v.powertrain === "bev" ? 0 : clamp((rpm / 1000) * 0.78 + (oilC > 120 ? -0.18 : 0) + gauss(r, 0.04), speedKph < 1 ? 1.2 : 2.2, 8.5);
+  const iatBase = state === "idle_ac_on" ? 30 : 28;
+  const chargeHeat = boosted ? 26 + powerFraction * 34 : 10 + powerFraction * 14;
+  const iatC = v.powertrain === "bev" ? 0 : clamp(iatBase + thermalIntegral(thermalLoad, t, boosted ? 7 : 11) * chargeHeat + speedKph * (boosted ? 0.012 : 0.004) + gauss(r, 0.2), 18, 100);
+  const egtBase = v.powertrain === "diesel" ? 240 : 320;
+  const egtPeak = v.powertrain === "diesel" ? 760 : boosted ? 930 : 790;
+  const egtC = v.powertrain === "bev"
+    ? 0
+    : clamp(egtBase + thermalIntegral(thermalLoad, t, 4.6) * (egtPeak - egtBase) + load * 1.1 + gauss(r, 4), 120, egtPeak);
+
+  let boostKpa = 0;
+  let wastegateDutyPct = 0;
+  let turboShaftRpm = 0;
+  if (boosted) {
+    const peakBoost = v.induction === "twin_turbo" ? 225 : v.induction === "supercharged" ? 135 : 185;
+    const lagBlend = v.induction === "supercharged" ? 1 : 1 - Math.exp(-Math.max(0.02, t) / 0.45);
+    const boostLoad = clamp((throttle / 100) * 1.05 * lagBlend, 0, 1);
+    boostKpa = clamp(boostLoad * peakBoost + gauss(r, 1.8), -8, peakBoost + 10);
+    wastegateDutyPct = clamp(18 + boostLoad * 72 + gauss(r, 1.4), 0, 100);
+    turboShaftRpm = clamp(boostLoad * (v.induction === "twin_turbo" ? 188000 : v.induction === "supercharged" ? 72000 : 172000) + gauss(r, 1800), 0, 240000);
+  }
+
+  const packCurrentA = v.packKwh > 0
+    ? clamp((powerFraction * v.peakMotorTorqueNm * 0.55) * (state === "regen_braking" ? -0.4 : 1), -500, 1500)
+    : 0;
+
+  return {
+    speedKph,
+    accelPedal,
+    brakeBar,
+    gear,
+    rpm,
+    throttle,
+    load,
+    shiftBlend: shift.shiftBlend,
+    inShift: shift.inShift,
+    maf,
+    lambda,
+    fuelRateLph,
+    fuelLevelPct,
+    coolantC,
+    oilC,
+    oilPressureBar,
+    iatC,
+    egtC,
+    boostKpa,
+    wastegateDutyPct,
+    turboShaftRpm,
+    packCurrentA,
+  };
+};
+
 // Traction-limited launch slip: returns extra km/h on the driven axle
 // during the first portion of acceleration. Scales with torque/weight ratio.
 const launchSlipKph = (v: VehicleProfile, t: number, scenarioPeak: number): number => {
@@ -582,117 +879,13 @@ const buildIceFramesAll = (): FrameDef[] => [
       { name: "Checksum_C0", startBit: 56, length: 8, factor: 1, offset: 0, min: 0, max: 255, unit: "" },
     ],
     shape: (t, ctx) => {
-      const r = ctx.rand;
-      const v = ctx.vehicle;
-      const idleRpm = v.idleRpm;
-      const redline = v.redlineRpm;
-      const gearTopIdx = Math.max(1, v.gearCount);
-      let rpm = idleRpm;
-      let throttle = 0;
-      let load = 8;
-      switch (ctx.state) {
-        case "launch_0_60": {
-          // Use real gear-ratio-based RPM mapping
-          const accelPhase = Math.min(1, t / Math.max(0.5, v.zeroTo100Sec));
-          const speed = 100 * (1 - Math.exp(-3.0 * accelPhase));
-          const sel = selectGear(v, speed);
-          rpm = Math.min(redline, sel.rpm + Math.sin(t * 8) * 60);
-          throttle = t <= v.zeroTo100Sec ? 95 + (r() - 0.5) * 2 : 30;
-          load = t <= v.zeroTo100Sec ? 92 : 35;
-          break;
-        }
-        case "drag_pass": {
-          // Quarter mile: full launch, hard shifts, RPM sawtooth between redline and ~70%
-          const accelPhase = Math.min(1, t / Math.max(0.5, v.zeroTo100Sec * 2.4));
-          const speed = (v.topSpeedKph * 0.6) * (1 - Math.exp(-2.6 * accelPhase));
-          const sel = selectGear(v, speed);
-          rpm = Math.min(redline, sel.rpm + Math.sin(t * 12) * 80);
-          throttle = 100;
-          load = 98;
-          break;
-        }
-        case "burnout": {
-          // Stationary wheels-spinning: very high RPM cycling, throttle stabbing
-          const swing = (Math.sin(t * 3) + 1) / 2; // 0..1
-          rpm = idleRpm + swing * (redline - idleRpm) * 0.85 + (r() - 0.5) * 200;
-          throttle = 60 + swing * 35;
-          load = 70 + swing * 25;
-          break;
-        }
-        case "track_lap": {
-          // Lap pattern: ~25s lap, accelerate / brake / corner repeatedly
-          const lap = (t % 25) / 25;
-          const targetSpeed = lap < 0.4 ? lap * 2.5 * (v.topSpeedKph * 0.85)
-            : lap < 0.55 ? v.topSpeedKph * 0.85 - (lap - 0.4) * 6 * (v.topSpeedKph * 0.5)
-            : lap < 0.85 ? 80 + Math.sin(lap * 12) * 30
-            : (1 - lap) * 6 * (v.topSpeedKph * 0.5);
-          const sel = selectGear(v, Math.max(20, targetSpeed));
-          rpm = Math.min(redline, sel.rpm + Math.sin(t * 9) * 100);
-          throttle = lap < 0.4 ? 95 : lap < 0.55 ? 5 : 60 + Math.sin(lap * 8) * 30;
-          load = lap < 0.4 ? 95 : lap < 0.55 ? 8 : 60;
-          break;
-        }
-        case "top_speed_run": {
-          const vMax = Math.max(80, v.topSpeedKph);
-          const fracToHundred = Math.min(0.95, 100 / vMax);
-          const tau60 = Math.max(0.6, v.zeroTo100Sec / -Math.log(1 - fracToHundred));
-          const fracV = 1 - Math.exp(-t / tau60);
-          const speed = vMax * fracV;
-          const sel = selectGear(v, speed);
-          // Use real per-gear RPM with shift-induced sawtooth
-          rpm = Math.min(redline, sel.rpm + Math.sin(t * 4) * 120);
-          throttle = 100 - fracV * 3;
-          load = 95;
-          break;
-        }
-        case "idle_ac_on":
-          rpm = idleRpm + Math.sin(t * 2) * 25 + (r() - 0.5) * 15;
-          throttle = 0;
-          load = 12;
-          break;
-        case "regen_braking":
-          rpm = idleRpm + 800 - (t / ctx.duration) * 600;
-          throttle = 0;
-          load = 5;
-          break;
-        case "highway_cruise": {
-          const sel = selectGear(v, v.cruiseKph);
-          rpm = sel.rpm + Math.sin(t * 0.3) * 60 + (r() - 0.5) * 20;
-          throttle = 18 + Math.sin(t * 0.3) * 2;
-          load = 32;
-          break;
-        }
-        case "charging_20_80": // ICE doesn't charge — engine off
-          rpm = 0;
-          throttle = 0;
-          load = 0;
-          break;
-        case "city_stop_go": {
-          const phase = (t % 30) / 30;
-          rpm = phase < 0.4 ? idleRpm + phase * 6000 : phase < 0.7 ? 2400 : idleRpm + 200;
-          throttle = phase < 0.4 ? 50 : phase < 0.7 ? 18 : 0;
-          load = phase < 0.4 ? 70 : 25;
-          break;
-        }
-        default:
-          rpm = 2200;
-          throttle = 22;
-          load = 30;
-      }
-      // Realism: shift dip + ignition retard under load + jitter + quantization
-      // Estimate "is in shift" by detecting near-redline crossings via deterministic sin pulse
-      const shiftPulse = Math.max(0, Math.sin(t * 4.0 + Math.PI / 2)) > 0.985 ? 1 : 0;
-      const shiftDip = shiftPulse * (rpm * 0.32); // brief 32% RPM drop
-      const rpmFinal = Math.max(0, Math.min(redline + 50, rpm - shiftDip + gauss(r, 1.2)));
-      const loadClamped = Math.max(0, Math.min(100, load + gauss(r, 0.4)));
-      // Ignition advance: drops under heavy load (knock retard), rises at light load
-      const baseAdvance = 24 - (loadClamped / 100) * 22; // 24° at idle → ~2° at WOT
-      const advance = baseAdvance + gauss(r, 0.5);
-      const throttleJ = Math.max(0, Math.min(100, throttle + gauss(r, 0.3)));
+      const motion = computeVehicleMotion(t, ctx);
+      const baseAdvance = 24 - (motion.load / 100) * 22 - motion.shiftBlend * 5;
+      const advance = clamp(baseAdvance + gauss(ctx.rand, 0.5), -4, 36);
       return {
-        EngineRPM: quantize(rpmFinal, 4), // ECU typically reports in ~4 rpm steps
-        ThrottlePosition: quantize(throttleJ, 0.4),
-        EngineLoad: quantize(loadClamped, 0.4),
+        EngineRPM: quantize(motion.rpm, 4),
+        ThrottlePosition: quantize(motion.throttle, 0.4),
+        EngineLoad: quantize(motion.load, 0.4),
         IgnitionAdvance: quantize(advance, 0.5),
       };
     },
@@ -709,49 +902,12 @@ const buildIceFramesAll = (): FrameDef[] => [
       { name: "MAF", startBit: 40, length: 16, factor: 0.05, offset: 0, min: 0, max: 600, unit: "g/s" },
     ],
     shape: (t, ctx) => {
-      const v = ctx.vehicle;
-      const r = ctx.rand;
-      let rate = 1.5;
-      let lambda = 1.0;
-      let maf = 4;
-      switch (ctx.state) {
-        case "launch_0_60":
-        case "top_speed_run":
-          rate = 35 + (v.peakMotorTorqueNm / 100);
-          lambda = 0.86 + (r() - 0.5) * 0.02;
-          maf = 220 + Math.sin(t * 2) * 20;
-          break;
-        case "highway_cruise":
-          rate = 8 + Math.sin(t * 0.3);
-          lambda = 1.0;
-          maf = 25 + Math.sin(t * 0.3) * 2;
-          break;
-        case "idle_ac_on":
-          rate = 1.4;
-          lambda = 1.0;
-          maf = 3.5;
-          break;
-        case "regen_braking":
-          rate = 0.6;
-          lambda = 1.05;
-          maf = 1.5;
-          break;
-        case "charging_20_80":
-          rate = 0;
-          lambda = 1.0;
-          maf = 0;
-          break;
-        case "city_stop_go":
-          rate = 5 + Math.sin(t * 0.5) * 3;
-          lambda = 1.0;
-          maf = 12 + Math.sin(t * 0.5) * 6;
-          break;
-      }
+      const motion = computeVehicleMotion(t, ctx);
       return {
-        FuelRate: rate,
-        FuelLevel: Math.max(0, 72 - (t / ctx.duration) * 0.2),
-        AFR_Lambda: lambda,
-        MAF: maf,
+        FuelRate: quantize(motion.fuelRateLph, 0.05),
+        FuelLevel: quantize(motion.fuelLevelPct, 0.4),
+        AFR_Lambda: quantize(motion.lambda, 0.001),
+        MAF: quantize(motion.maf, 0.05),
       };
     },
   },
@@ -768,37 +924,13 @@ const buildIceFramesAll = (): FrameDef[] => [
       { name: "ExhaustGasTemp", startBit: 32, length: 16, factor: 1, offset: 0, min: 0, max: 1100, unit: "C" },
     ],
     shape: (t, ctx) => {
-      const r = ctx.rand;
-      const v = ctx.vehicle;
-      // Heat load by scenario (0..1)
-      const heat =
-        ctx.state === "drag_pass" || ctx.state === "burnout" ? 1.1 :
-        ctx.state === "track_lap" ? 0.9 :
-        ctx.state === "launch_0_60" || ctx.state === "top_speed_run" ? 1 :
-        ctx.state === "highway_cruise" ? 0.4 : 0.1;
-      // Diesel runs cooler EGT but higher coolant under load
-      const egtBase = v.powertrain === "diesel" ? 320 : 420;
-      const egtSpan = v.powertrain === "diesel" ? 380 : 480;
-      const k = Math.min(1, t / ctx.duration);
-      // Cumulative thermal rise — temps integrate over time, not just k of duration
-      const tempRiseRate = heat * 0.4; // °C per second under load
-      // Realism: 1st-order thermal integrator with cooldown after lift; oil lags coolant.
-      // loadFactor 0..1, scenario-specific.
-      const isHighLoad = ctx.state === "launch_0_60" || ctx.state === "top_speed_run" || ctx.state === "drag_pass" || ctx.state === "burnout";
-      const isMid = ctx.state === "track_lap" || ctx.state === "highway_cruise";
-      const loadFactor = isHighLoad ? 0.95 : isMid ? (ctx.state === "track_lap" ? 0.75 : 0.35) : 0.08;
-      const coolantRise = thermalIntegral(loadFactor, t, 28) * 28; // up to ~+28°C
-      const oilRise = thermalIntegral(loadFactor, t, 55) * 50; // slower, larger ceiling
-      const iatRise = thermalIntegral(loadFactor, t, 6) * (v.induction !== "na" ? 38 : 18);
-      const egtRise = thermalIntegral(loadFactor, t, 4) * egtSpan;
-      // Slight cooldown after burst — if we're not at peak load and t > 5s, decay
-      const cooldown = !isHighLoad && t > 5 ? Math.exp(-(t - 5) / 30) : 1;
+      const motion = computeVehicleMotion(t, ctx);
       return {
-        CoolantTemp: quantize(88 + coolantRise * cooldown + gauss(r, 0.15), 0.5),
-        OilTemp: quantize(95 + oilRise * cooldown + gauss(r, 0.2), 0.5),
-        OilPressure: quantize(3.2 + loadFactor * 1.4 + gauss(r, 0.05), 0.05),
-        IntakeAirTemp: quantize(32 + iatRise + gauss(r, 0.2), 0.5),
-        ExhaustGasTemp: quantize(egtBase + egtRise + gauss(r, 4), 1),
+        CoolantTemp: quantize(motion.coolantC, 1),
+        OilTemp: quantize(motion.oilC, 1),
+        OilPressure: quantize(motion.oilPressureBar, 0.05),
+        IntakeAirTemp: quantize(motion.iatC, 1),
+        ExhaustGasTemp: quantize(motion.egtC, 1),
       };
     },
   },
@@ -814,37 +946,11 @@ const buildIceFramesAll = (): FrameDef[] => [
       { name: "Counter_D8", startBit: 48, length: 8, factor: 1, offset: 0, min: 0, max: 255, unit: "" },
     ],
     shape: (t, ctx) => {
-      const v = ctx.vehicle;
-      const r = ctx.rand;
-      const boosted = v.induction === "turbo" || v.induction === "twin_turbo" || v.induction === "supercharged";
-      if (!boosted) {
-        return { BoostPressure: 0, WastegateDuty: 0, TurboShaftRpm: 0 };
-      }
-      const peakBoost = v.induction === "twin_turbo" ? 220 : v.induction === "supercharged" ? 130 : 180;
-      let load = 0;
-      switch (ctx.state) {
-        case "launch_0_60":
-        case "drag_pass":
-        case "top_speed_run":
-        case "burnout":
-          load = 0.95; break;
-        case "track_lap": {
-          const lap = (t % 25) / 25;
-          load = lap < 0.4 ? 0.9 : lap < 0.55 ? 0.05 : 0.5;
-          break;
-        }
-        case "highway_cruise": load = 0.15; break;
-        case "city_stop_go": load = 0.3 + Math.sin(t * 0.5) * 0.2; break;
-        default: load = 0.05;
-      }
-      // Lag: superchargers respond instantly, turbos lag 0.4s
-      const lag = v.induction === "supercharged" ? 0 : 0.4;
-      const effLoad = Math.max(0, Math.min(1, load * (1 - Math.exp(-Math.max(0.01, t) / Math.max(0.01, lag)))));
-      const boost = effLoad * peakBoost + (r() - 0.5) * 3;
+      const motion = computeVehicleMotion(t, ctx);
       return {
-        BoostPressure: boost,
-        WastegateDuty: load > 0.8 ? 80 + (r() - 0.5) * 5 : 30 * load,
-        TurboShaftRpm: effLoad * 180000,
+        BoostPressure: quantize(motion.boostKpa, 0.01),
+        WastegateDuty: quantize(motion.wastegateDutyPct, 0.5),
+        TurboShaftRpm: quantize(motion.turboShaftRpm, 10),
       };
     },
   },
@@ -866,10 +972,11 @@ const buildEvFrames = (): FrameDef[] => [
     shape: (t, ctx) => {
       const r = ctx.rand;
       const v = ctx.vehicle;
+      const motion = computeVehicleMotion(t, ctx);
       const packV = v.nominalPackVolts;
       const peakPackAmps = Math.max(120, Math.min(1500, v.peakMotorTorqueNm * 1.4));
       let soc = 70;
-      let current = 0;
+      let current = motion.packCurrentA;
       let temp = 28;
       switch (ctx.state) {
         case "charging_20_80": {
@@ -881,22 +988,18 @@ const buildEvFrames = (): FrameDef[] => [
         }
         case "launch_0_60":
           soc = 78 - (t / ctx.duration) * 0.4;
-          current = Math.min(peakPackAmps, 280 + v.peakMotorTorqueNm * 0.2) + (r() - 0.5) * 10;
           temp = 32 + (t / ctx.duration) * 3;
           break;
         case "top_speed_run":
           soc = 78 - (t / ctx.duration) * 1.5;
-          current = Math.min(peakPackAmps, peakPackAmps * 0.8) + (r() - 0.5) * 12;
           temp = 35 + (t / ctx.duration) * 8;
           break;
         case "regen_braking":
           soc = 65 + (t / ctx.duration) * 0.3;
-          current = -Math.min(peakPackAmps * 0.4, 100) + (r() - 0.5) * 6;
           temp = 30;
           break;
         case "highway_cruise":
           soc = 72 - (t / ctx.duration) * 0.6;
-          current = 60 + (r() - 0.5) * 4;
           temp = 32;
           break;
         case "idle_ac_on":
@@ -906,12 +1009,10 @@ const buildEvFrames = (): FrameDef[] => [
           break;
         case "city_stop_go":
           soc = 70 - (t / ctx.duration) * 0.4;
-          current = 30 + Math.sin(t) * 20;
           temp = 31;
           break;
         default:
           soc = 70;
-          current = 20;
       }
       return {
         BatterySOC: soc,
@@ -936,57 +1037,33 @@ const buildEvFrames = (): FrameDef[] => [
     shape: (t, ctx) => {
       const r = ctx.rand;
       const v = ctx.vehicle;
+      const motion = computeVehicleMotion(t, ctx);
       const peak = v.peakMotorTorqueNm;
-      const vMax = Math.max(80, v.topSpeedKph);
-      // Approx motor RPM tracks vehicle speed (single-speed reducer for most BEVs)
-      const speedToMotorRpm = 75; // rpm per km/h, fictional gearing
+      const speedToMotorRpm = v.rpmPerKphByGear[0] ?? 75;
       let req = 0;
-      let speed = 0;
       switch (ctx.state) {
-        case "launch_0_60": {
-          const inAccel = t <= v.zeroTo100Sec;
-          req = inAccel ? peak * 0.95 + (r() - 0.5) * 6 : peak * 0.25;
-          const accelPhase = Math.min(1, t / Math.max(0.5, v.zeroTo100Sec));
-          speed = 100 * (1 - Math.exp(-3.0 * accelPhase));
+        case "launch_0_60":
+        case "top_speed_run":
+        case "drag_pass":
+          req = peak * clamp(motion.accelPedal / 100, 0, 1);
           break;
-        }
-        case "top_speed_run": {
-          const fracToHundred = Math.min(0.95, 100 / vMax);
-          const tau60 = Math.max(0.6, v.zeroTo100Sec / -Math.log(1 - fracToHundred));
-          const fracV = 1 - Math.exp(-t / tau60);
-          req = peak * (1 - 0.55 * fracV) + (r() - 0.5) * 10;
-          speed = vMax * fracV;
-          break;
-        }
         case "regen_braking":
           req = -Math.min(peak * 0.35, 250) + (r() - 0.5) * 8;
-          speed = Math.max(0, 80 - (t / ctx.duration) * 75);
           break;
         case "highway_cruise":
-          req = Math.min(peak * 0.15, 120) + Math.sin(t * 0.3) * 8;
-          speed = v.cruiseKph;
-          break;
-        case "idle_ac_on":
-          req = 0;
-          speed = 0;
-          break;
-        case "charging_20_80":
-          req = 0;
-          speed = 0;
+          req = Math.min(peak * 0.18, 140) + Math.sin(t * 0.3) * 8;
           break;
         case "city_stop_go":
           req = Math.min(peak * 0.25, 200) + Math.sin(t * 0.5) * 60;
-          speed = 25 + Math.sin(t * 0.5) * 15;
           break;
         default:
-          req = 50;
-          speed = 40;
+          req = 0;
       }
       req = Math.max(-peak, Math.min(peak, req));
       return {
         TorqueRequest: req,
         TorqueActual: req * 0.97 + (r() - 0.5) * 4,
-        MotorRPM: Math.max(0, speed * speedToMotorRpm),
+        MotorRPM: Math.max(0, motion.speedKph * speedToMotorRpm),
         MotorTemp: 45 + (t / ctx.duration) * 8,
       };
     },
@@ -1030,130 +1107,12 @@ const buildCommonFrames = (): FrameDef[] => [
       { name: "Checksum_100", startBit: 56, length: 8, factor: 1, offset: 0, min: 0, max: 255, unit: "" },
     ],
     shape: (t, ctx) => {
-      const d = ctx.duration;
-      const r = ctx.rand;
-      const v = ctx.vehicle;
-      let speed = 0;
-      let pedal = 0;
-      let brake = 0;
-      let gear = 1;
-      // Vehicle-aware acceleration constants
-      // tau60 ~ time constant fitted so 0->100 km/h matches v.zeroTo100Sec for an exponential approach to vMax.
-      // For exponential v(t)=Vmax*(1-exp(-t/tau)): t100 = -tau*ln(1-100/Vmax)
-      const vMax = Math.max(80, v.topSpeedKph);
-      const fracToHundred = Math.min(0.95, 100 / vMax);
-      const tau60 = Math.max(0.6, v.zeroTo100Sec / -Math.log(1 - fracToHundred));
-      const gearTopIdx = Math.max(1, v.gearCount);
-      switch (ctx.state) {
-        case "launch_0_60": {
-          // Accurate 0->100 km/h profile per spec, then ease off accelerator
-          const accelPhase = Math.min(1, t / Math.max(0.5, v.zeroTo100Sec));
-          speed = 100 * (1 - Math.exp(-3.0 * accelPhase));
-          // small drift after hitting ~100
-          if (t > v.zeroTo100Sec) {
-            const extra = Math.min(20, (t - v.zeroTo100Sec) * 4);
-            speed = Math.min(vMax, 100 + extra);
-          }
-          pedal = t < v.zeroTo100Sec ? 95 + (r() - 0.5) * 2 : 35 + (r() - 0.5) * 4;
-          brake = 0;
-          gear = Math.min(gearTopIdx, 1 + Math.floor((speed / 110) * Math.min(6, gearTopIdx)));
-          break;
-        }
-        case "top_speed_run": {
-          // Exponential approach to manufacturer-style top speed
-          speed = vMax * (1 - Math.exp(-t / tau60));
-          pedal = 100 - Math.max(0, (speed / vMax) * 4) + (r() - 0.5) * 0.6;
-          brake = 0;
-          gear = Math.min(gearTopIdx, 1 + Math.min(gearTopIdx - 1, Math.floor((speed / vMax) * gearTopIdx)));
-          break;
-        }
-        case "idle_ac_on":
-          speed = 0;
-          pedal = 0;
-          brake = 1 + (r() - 0.5) * 0.4;
-          gear = 0;
-          break;
-        case "regen_braking": {
-          if (!v.hasRegen) {
-            // ICE coasts/brakes — use service brake harder, no negative torque
-            const k = Math.min(1, t / d);
-            speed = Math.max(0, 80 - k * 75);
-            pedal = 0;
-            brake = 18 + (r() - 0.5) * 2;
-            gear = Math.max(2, Math.min(gearTopIdx, gearTopIdx - 2));
-          } else {
-            const k = Math.min(1, t / d);
-            speed = Math.max(0, 80 - k * 75);
-            pedal = 0;
-            brake = 5 + (r() - 0.5);
-            gear = Math.max(1, Math.min(gearTopIdx, Math.floor(gearTopIdx * 0.6)));
-          }
-          break;
-        }
-        case "highway_cruise":
-          speed = v.cruiseKph + Math.sin(t * 0.4) * 1.2 + (r() - 0.5) * 0.6;
-          pedal = 18 + Math.sin(t * 0.3) * 2 + (r() - 0.5);
-          brake = 0;
-          gear = gearTopIdx;
-          break;
-        case "charging_20_80":
-          speed = 0;
-          pedal = 0;
-          brake = 0;
-          gear = 0;
-          break;
-        case "city_stop_go": {
-          const phase = (t % 30) / 30;
-          if (phase < 0.4) speed = phase * 2.5 * 35;
-          else if (phase < 0.7) speed = 35 + Math.sin(phase * 10) * 3;
-          else speed = Math.max(0, 35 - (phase - 0.7) * 116);
-          pedal = speed > 5 ? 18 + (r() - 0.5) * 4 : 0;
-          brake = speed < 5 && phase > 0.7 ? 8 : 0;
-          gear = Math.min(gearTopIdx, speed > 25 ? 3 : speed > 10 ? 2 : 1);
-          break;
-        }
-        case "burnout":
-          // Stationary, launch-control like — driven wheels handled in VEH_Wheels via slip
-          speed = 0 + (r() - 0.5) * 0.4;
-          pedal = 60 + (Math.sin(t * 3) + 1) * 18;
-          brake = 18 + (r() - 0.5) * 2; // brake torque holding car
-          gear = 1;
-          break;
-        case "drag_pass": {
-          const accelPhase = Math.min(1, t / Math.max(0.5, v.zeroTo100Sec * 2.4));
-          speed = (vMax * 0.6) * (1 - Math.exp(-2.6 * accelPhase));
-          pedal = 100;
-          brake = 0;
-          gear = Math.min(gearTopIdx, 1 + Math.floor((speed / vMax) * gearTopIdx));
-          break;
-        }
-        case "track_lap": {
-          const lap = (t % 25) / 25;
-          if (lap < 0.4) speed = lap * 2.5 * (vMax * 0.85);
-          else if (lap < 0.55) speed = vMax * 0.85 - (lap - 0.4) * 6 * (vMax * 0.5);
-          else if (lap < 0.85) speed = 80 + Math.sin(lap * 12) * 30;
-          else speed = Math.max(0, (1 - lap) * 6 * (vMax * 0.5));
-          pedal = lap < 0.4 ? 95 : lap < 0.55 ? 5 : 60 + Math.sin(lap * 8) * 30;
-          brake = lap >= 0.4 && lap < 0.55 ? 60 + (r() - 0.5) * 6 : 0;
-          gear = Math.min(gearTopIdx, 1 + Math.floor((speed / vMax) * gearTopIdx));
-          break;
-        }
-        default:
-          speed = 40 + Math.sin(t * 0.5) * 10;
-          pedal = 20;
-          brake = 0;
-          gear = Math.min(gearTopIdx, 3);
-      }
-      // Apply drag-aware top-speed squeeze and small pedal/brake jitter + quantization
-      const dragSqueeze = speed > vMax * 0.6 ? 1 - 0.12 * Math.pow(speed / vMax, 3) : 1;
-      const speedFinal = Math.max(0, speed * dragSqueeze + gauss(r, 0.05));
-      const pedalFinal = Math.max(0, Math.min(100, pedal + gauss(r, 0.25)));
-      const brakeFinal = Math.max(0, brake + gauss(r, 0.08));
+      const motion = computeVehicleMotion(t, ctx);
       return {
-        VehicleSpeed: quantize(speedFinal, 0.01),
-        AcceleratorPedal: quantize(pedalFinal, 0.4),
-        BrakePressure: quantize(brakeFinal, 0.1),
-        GearPosition: gear,
+        VehicleSpeed: quantize(motion.speedKph, 0.01),
+        AcceleratorPedal: quantize(motion.accelPedal, 0.4),
+        BrakePressure: quantize(motion.brakeBar, 0.1),
+        GearPosition: motion.gear,
       };
     },
   },
@@ -1171,58 +1130,17 @@ const buildCommonFrames = (): FrameDef[] => [
     shape: (t, ctx) => {
       const r = ctx.rand;
       const v = ctx.vehicle;
-      const vMax = Math.max(80, v.topSpeedKph);
-      const fracToHundred = Math.min(0.95, 100 / vMax);
-      const tau60 = Math.max(0.6, v.zeroTo100Sec / -Math.log(1 - fracToHundred));
-      // mirror VEH_Speed
-      let base = 0;
-      switch (ctx.state) {
-        case "idle_ac_on":
-        case "charging_20_80":
-          base = 0; break;
-        case "highway_cruise":
-          base = v.cruiseKph; break;
-        case "launch_0_60":
-          base = 100 * (1 - Math.exp(-3.0 * Math.min(1, t / Math.max(0.5, v.zeroTo100Sec)))) +
-            (t > v.zeroTo100Sec ? Math.min(20, (t - v.zeroTo100Sec) * 4) : 0);
-          break;
-        case "top_speed_run":
-          base = vMax * (1 - Math.exp(-t / tau60)); break;
-        case "regen_braking":
-          base = Math.max(0, 80 - (t / ctx.duration) * 75); break;
-        case "burnout":
-          base = 0; break;
-        case "drag_pass": {
-          const accelPhase = Math.min(1, t / Math.max(0.5, v.zeroTo100Sec * 2.4));
-          base = (vMax * 0.6) * (1 - Math.exp(-2.6 * accelPhase));
-          break;
-        }
-        case "track_lap": {
-          const lap = (t % 25) / 25;
-          if (lap < 0.4) base = lap * 2.5 * (vMax * 0.85);
-          else if (lap < 0.55) base = vMax * 0.85 - (lap - 0.4) * 6 * (vMax * 0.5);
-          else if (lap < 0.85) base = 80 + Math.sin(lap * 12) * 30;
-          else base = Math.max(0, (1 - lap) * 6 * (vMax * 0.5));
-          break;
-        }
-        default:
-          base = 30 + Math.sin(t * 0.5) * 10;
-      }
-      // Per-wheel small jitter; left/right divergence under load
+      const motion = computeVehicleMotion(t, ctx);
+      const base = motion.speedKph;
       const driveAxle = v.drivetrain;
       let slipDriven = 0;
       if (ctx.state === "burnout") slipDriven = 80 + Math.sin(t * 5) * 20;
-      else if (ctx.state === "launch_0_60" && t < v.zeroTo100Sec * 0.5)
-        slipDriven = Math.max(0, (10 - base * 0.15));
-      else if (ctx.state === "drag_pass" && t < v.zeroTo100Sec * 0.6)
-        slipDriven = Math.max(0, (8 - base * 0.1));
-      // Traction-control oscillation at ~12-15 Hz when slip > 0
+      else if (ctx.state === "launch_0_60" && t < v.zeroTo100Sec * 0.5) slipDriven = launchSlipKph(v, t, 2.2);
+      else if (ctx.state === "drag_pass" && t < v.zeroTo100Sec * 0.6) slipDriven = launchSlipKph(v, t, 1.8);
       const tc = slipDriven > 0.5 ? wobble(t, 13.5, slipDriven * 0.18) : 0;
-      // High-speed micro-slip on driven axle
-      const microSlip = base > vMax * 0.7 ? wobble(t, 7, 0.4) : 0;
-      // Left/right divergence (camber/road crown bias)
+      const microSlip = base > v.topSpeedKph * 0.7 ? wobble(t, 7, 0.35) : 0;
       const lrBias = base * 0.0015;
-      const j = (sigma = 0.15) => gauss(r, sigma);
+      const j = (sigma = 0.12) => gauss(r, sigma);
       const drivenAdd = slipDriven + tc + microSlip;
       const fl = base + j() - lrBias + (driveAxle === "fwd" || driveAxle === "awd" ? drivenAdd * 0.5 : 0);
       const fr = base + j() + lrBias + (driveAxle === "fwd" || driveAxle === "awd" ? drivenAdd * 0.5 : 0);
