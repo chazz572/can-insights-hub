@@ -232,28 +232,39 @@ const buildFrames = (): FrameDef[] => [
     shape: (t, ctx) => {
       const d = ctx.duration;
       const r = ctx.rand;
+      const v = ctx.vehicle;
       let speed = 0;
       let pedal = 0;
       let brake = 0;
       let gear = 1;
+      // Vehicle-aware acceleration constants
+      // tau60 ~ time constant fitted so 0->100 km/h matches v.zeroTo100Sec for an exponential approach to vMax.
+      // For exponential v(t)=Vmax*(1-exp(-t/tau)): t100 = -tau*ln(1-100/Vmax)
+      const vMax = Math.max(80, v.topSpeedKph);
+      const fracToHundred = Math.min(0.95, 100 / vMax);
+      const tau60 = Math.max(0.6, v.zeroTo100Sec / -Math.log(1 - fracToHundred));
+      const gearTopIdx = Math.max(1, v.gearCount);
       switch (ctx.state) {
         case "launch_0_60": {
-          // 0 -> ~97 km/h over duration
-          const k = Math.min(1, t / Math.max(1, d * 0.85));
-          speed = 97 * (1 - Math.pow(1 - k, 1.6));
-          pedal = 95 - k * 10 + (r() - 0.5) * 2;
+          // Accurate 0->100 km/h profile per spec, then ease off accelerator
+          const accelPhase = Math.min(1, t / Math.max(0.5, v.zeroTo100Sec));
+          speed = 100 * (1 - Math.exp(-3.0 * accelPhase));
+          // small drift after hitting ~100
+          if (t > v.zeroTo100Sec) {
+            const extra = Math.min(20, (t - v.zeroTo100Sec) * 4);
+            speed = Math.min(vMax, 100 + extra);
+          }
+          pedal = t < v.zeroTo100Sec ? 95 + (r() - 0.5) * 2 : 35 + (r() - 0.5) * 4;
           brake = 0;
-          gear = 1 + Math.floor(k * 5);
+          gear = Math.min(gearTopIdx, 1 + Math.floor((speed / 110) * Math.min(6, gearTopIdx)));
           break;
         }
         case "top_speed_run": {
-          // 0 -> topSpeed asymptotic; pedal pinned, gears step up across run
-          const vMax = ctx.topSpeedKph;
-          const tau = Math.max(2, d * 0.55);
-          speed = vMax * (1 - Math.exp(-t / tau));
+          // Exponential approach to manufacturer-style top speed
+          speed = vMax * (1 - Math.exp(-t / tau60));
           pedal = 100 - Math.max(0, (speed / vMax) * 4) + (r() - 0.5) * 0.6;
           brake = 0;
-          gear = 1 + Math.min(7, Math.floor((speed / vMax) * 7));
+          gear = Math.min(gearTopIdx, 1 + Math.min(gearTopIdx - 1, Math.floor((speed / vMax) * gearTopIdx)));
           break;
         }
         case "idle_ac_on":
@@ -263,18 +274,27 @@ const buildFrames = (): FrameDef[] => [
           gear = 0;
           break;
         case "regen_braking": {
-          const k = Math.min(1, t / d);
-          speed = Math.max(0, 80 - k * 75);
-          pedal = 0;
-          brake = 5 + (r() - 0.5);
-          gear = 4;
+          if (!v.hasRegen) {
+            // ICE coasts/brakes — use service brake harder, no negative torque
+            const k = Math.min(1, t / d);
+            speed = Math.max(0, 80 - k * 75);
+            pedal = 0;
+            brake = 18 + (r() - 0.5) * 2;
+            gear = Math.max(2, Math.min(gearTopIdx, gearTopIdx - 2));
+          } else {
+            const k = Math.min(1, t / d);
+            speed = Math.max(0, 80 - k * 75);
+            pedal = 0;
+            brake = 5 + (r() - 0.5);
+            gear = Math.max(1, Math.min(gearTopIdx, Math.floor(gearTopIdx * 0.6)));
+          }
           break;
         }
         case "highway_cruise":
-          speed = 112 + Math.sin(t * 0.4) * 1.2 + (r() - 0.5) * 0.6;
-          pedal = 22 + Math.sin(t * 0.3) * 2 + (r() - 0.5);
+          speed = v.cruiseKph + Math.sin(t * 0.4) * 1.2 + (r() - 0.5) * 0.6;
+          pedal = 18 + Math.sin(t * 0.3) * 2 + (r() - 0.5);
           brake = 0;
-          gear = 6;
+          gear = gearTopIdx;
           break;
         case "charging_20_80":
           speed = 0;
@@ -289,14 +309,14 @@ const buildFrames = (): FrameDef[] => [
           else speed = Math.max(0, 35 - (phase - 0.7) * 116);
           pedal = speed > 5 ? 18 + (r() - 0.5) * 4 : 0;
           brake = speed < 5 && phase > 0.7 ? 8 : 0;
-          gear = speed > 25 ? 3 : speed > 10 ? 2 : 1;
+          gear = Math.min(gearTopIdx, speed > 25 ? 3 : speed > 10 ? 2 : 1);
           break;
         }
         default:
           speed = 40 + Math.sin(t * 0.5) * 10;
           pedal = 20;
           brake = 0;
-          gear = 3;
+          gear = Math.min(gearTopIdx, 3);
       }
       return { VehicleSpeed: speed, AcceleratorPedal: pedal, BrakePressure: brake, GearPosition: gear };
     },
