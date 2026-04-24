@@ -470,24 +470,55 @@ const buildVehicleProfile = (desc: string, override?: VehicleSpecOverride): Vehi
   };
 };
 
-// Pick the best gear given current speed: highest gear whose RPM is still above idle*1.4
-// and below redline*0.95.
-const selectGear = (v: VehicleProfile, speedKph: number): { gear: number; rpm: number } => {
+// Pick the best gear given current speed and load context.
+// RPM-SPEED-GEAR CONSISTENCY RULE:
+//   - For ICE: enforce RPM ≥ 3000 when speedKph > 180 (production cars downshift to stay
+//     in the power band at sustained high speed). The only exception is when ALL of the
+//     vehicle's available gears physically can't reach 3000 rpm at that speed (ultra-tall
+//     gearing) — then we use the lowest available gear that stays under redline.
+//   - Under high load (load >= 0.7) at any speed, prefer a gear that keeps RPM ≥
+//     idle * 2.5 so the engine is in its torque band, not lugging.
+const selectGear = (
+  v: VehicleProfile,
+  speedKph: number,
+  loadHint: number = 0.2,
+): { gear: number; rpm: number } => {
+  const isBev = v.powertrain === "bev";
+  const minRpm = isBev ? 0 : v.idleRpm;
   if (v.rpmPerKphByGear.length <= 1) {
-    const minRpm = v.powertrain === "bev" ? 0 : v.idleRpm;
     const rpm = Math.max(minRpm, v.rpmPerKphByGear[0] * speedKph);
     return { gear: 1, rpm: Math.min(v.redlineRpm, rpm) };
   }
+  // Per-rule minimum RPM at this speed
+  let perRuleMinRpm = isBev ? 0 : v.idleRpm * 1.6;
+  if (!isBev) {
+    if (speedKph > 180) perRuleMinRpm = Math.max(perRuleMinRpm, 3000);
+    if (loadHint >= 0.7) perRuleMinRpm = Math.max(perRuleMinRpm, v.idleRpm * 2.5);
+    if (loadHint >= 0.9) perRuleMinRpm = Math.max(perRuleMinRpm, v.redlineRpm * 0.55);
+  }
+  // Pass 1: highest gear satisfying minRpm constraint AND under redline
   for (let g = v.rpmPerKphByGear.length; g >= 1; g--) {
     const rpm = v.rpmPerKphByGear[g - 1] * speedKph;
-    const minCruiseRpm = v.powertrain === "bev" ? 0 : v.idleRpm * 1.6;
-    const minRpm = v.powertrain === "bev" ? 0 : v.idleRpm;
-    if (rpm <= v.redlineRpm * 0.95 && (g === 1 || rpm >= minCruiseRpm)) {
+    if (rpm <= v.redlineRpm * 0.95 && (g === 1 || rpm >= perRuleMinRpm)) {
       return { gear: g, rpm: Math.max(minRpm, rpm) };
     }
   }
-  const minRpm = v.powertrain === "bev" ? 0 : v.idleRpm;
-  return { gear: 1, rpm: Math.max(minRpm, v.rpmPerKphByGear[0] * speedKph) };
+  // Pass 2 (relaxed): no gear satisfies the rule — pick the gear giving RPM closest to
+  // the target (keeps physics consistent even on ultra-tall hypercar gearing).
+  let bestGear = 1;
+  let bestRpm = v.rpmPerKphByGear[0] * speedKph;
+  let bestDist = Math.abs(bestRpm - perRuleMinRpm);
+  for (let g = 1; g <= v.rpmPerKphByGear.length; g++) {
+    const rpm = v.rpmPerKphByGear[g - 1] * speedKph;
+    if (rpm > v.redlineRpm * 0.95) continue;
+    const dist = Math.abs(rpm - perRuleMinRpm);
+    if (dist < bestDist) {
+      bestDist = dist;
+      bestGear = g;
+      bestRpm = rpm;
+    }
+  }
+  return { gear: bestGear, rpm: Math.max(minRpm, bestRpm) };
 };
 
 // ============================================================================
@@ -541,9 +572,10 @@ const computeShiftEvent = (
   v: VehicleProfile,
   speedKph: number,
   prevSpeedKph: number,
+  loadHint: number = 0.2,
 ): ShiftInfo => {
-  const sel = selectGear(v, speedKph);
-  const prev = selectGear(v, prevSpeedKph);
+  const sel = selectGear(v, speedKph, loadHint);
+  const prev = selectGear(v, prevSpeedKph, loadHint);
   if (sel.gear !== prev.gear && sel.gear > prev.gear) {
     // Right at a shift boundary — emit a brief blend
     return { gear: sel.gear, rpm: sel.rpm, shiftBlend: 1, inShift: true };
@@ -651,7 +683,16 @@ const computeVehicleMotion = (t: number, ctx: ShapeCtx): MotionSnapshot => {
   const nextSpeed = scenarioSpeedKph(state, Math.min(duration, t + sampleDt), duration, v);
   const speedKph = Math.max(0, rawSpeed + gauss(r, 0.05));
   const accelMps2 = ((nextSpeed - prevSpeed) / (2 * sampleDt)) / 3.6;
-  const shift = computeShiftEvent(v, Math.max(0, rawSpeed), Math.max(0, prevSpeed));
+  // Load hint per scenario — drives gear selection so the engine stays in the
+  // power band on top-speed runs and launches (RPM-SPEED-GEAR CONSISTENCY RULE).
+  const loadHint =
+    state === "top_speed_run" || state === "drag_pass" || state === "launch_0_60" ? 0.95 :
+    state === "track_lap" ? 0.8 :
+    state === "burnout" ? 0.9 :
+    state === "highway_cruise" ? 0.25 :
+    state === "city_stop_go" ? 0.4 :
+    0.3;
+  const shift = computeShiftEvent(v, Math.max(0, rawSpeed), Math.max(0, prevSpeed), loadHint);
   const boosted = v.induction === "turbo" || v.induction === "twin_turbo" || v.induction === "supercharged";
   const tankLiters = inferTankSizeLiters(v);
   const fullLoadFuelLph = litersPer100KmAtFullLoad(v);
@@ -710,16 +751,16 @@ const computeVehicleMotion = (t: number, ctx: ShapeCtx): MotionSnapshot => {
       throttle = 15 + Math.sin(t * 0.3) * 3;
       brakeBar = 0;
       load = 26 + Math.max(0, speedKph - v.cruiseKph) * 0.06;
-      gear = selectGear(v, speedKph).gear;
-      rpm = selectGear(v, speedKph).rpm;
+      gear = selectGear(v, speedKph, loadHint).gear;
+      rpm = selectGear(v, speedKph, loadHint).rpm;
       break;
     case "regen_braking":
       accelPedal = 0;
       throttle = 0;
       brakeBar = v.hasRegen ? 5 : 18;
       load = 4;
-      gear = Math.max(1, Math.min(v.gearCount, selectGear(v, Math.max(speedKph, 20)).gear));
-      rpm = speedKph > 4 ? selectGear(v, Math.max(speedKph, 8)).rpm : v.idleRpm;
+      gear = Math.max(1, Math.min(v.gearCount, selectGear(v, Math.max(speedKph, 20), loadHint).gear));
+      rpm = speedKph > 4 ? selectGear(v, Math.max(speedKph, 8), loadHint).rpm : v.idleRpm;
       break;
     case "idle_ac_on":
       accelPedal = 0;
@@ -744,7 +785,7 @@ const computeVehicleMotion = (t: number, ctx: ShapeCtx): MotionSnapshot => {
       brakeBar = speedKph < 5 && phase > 0.7 ? 8 : 0;
       load = speedKph > 5 ? 18 + Math.max(0, accelMps2) * 18 : 8;
       gear = Math.min(v.gearCount, speedKph > 25 ? 3 : speedKph > 10 ? 2 : 1);
-      rpm = selectGear(v, Math.max(speedKph, 8)).rpm;
+      rpm = selectGear(v, Math.max(speedKph, 8), loadHint).rpm;
       break;
     }
     default:
@@ -753,11 +794,11 @@ const computeVehicleMotion = (t: number, ctx: ShapeCtx): MotionSnapshot => {
       brakeBar = 0;
       load = 26;
       gear = Math.min(v.gearCount, 3);
-      rpm = selectGear(v, Math.max(speedKph, 20)).rpm;
+      rpm = selectGear(v, Math.max(speedKph, 20), loadHint).rpm;
   }
 
   if (state !== "burnout" && state !== "idle_ac_on" && state !== "charging_20_80") {
-    const selected = selectGear(v, Math.max(speedKph, speedKph > 0 ? 4 : 0));
+    const selected = selectGear(v, Math.max(speedKph, speedKph > 0 ? 4 : 0), loadHint);
     gear = speedKph < 0.5 && v.powertrain !== "bev" ? 1 : selected.gear;
     rpm = selected.rpm;
   }
