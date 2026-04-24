@@ -738,7 +738,7 @@ const Results = () => {
           </AnalysisCard>
 
           <AnalysisCard title="Mechanic Mode" description="Simplified diagnostic summary for service workflows." icon={<Wrench className="size-5" />}>
-            <MechanicSummary data={diagnostics.mechanic_summary ?? summaryText} />
+            <MechanicSummary data={diagnostics.mechanic_summary ?? summaryText} unit={speedUnit} />
           </AnalysisCard>
 
           <AnalysisCard title="AI Diagnostic Copilot" description="Plain-English mechanic, reverse-engineering, repair, signal naming, and byte decoding guidance." icon={<Sparkles className="size-5" />}>
