@@ -1356,7 +1356,10 @@ export const generateSample = (req: SampleRequest): SampleOutput => {
 
 export const drivingStateOptions: Array<{ value: DrivingState; label: string }> = [
   { value: "launch_0_60", label: "0–60 launch" },
+  { value: "drag_pass", label: "Drag pass (1/4 mile)" },
   { value: "top_speed_run", label: "Top speed run (0 → Vmax)" },
+  { value: "burnout", label: "Burnout (stationary, wheels spinning)" },
+  { value: "track_lap", label: "Track lap (mixed)" },
   { value: "idle_ac_on", label: "Idle with HVAC on" },
   { value: "regen_braking", label: "Regen braking" },
   { value: "highway_cruise", label: "Highway cruise (70 mph)" },
