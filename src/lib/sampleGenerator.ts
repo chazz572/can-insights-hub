@@ -357,25 +357,87 @@ const buildVehicleProfile = (desc: string): VehicleProfile => {
   else if (has(/(motorcycle|bike|hayabusa|ninja|panigale)/)) curbWeightKg = 220;
 
   // Cruise speed bias (km/h)
-  const cruiseKph = Math.min(135, Math.max(95, Math.round(topSpeedKph * 0.45)));
+  let cruiseKph = Math.min(135, Math.max(95, Math.round(topSpeedKph * 0.45)));
 
   // HVAC idle current (amps on 12V or HV bus depending — kept as simple metric)
   const hvacIdleAmps = powertrain === "bev" ? 14 : 6;
+
+  // Heuristic defaults for new fields
+  let redlineRpm = topSpeedKph >= 320 ? 8500 : topSpeedKph >= 280 ? 8000 : topSpeedKph >= 240 ? 7200 : 6500;
+  if (powertrain === "diesel") redlineRpm = 4500;
+  if (powertrain === "bev") redlineRpm = 18000;
+  let idleRpm = powertrain === "diesel" ? 700 : 800;
+  let peakPowerHp = Math.round(peakMotorTorqueNm * 0.6);
+  let induction: VehicleProfile["induction"] = powertrain === "bev" ? "electric" : has(/(turbo|tt|biturbo)/) ? "turbo" : has(/(supercharg|whipple|kompressor)/) ? "supercharged" : "na";
+  let drivetrain: VehicleProfile["drivetrain"] = has(/\bawd\b|quattro|4matic|x-?drive|sh-?awd|all[- ]wheel/) ? "awd" : has(/\bfwd\b|front[- ]wheel/) ? "fwd" : "rwd";
+  let tireRadiusM = has(/(truck|f-?150|silverado|ram|tundra|raptor|cybertruck)/) ? 0.412 : has(/(suv|escalade|tahoe|range rover)/) ? 0.382 : has(/(econ|civic|corolla|fit|yaris)/) ? 0.317 : 0.342;
+  let sixtyTo130Sec = Math.max(2.5, zeroTo100Sec * 2.6);
+  let gearRatios: number[] | undefined;
+  let finalDrive: number | undefined;
+
+  // Apply named-vehicle override (real-world specs)
+  const named = matchNamedSpec(desc);
+  if (named) {
+    if (named.powertrain) powertrain = named.powertrain;
+    if (named.topSpeedKph) topSpeedKph = named.topSpeedKph;
+    if (named.zeroTo100Sec) zeroTo100Sec = named.zeroTo100Sec;
+    if (named.sixtyTo130Sec) sixtyTo130Sec = named.sixtyTo130Sec;
+    if (named.redlineRpm) redlineRpm = named.redlineRpm;
+    if (named.idleRpm) idleRpm = named.idleRpm;
+    if (named.gearCount) gearCount = named.gearCount;
+    if (named.gearRatios) gearRatios = named.gearRatios;
+    if (named.finalDrive) finalDrive = named.finalDrive;
+    if (named.packKwh !== undefined) packKwh = named.packKwh;
+    if (named.nominalPackVolts) nominalPackVolts = named.nominalPackVolts;
+    if (named.peakPowerHp) peakPowerHp = named.peakPowerHp;
+    if (named.peakMotorTorqueNm) peakMotorTorqueNm = named.peakMotorTorqueNm;
+    if (named.curbWeightKg) curbWeightKg = named.curbWeightKg;
+    if (named.induction) induction = named.induction;
+    if (named.drivetrain) drivetrain = named.drivetrain;
+    if (named.tireRadiusM) tireRadiusM = named.tireRadiusM;
+    cruiseKph = Math.min(135, Math.max(95, Math.round(topSpeedKph * 0.45)));
+  }
+
+  const rpmPerKphByGear = computeRpmPerKphTable(gearRatios, finalDrive, tireRadiusM, gearCount, redlineRpm, topSpeedKph);
 
   return {
     description: desc,
     powertrain,
     topSpeedKph,
     zeroTo100Sec,
+    sixtyTo130Sec,
+    redlineRpm,
+    idleRpm,
     gearCount,
+    rpmPerKphByGear,
     packKwh,
     nominalPackVolts,
+    peakPowerHp,
     peakMotorTorqueNm,
     curbWeightKg,
     cruiseKph,
     hvacIdleAmps,
     hasRegen: powertrain === "bev" || powertrain === "phev" || powertrain === "hybrid",
+    induction,
+    drivetrain,
+    tireRadiusM,
   };
+};
+
+// Pick the best gear given current speed: highest gear whose RPM is still above idle*1.4
+// and below redline*0.95.
+const selectGear = (v: VehicleProfile, speedKph: number): { gear: number; rpm: number } => {
+  if (v.rpmPerKphByGear.length <= 1) {
+    const rpm = Math.max(v.idleRpm, v.rpmPerKphByGear[0] * speedKph);
+    return { gear: 1, rpm: Math.min(v.redlineRpm, rpm) };
+  }
+  for (let g = v.rpmPerKphByGear.length; g >= 1; g--) {
+    const rpm = v.rpmPerKphByGear[g - 1] * speedKph;
+    if (rpm <= v.redlineRpm * 0.95 && (g === 1 || rpm >= v.idleRpm * 1.6)) {
+      return { gear: g, rpm: Math.max(v.idleRpm, rpm) };
+    }
+  }
+  return { gear: 1, rpm: Math.max(v.idleRpm, v.rpmPerKphByGear[0] * speedKph) };
 };
 
 // Backwards-compatible helper
