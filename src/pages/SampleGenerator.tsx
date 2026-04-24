@@ -13,6 +13,7 @@ import {
   type DrivingState,
   type SampleOutput,
 } from "@/lib/sampleGenerator";
+import { fetchVehicleSpecs } from "@/lib/vehicleSpecs";
 import { convertSpeedsInText, useSpeedUnit } from "@/lib/units";
 
 const slug = (s: string) =>
