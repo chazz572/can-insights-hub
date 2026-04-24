@@ -14,12 +14,15 @@ import { analyzeFile, AnalysisResult, type JsonRecord } from "@/lib/canApi";
 import { buildPartialDbcDraft, generatePartialDbcCandidates, inferVehicleIdentification } from "@/lib/intelligence";
 import { requestAiInsight, saveAnalysisSnapshot, type AiInsightKind } from "@/lib/saasApi";
 import { cn } from "@/lib/utils";
+import { convertSpeedsInText, type SpeedUnit, useSpeedUnit } from "@/lib/units";
 
 const renderText = (value: unknown) => {
   if (value === null || value === undefined || value === "") return "No summary returned.";
   if (typeof value === "string" || typeof value === "number" || typeof value === "boolean") return String(value);
   return JSON.stringify(value, null, 2);
 };
+
+const renderTextU = (value: unknown, unit: SpeedUnit) => convertSpeedsInText(renderText(value), unit);
 
 const renderList = (value: unknown) => {
   const items = Array.isArray(value) ? value : value === undefined || value === null ? [] : [value];
@@ -184,10 +187,10 @@ const SystemsBadges = ({ data }: { data: unknown }) => {
   return <div className="flex flex-wrap gap-2">{rows.map((row, index) => <span key={index} className="max-w-full break-words rounded-lg border border-glass-border bg-secondary px-3 py-2 text-sm font-semibold leading-5 text-secondary-foreground shadow-glow">{renderText(row.category ?? row.key ?? row.system ?? row.value)}</span>)}</div>;
 };
 
-const MechanicSummary = ({ data }: { data: unknown }) => (
+const MechanicSummary = ({ data, unit = "kph" }: { data: unknown; unit?: SpeedUnit }) => (
   <div className="min-w-0 max-w-full overflow-hidden rounded-lg border border-primary/30 bg-gradient-subtle p-3 shadow-glow backdrop-blur sm:p-5">
     <div className="block min-w-0 max-w-full overflow-hidden whitespace-pre-wrap break-all text-xs leading-6 text-foreground [overflow-wrap:anywhere] sm:break-words sm:text-sm sm:leading-7">
-      {renderText(data)}
+      {renderTextU(data, unit)}
     </div>
   </div>
 );
@@ -492,6 +495,7 @@ const Results = () => {
   const [aiInsight, setAiInsight] = useState<string | null>(null);
   const [aiLoading, setAiLoading] = useState<AiInsightKind | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [speedUnit, setSpeedUnit] = useSpeedUnit();
 
   useEffect(() => {
     let isMounted = true;
@@ -646,9 +650,28 @@ const Results = () => {
           <div className="grid gap-6 xl:grid-cols-[1.25fr_0.75fr]">
             <AnalysisCard title="Summary" icon={<MessageSquareText className="size-5" />}>
               <div className="grid gap-4">
-                <PipelineBadge type={fileType} label={pipelineLabel} />
-                <div className="min-w-0 max-w-full overflow-hidden break-all rounded-lg border border-primary/30 bg-gradient-subtle p-3 text-xs font-medium leading-6 text-foreground shadow-glow backdrop-blur [overflow-wrap:anywhere] sm:break-words sm:p-4 sm:text-sm">{shortPlainSummary}</div>
-                <div className="min-w-0 max-w-full overflow-hidden rounded-lg border border-glass-border bg-glass p-4 text-sm leading-7 text-foreground backdrop-blur whitespace-pre-wrap [overflow-wrap:anywhere]">{renderText(summaryText)}</div>
+                <div className="flex items-center justify-between gap-2">
+                  <PipelineBadge type={fileType} label={pipelineLabel} />
+                  <div className="inline-flex items-center gap-1 rounded-sm border border-glass-border bg-background/60 p-1 font-mono text-[10px] uppercase tracking-wider">
+                    <span className="px-2 text-muted-foreground">Units</span>
+                    <button
+                      type="button"
+                      onClick={() => setSpeedUnit("kph")}
+                      className={`rounded-sm px-2 py-1 transition-colors ${speedUnit === "kph" ? "bg-primary text-primary-foreground" : "text-foreground hover:bg-secondary"}`}
+                    >
+                      km/h
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setSpeedUnit("mph")}
+                      className={`rounded-sm px-2 py-1 transition-colors ${speedUnit === "mph" ? "bg-primary text-primary-foreground" : "text-foreground hover:bg-secondary"}`}
+                    >
+                      mph
+                    </button>
+                  </div>
+                </div>
+                <div className="min-w-0 max-w-full overflow-hidden break-all rounded-lg border border-primary/30 bg-gradient-subtle p-3 text-xs font-medium leading-6 text-foreground shadow-glow backdrop-blur [overflow-wrap:anywhere] sm:break-words sm:p-4 sm:text-sm">{convertSpeedsInText(shortPlainSummary, speedUnit)}</div>
+                <div className="min-w-0 max-w-full overflow-hidden rounded-lg border border-glass-border bg-glass p-4 text-sm leading-7 text-foreground backdrop-blur whitespace-pre-wrap [overflow-wrap:anywhere]">{renderTextU(summaryText, speedUnit)}</div>
               </div>
             </AnalysisCard>
             <AnalysisCard title={fileType === "dbc" ? "DBC Structure" : fileType === "log_dbc" ? "Decoded Signal Activity" : "Raw Bus Activity"} description={fileType === "dbc" ? "Message and signal definitions only." : fileType === "log_dbc" ? "Physical units from DBC-backed decoding." : "Timing and frame intensity without physical decoding."} icon={<BarChart3 className="size-5" />}>
@@ -715,7 +738,7 @@ const Results = () => {
           </AnalysisCard>
 
           <AnalysisCard title="Mechanic Mode" description="Simplified diagnostic summary for service workflows." icon={<Wrench className="size-5" />}>
-            <MechanicSummary data={diagnostics.mechanic_summary ?? summaryText} />
+            <MechanicSummary data={diagnostics.mechanic_summary ?? summaryText} unit={speedUnit} />
           </AnalysisCard>
 
           <AnalysisCard title="AI Diagnostic Copilot" description="Plain-English mechanic, reverse-engineering, repair, signal naming, and byte decoding guidance." icon={<Sparkles className="size-5" />}>
@@ -779,7 +802,7 @@ const Results = () => {
               <CollapsiblePanel title="Driver Behavior" icon={<Car className="size-5" />}><JsonTable data={diagnostics.driver_behavior} /></CollapsiblePanel>
               <CollapsiblePanel title="Event Timeline" icon={<TimerReset className="size-5" />}><JsonTable data={diagnostics.event_timeline} /></CollapsiblePanel>
               <CollapsiblePanel title="Partial DBC Draft Available" icon={<Download className="size-5" />}><pre className="whitespace-pre-wrap rounded-lg border border-glass-border bg-glass p-4 text-sm text-foreground">{partialDbcDraft}</pre></CollapsiblePanel>
-              <CollapsiblePanel title="Mechanic Summary" icon={<Wrench className="size-5" />} defaultOpen><MechanicSummary data={diagnostics.mechanic_summary} /></CollapsiblePanel>
+              <CollapsiblePanel title="Mechanic Summary" icon={<Wrench className="size-5" />} defaultOpen><MechanicSummary data={diagnostics.mechanic_summary} unit={speedUnit} /></CollapsiblePanel>
             </div>
           </AnalysisCard>
           </> : null}
