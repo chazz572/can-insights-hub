@@ -478,37 +478,45 @@ const buildFrames = (): FrameDef[] => [
     ],
     shape: (t, ctx) => {
       const r = ctx.rand;
+      const v = ctx.vehicle;
+      const peak = v.peakMotorTorqueNm;
       let req = 0;
       switch (ctx.state) {
         case "launch_0_60": {
-          const k = Math.min(1, t / Math.max(1, ctx.duration * 0.85));
-          req = 480 * (1 - k * 0.4) + (r() - 0.5) * 6;
+          // Hold near peak through accel phase, then back off after ~100 km/h
+          const inAccel = t <= v.zeroTo100Sec;
+          req = inAccel ? peak * 0.95 + (r() - 0.5) * 6 : peak * 0.25 + (r() - 0.5) * 6;
           break;
         }
         case "top_speed_run": {
           // Strong torque at launch, tapering as drag dominates near Vmax
-          const fracV = 1 - Math.exp(-t / Math.max(2, ctx.duration * 0.55));
-          req = 950 * (1 - 0.55 * fracV) + (r() - 0.5) * 10;
+          const vMax = Math.max(80, v.topSpeedKph);
+          const fracToHundred = Math.min(0.95, 100 / vMax);
+          const tau60 = Math.max(0.6, v.zeroTo100Sec / -Math.log(1 - fracToHundred));
+          const fracV = 1 - Math.exp(-t / tau60);
+          req = peak * (1 - 0.55 * fracV) + (r() - 0.5) * 10;
           break;
         }
         case "regen_braking":
-          req = -180 + (r() - 0.5) * 8;
+          req = v.hasRegen ? -Math.min(peak * 0.35, 250) + (r() - 0.5) * 8 : -10 + (r() - 0.5) * 4;
           break;
         case "highway_cruise":
-          req = 60 + Math.sin(t * 0.3) * 8 + (r() - 0.5) * 2;
+          req = Math.min(peak * 0.15, 120) + Math.sin(t * 0.3) * 8 + (r() - 0.5) * 2;
           break;
         case "idle_ac_on":
-          req = 0;
+          req = v.powertrain === "ice" || v.powertrain === "diesel" ? 8 + (r() - 0.5) : 0;
           break;
         case "charging_20_80":
           req = 0;
           break;
         case "city_stop_go":
-          req = 80 + Math.sin(t * 0.5) * 60 + (r() - 0.5) * 6;
+          req = Math.min(peak * 0.25, 200) + Math.sin(t * 0.5) * 60 + (r() - 0.5) * 6;
           break;
         default:
-          req = 50;
+          req = Math.min(peak * 0.1, 80);
       }
+      // Clip to peak envelope
+      req = Math.max(-peak, Math.min(peak, req));
       const actual = req * 0.97 + (r() - 0.5) * 4;
       return { TorqueRequest: req, TorqueActual: actual, MotorTemp: 45 + (t / ctx.duration) * 8 };
     },
