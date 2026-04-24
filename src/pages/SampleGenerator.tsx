@@ -33,12 +33,17 @@ const isIOS = () => {
 const escapeHtml = (s: string) =>
   s.replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c] as string));
 
-const openInNewTab = (filename: string, contents: string) => {
-  // iOS Safari can't trigger blob downloads, but it CAN open a new tab
-  // and let the user use Share → Save to Files. We open synchronously
-  // (inside the click handler) so the popup blocker doesn't fire.
+const openInNewTab = (filename: string, contents: string, mime: string) => {
+  // iOS Safari can't trigger anchor-based blob downloads, but it CAN open a new
+  // tab containing a real download link with the correct MIME + filename so the
+  // user can long-press / use Share → Save to Files and the extension (.dbc /
+  // .log) is preserved instead of being saved as .txt or .html.
+  const blob = new Blob([contents], { type: mime });
+  const url = URL.createObjectURL(blob);
+
   const win = window.open("", "_blank");
   if (!win) {
+    URL.revokeObjectURL(url);
     // Popup blocked — fall back to copying contents to clipboard
     try {
       void navigator.clipboard?.writeText(contents);
@@ -50,16 +55,18 @@ const openInNewTab = (filename: string, contents: string) => {
   }
   win.document.open();
   win.document.write(
-    `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${escapeHtml(filename)}</title><style>body{margin:0;font-family:-apple-system,system-ui,sans-serif;background:#111;color:#eee}header{position:sticky;top:0;background:#1a1a1a;padding:12px 16px;border-bottom:1px solid #333;display:flex;align-items:center;gap:12px}h1{font-size:14px;margin:0;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}button{background:#3b82f6;color:#fff;border:0;padding:8px 14px;border-radius:6px;font-size:13px;font-weight:600}pre{margin:0;padding:16px;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:11px;line-height:1.5;white-space:pre-wrap;word-break:break-all}</style></head><body><header><h1>${escapeHtml(filename)}</h1><button onclick="navigator.clipboard.writeText(document.getElementById('c').innerText).then(()=>this.textContent='Copied!')">Copy All</button></header><pre id="c">${escapeHtml(contents)}</pre><script>document.title=${JSON.stringify(filename)};</script></body></html>`,
+    `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${escapeHtml(filename)}</title><style>body{margin:0;font-family:-apple-system,system-ui,sans-serif;background:#111;color:#eee}header{position:sticky;top:0;background:#1a1a1a;padding:12px 16px;border-bottom:1px solid #333;display:flex;align-items:center;gap:8px;flex-wrap:wrap}h1{font-size:13px;margin:0;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}a.btn,button{background:#3b82f6;color:#fff;border:0;padding:8px 14px;border-radius:6px;font-size:13px;font-weight:600;text-decoration:none;display:inline-block}p.hint{margin:8px 16px;font-size:12px;color:#9ca3af}pre{margin:0;padding:16px;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:11px;line-height:1.5;white-space:pre-wrap;word-break:break-all}</style></head><body><header><h1>${escapeHtml(filename)}</h1><a class="btn" href="${url}" download="${escapeHtml(filename)}" type="${escapeHtml(mime)}">Download</a><button onclick="navigator.clipboard.writeText(document.getElementById('c').innerText).then(()=>this.textContent='Copied!')">Copy</button></header><p class="hint">iOS: long-press <b>Download</b> → <b>Download Linked File</b> to save as <code>${escapeHtml(filename)}</code>. Or tap Download, then Share → Save to Files.</p><pre id="c">${escapeHtml(contents)}</pre></body></html>`,
   );
   win.document.close();
+  // Keep the blob URL alive for ~5 min so the user has time to save.
+  setTimeout(() => URL.revokeObjectURL(url), 5 * 60 * 1000);
 };
 
 const downloadText = (filename: string, contents: string, mime: string) => {
-  // iOS Safari: blob downloads silently fail. Open in a new tab instead so
-  // the user can use Share → Save to Files / Copy.
+  // iOS Safari: blob downloads silently fail. Open in a new tab with a real
+  // download link instead so Safari preserves the .dbc / .log extension.
   if (isIOS()) {
-    openInNewTab(filename, contents);
+    openInNewTab(filename, contents, mime);
     return;
   }
 
@@ -289,7 +296,7 @@ const SampleGenerator = () => {
               <Button
                 variant="secondary"
                 size="sm"
-                onClick={() => downloadText(`${baseName}.dbc`, result.dbc, "text/plain")}
+                onClick={() => downloadText(`${baseName}.dbc`, result.dbc, "application/octet-stream")}
               >
                 <Download className="mr-1.5 size-3.5" /> Download .dbc
               </Button>
@@ -311,7 +318,7 @@ const SampleGenerator = () => {
               <Button
                 variant="secondary"
                 size="sm"
-                onClick={() => downloadText(`${baseName}.log`, result.log, "text/plain")}
+                onClick={() => downloadText(`${baseName}.log`, result.log, "application/octet-stream")}
               >
                 <Download className="mr-1.5 size-3.5" /> Download .log
               </Button>
