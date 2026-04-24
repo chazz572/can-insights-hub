@@ -644,11 +644,11 @@ const buildLog = (
   duration: number,
   rand: () => number,
   state: DrivingState,
-  topSpeedKph: number,
+  vehicle: VehicleProfile,
 ): { log: string; messageCount: number } => {
   // candump-style: (timestamp) can0 ID#DATA
   const lines: string[] = [];
-  const ctx: ShapeCtx = { state, duration, rand, topSpeedKph };
+  const ctx: ShapeCtx = { state, duration, rand, vehicle, topSpeedKph: vehicle.topSpeedKph };
   const counters: Record<number, number> = {};
   // schedule: emit each frame at its cycleMs
   let messageCount = 0;
