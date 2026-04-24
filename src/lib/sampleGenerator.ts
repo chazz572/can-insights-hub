@@ -214,8 +214,346 @@ const buildVehicleProfile = (desc: string): VehicleProfile => {
 // Backwards-compatible helper
 const inferTopSpeedKph = (desc: string): number => buildVehicleProfile(desc).topSpeedKph;
 
-// Generic, safe, fictional frame catalog
-const buildFrames = (): FrameDef[] => [
+// ICE-specific frames: engine, fuel, thermals
+const buildIceFrames = (): FrameDef[] => [
+  {
+    id: 0x0C0,
+    name: "ENG_Status",
+    dlc: 8,
+    cycleMs: 20,
+    signals: [
+      { name: "EngineRPM", startBit: 0, length: 16, factor: 1, offset: 0, min: 0, max: 9000, unit: "rpm" },
+      { name: "ThrottlePosition", startBit: 16, length: 8, factor: 0.4, offset: 0, min: 0, max: 100, unit: "%" },
+      { name: "EngineLoad", startBit: 24, length: 8, factor: 0.4, offset: 0, min: 0, max: 100, unit: "%" },
+      { name: "IgnitionAdvance", startBit: 32, length: 8, factor: 0.5, offset: -64, min: -64, max: 64, unit: "deg" },
+      { name: "Counter_C0", startBit: 48, length: 8, factor: 1, offset: 0, min: 0, max: 255, unit: "" },
+      { name: "Checksum_C0", startBit: 56, length: 8, factor: 1, offset: 0, min: 0, max: 255, unit: "" },
+    ],
+    shape: (t, ctx) => {
+      const r = ctx.rand;
+      const v = ctx.vehicle;
+      const idleRpm = /(diesel|cummins|duramax|powerstroke|tdi)/.test(v.description.toLowerCase()) ? 750 : 850;
+      const redline = v.topSpeedKph >= 320 ? 8500 : v.topSpeedKph >= 280 ? 8000 : v.topSpeedKph >= 240 ? 7200 : 6500;
+      const gearTopIdx = Math.max(1, v.gearCount);
+      let rpm = idleRpm;
+      let throttle = 0;
+      let load = 8;
+      switch (ctx.state) {
+        case "launch_0_60": {
+          const inAccel = t <= v.zeroTo100Sec;
+          // Sawtooth-style RPM climb with shifts
+          const accelPhase = Math.min(1, t / Math.max(0.5, v.zeroTo100Sec));
+          const speed = 100 * (1 - Math.exp(-3.0 * accelPhase));
+          const gear = Math.min(gearTopIdx, 1 + Math.floor((speed / 110) * Math.min(6, gearTopIdx)));
+          const gearRatioDrop = 0.65; // RPM drops to 65% on upshift
+          const baseRpm = idleRpm + (redline - idleRpm) * Math.pow(gearRatioDrop, gear - 1);
+          rpm = inAccel ? baseRpm + (redline - baseRpm) * (accelPhase) : redline * 0.55;
+          throttle = inAccel ? 95 + (r() - 0.5) * 2 : 30;
+          load = inAccel ? 92 : 35;
+          break;
+        }
+        case "top_speed_run": {
+          const vMax = Math.max(80, v.topSpeedKph);
+          const fracToHundred = Math.min(0.95, 100 / vMax);
+          const tau60 = Math.max(0.6, v.zeroTo100Sec / -Math.log(1 - fracToHundred));
+          const fracV = 1 - Math.exp(-t / tau60);
+          // Climbs through gears, RPM swings each shift, settles near redline*0.95 in top gear
+          rpm = idleRpm + (redline * 0.95 - idleRpm) * fracV + Math.sin(t * 1.6) * 250;
+          throttle = 100 - fracV * 3;
+          load = 95;
+          break;
+        }
+        case "idle_ac_on":
+          rpm = idleRpm + Math.sin(t * 2) * 25 + (r() - 0.5) * 15;
+          throttle = 0;
+          load = 12;
+          break;
+        case "regen_braking":
+          rpm = idleRpm + 800 - (t / ctx.duration) * 600;
+          throttle = 0;
+          load = 5;
+          break;
+        case "highway_cruise":
+          rpm = 1900 + Math.sin(t * 0.3) * 60 + (r() - 0.5) * 20;
+          throttle = 18 + Math.sin(t * 0.3) * 2;
+          load = 32;
+          break;
+        case "charging_20_80": // ICE doesn't charge — engine off
+          rpm = 0;
+          throttle = 0;
+          load = 0;
+          break;
+        case "city_stop_go": {
+          const phase = (t % 30) / 30;
+          rpm = phase < 0.4 ? idleRpm + phase * 6000 : phase < 0.7 ? 2400 : idleRpm + 200;
+          throttle = phase < 0.4 ? 50 : phase < 0.7 ? 18 : 0;
+          load = phase < 0.4 ? 70 : 25;
+          break;
+        }
+        default:
+          rpm = 2200;
+          throttle = 22;
+          load = 30;
+      }
+      return {
+        EngineRPM: Math.max(0, Math.min(redline + 200, rpm)),
+        ThrottlePosition: throttle,
+        EngineLoad: load,
+        IgnitionAdvance: 12 + (r() - 0.5) * 4,
+      };
+    },
+  },
+  {
+    id: 0x0C8,
+    name: "ENG_Fuel",
+    dlc: 8,
+    cycleMs: 100,
+    signals: [
+      { name: "FuelRate", startBit: 0, length: 16, factor: 0.05, offset: 0, min: 0, max: 100, unit: "L/h" },
+      { name: "FuelLevel", startBit: 16, length: 8, factor: 0.4, offset: 0, min: 0, max: 100, unit: "%" },
+      { name: "AFR_Lambda", startBit: 24, length: 16, factor: 0.001, offset: 0, min: 0.5, max: 1.5, unit: "" },
+      { name: "MAF", startBit: 40, length: 16, factor: 0.05, offset: 0, min: 0, max: 600, unit: "g/s" },
+    ],
+    shape: (t, ctx) => {
+      const v = ctx.vehicle;
+      const r = ctx.rand;
+      let rate = 1.5;
+      let lambda = 1.0;
+      let maf = 4;
+      switch (ctx.state) {
+        case "launch_0_60":
+        case "top_speed_run":
+          rate = 35 + (v.peakMotorTorqueNm / 100);
+          lambda = 0.86 + (r() - 0.5) * 0.02;
+          maf = 220 + Math.sin(t * 2) * 20;
+          break;
+        case "highway_cruise":
+          rate = 8 + Math.sin(t * 0.3);
+          lambda = 1.0;
+          maf = 25 + Math.sin(t * 0.3) * 2;
+          break;
+        case "idle_ac_on":
+          rate = 1.4;
+          lambda = 1.0;
+          maf = 3.5;
+          break;
+        case "regen_braking":
+          rate = 0.6;
+          lambda = 1.05;
+          maf = 1.5;
+          break;
+        case "charging_20_80":
+          rate = 0;
+          lambda = 1.0;
+          maf = 0;
+          break;
+        case "city_stop_go":
+          rate = 5 + Math.sin(t * 0.5) * 3;
+          lambda = 1.0;
+          maf = 12 + Math.sin(t * 0.5) * 6;
+          break;
+      }
+      return {
+        FuelRate: rate,
+        FuelLevel: Math.max(0, 72 - (t / ctx.duration) * 0.2),
+        AFR_Lambda: lambda,
+        MAF: maf,
+      };
+    },
+  },
+  {
+    id: 0x0D0,
+    name: "ENG_Thermal",
+    dlc: 8,
+    cycleMs: 200,
+    signals: [
+      { name: "CoolantTemp", startBit: 0, length: 8, factor: 1, offset: -40, min: -40, max: 150, unit: "C" },
+      { name: "OilTemp", startBit: 8, length: 8, factor: 1, offset: -40, min: -40, max: 160, unit: "C" },
+      { name: "OilPressure", startBit: 16, length: 8, factor: 0.05, offset: 0, min: 0, max: 10, unit: "bar" },
+      { name: "IntakeAirTemp", startBit: 24, length: 8, factor: 1, offset: -40, min: -40, max: 100, unit: "C" },
+      { name: "ExhaustGasTemp", startBit: 32, length: 16, factor: 1, offset: 0, min: 0, max: 1100, unit: "C" },
+    ],
+    shape: (t, ctx) => {
+      const r = ctx.rand;
+      const heat = ctx.state === "launch_0_60" || ctx.state === "top_speed_run" ? 1 : ctx.state === "highway_cruise" ? 0.4 : 0.1;
+      const k = Math.min(1, t / ctx.duration);
+      return {
+        CoolantTemp: 88 + heat * 8 * k + (r() - 0.5) * 0.6,
+        OilTemp: 95 + heat * 18 * k + (r() - 0.5) * 0.6,
+        OilPressure: 3.2 + heat * 1.4 + (r() - 0.5) * 0.1,
+        IntakeAirTemp: 32 + heat * 12 * k + (r() - 0.5) * 0.5,
+        ExhaustGasTemp: 420 + heat * 480 * k + (r() - 0.5) * 8,
+      };
+    },
+  },
+];
+
+// EV-specific frames
+const buildEvFrames = (): FrameDef[] => [
+  {
+    id: 0x300,
+    name: "PWR_Battery",
+    dlc: 8,
+    cycleMs: 100,
+    signals: [
+      { name: "BatterySOC", startBit: 0, length: 16, factor: 0.01, offset: 0, min: 0, max: 100, unit: "%" },
+      { name: "PackVoltage", startBit: 16, length: 16, factor: 0.1, offset: 0, min: 0, max: 1000, unit: "V" },
+      { name: "PackCurrent", startBit: 32, length: 16, factor: 0.1, offset: -1000, min: -500, max: 500, unit: "A" },
+      { name: "BatteryTemp", startBit: 48, length: 8, factor: 1, offset: -40, min: -40, max: 100, unit: "C" },
+    ],
+    shape: (t, ctx) => {
+      const r = ctx.rand;
+      const v = ctx.vehicle;
+      const packV = v.nominalPackVolts;
+      const peakPackAmps = Math.max(120, Math.min(1500, v.peakMotorTorqueNm * 1.4));
+      let soc = 70;
+      let current = 0;
+      let temp = 28;
+      switch (ctx.state) {
+        case "charging_20_80": {
+          const k = Math.min(1, t / ctx.duration);
+          soc = 20 + k * 60;
+          current = -Math.min(peakPackAmps * 0.6, 250) + (r() - 0.5) * 4;
+          temp = 30 + k * 6;
+          break;
+        }
+        case "launch_0_60":
+          soc = 78 - (t / ctx.duration) * 0.4;
+          current = Math.min(peakPackAmps, 280 + v.peakMotorTorqueNm * 0.2) + (r() - 0.5) * 10;
+          temp = 32 + (t / ctx.duration) * 3;
+          break;
+        case "top_speed_run":
+          soc = 78 - (t / ctx.duration) * 1.5;
+          current = Math.min(peakPackAmps, peakPackAmps * 0.8) + (r() - 0.5) * 12;
+          temp = 35 + (t / ctx.duration) * 8;
+          break;
+        case "regen_braking":
+          soc = 65 + (t / ctx.duration) * 0.3;
+          current = -Math.min(peakPackAmps * 0.4, 100) + (r() - 0.5) * 6;
+          temp = 30;
+          break;
+        case "highway_cruise":
+          soc = 72 - (t / ctx.duration) * 0.6;
+          current = 60 + (r() - 0.5) * 4;
+          temp = 32;
+          break;
+        case "idle_ac_on":
+          soc = 80 - (t / ctx.duration) * 0.05;
+          current = v.hvacIdleAmps + (r() - 0.5);
+          temp = 29;
+          break;
+        case "city_stop_go":
+          soc = 70 - (t / ctx.duration) * 0.4;
+          current = 30 + Math.sin(t) * 20;
+          temp = 31;
+          break;
+        default:
+          soc = 70;
+          current = 20;
+      }
+      return {
+        BatterySOC: soc,
+        PackVoltage: packV + (r() - 0.5) * 2,
+        PackCurrent: current,
+        BatteryTemp: temp,
+      };
+    },
+  },
+  {
+    id: 0x310,
+    name: "PWR_Motor",
+    dlc: 8,
+    cycleMs: 20,
+    signals: [
+      { name: "TorqueRequest", startBit: 0, length: 16, factor: 0.1, offset: -3000, min: -1500, max: 1500, unit: "Nm" },
+      { name: "TorqueActual", startBit: 16, length: 16, factor: 0.1, offset: -3000, min: -1500, max: 1500, unit: "Nm" },
+      { name: "MotorRPM", startBit: 32, length: 16, factor: 1, offset: 0, min: 0, max: 25000, unit: "rpm" },
+      { name: "MotorTemp", startBit: 48, length: 8, factor: 1, offset: -40, min: -40, max: 200, unit: "C" },
+      { name: "Checksum_310", startBit: 56, length: 8, factor: 1, offset: 0, min: 0, max: 255, unit: "" },
+    ],
+    shape: (t, ctx) => {
+      const r = ctx.rand;
+      const v = ctx.vehicle;
+      const peak = v.peakMotorTorqueNm;
+      const vMax = Math.max(80, v.topSpeedKph);
+      // Approx motor RPM tracks vehicle speed (single-speed reducer for most BEVs)
+      const speedToMotorRpm = 75; // rpm per km/h, fictional gearing
+      let req = 0;
+      let speed = 0;
+      switch (ctx.state) {
+        case "launch_0_60": {
+          const inAccel = t <= v.zeroTo100Sec;
+          req = inAccel ? peak * 0.95 + (r() - 0.5) * 6 : peak * 0.25;
+          const accelPhase = Math.min(1, t / Math.max(0.5, v.zeroTo100Sec));
+          speed = 100 * (1 - Math.exp(-3.0 * accelPhase));
+          break;
+        }
+        case "top_speed_run": {
+          const fracToHundred = Math.min(0.95, 100 / vMax);
+          const tau60 = Math.max(0.6, v.zeroTo100Sec / -Math.log(1 - fracToHundred));
+          const fracV = 1 - Math.exp(-t / tau60);
+          req = peak * (1 - 0.55 * fracV) + (r() - 0.5) * 10;
+          speed = vMax * fracV;
+          break;
+        }
+        case "regen_braking":
+          req = -Math.min(peak * 0.35, 250) + (r() - 0.5) * 8;
+          speed = Math.max(0, 80 - (t / ctx.duration) * 75);
+          break;
+        case "highway_cruise":
+          req = Math.min(peak * 0.15, 120) + Math.sin(t * 0.3) * 8;
+          speed = v.cruiseKph;
+          break;
+        case "idle_ac_on":
+          req = 0;
+          speed = 0;
+          break;
+        case "charging_20_80":
+          req = 0;
+          speed = 0;
+          break;
+        case "city_stop_go":
+          req = Math.min(peak * 0.25, 200) + Math.sin(t * 0.5) * 60;
+          speed = 25 + Math.sin(t * 0.5) * 15;
+          break;
+        default:
+          req = 50;
+          speed = 40;
+      }
+      req = Math.max(-peak, Math.min(peak, req));
+      return {
+        TorqueRequest: req,
+        TorqueActual: req * 0.97 + (r() - 0.5) * 4,
+        MotorRPM: Math.max(0, speed * speedToMotorRpm),
+        MotorTemp: 45 + (t / ctx.duration) * 8,
+      };
+    },
+  },
+  {
+    id: 0x320,
+    name: "PWR_Inverter",
+    dlc: 8,
+    cycleMs: 100,
+    signals: [
+      { name: "InverterTemp", startBit: 0, length: 8, factor: 1, offset: -40, min: -40, max: 200, unit: "C" },
+      { name: "InverterDcCurrent", startBit: 8, length: 16, factor: 0.1, offset: -1000, min: -500, max: 500, unit: "A" },
+      { name: "DcLinkVoltage", startBit: 24, length: 16, factor: 0.1, offset: 0, min: 0, max: 1000, unit: "V" },
+    ],
+    shape: (t, ctx) => {
+      const r = ctx.rand;
+      const v = ctx.vehicle;
+      const heat = ctx.state === "top_speed_run" || ctx.state === "launch_0_60" ? 1 : ctx.state === "highway_cruise" ? 0.3 : 0.1;
+      return {
+        InverterTemp: 50 + heat * 30 * (t / ctx.duration) + (r() - 0.5),
+        InverterDcCurrent: ctx.state === "regen_braking" ? -80 : heat * 200,
+        DcLinkVoltage: v.nominalPackVolts + (r() - 0.5) * 3,
+      };
+    },
+  },
+];
+
+// Common chassis/body frames (always included)
+const buildCommonFrames = (): FrameDef[] => [
   {
     id: 0x100,
     name: "VEH_Speed",
