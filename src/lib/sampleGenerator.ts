@@ -507,6 +507,32 @@ interface ShiftInfo {
   shiftBlend: number; // 0..1 — how "mid-shift" we are
   inShift: boolean;
 }
+
+interface MotionSnapshot {
+  speedKph: number;
+  accelPedal: number;
+  brakeBar: number;
+  gear: number;
+  rpm: number;
+  throttle: number;
+  load: number;
+  shiftBlend: number;
+  inShift: boolean;
+  maf: number;
+  lambda: number;
+  fuelRateLph: number;
+  fuelLevelPct: number;
+  coolantC: number;
+  oilC: number;
+  oilPressureBar: number;
+  iatC: number;
+  egtC: number;
+  boostKpa: number;
+  wastegateDutyPct: number;
+  turboShaftRpm: number;
+  packCurrentA: number;
+}
+
 const computeShiftEvent = (
   v: VehicleProfile,
   speedKph: number,
@@ -548,6 +574,272 @@ const thermalIntegral = (
   // 1st-order: T(t) = T_steady * (1 - exp(-t / tau))
   const tau = capacityScale * (1.2 - loadFactor * 0.6);
   return loadFactor * (1 - Math.exp(-Math.max(0, t) / Math.max(0.1, tau)));
+};
+
+const clamp = (value: number, min: number, max: number) => Math.max(min, Math.min(max, value));
+
+const lerp = (a: number, b: number, t: number) => a + (b - a) * t;
+
+const litersPer100KmAtFullLoad = (v: VehicleProfile) => {
+  const bsfc = v.powertrain === "diesel" ? 205 : 255;
+  const density = v.powertrain === "diesel" ? 0.832 : 0.745;
+  const litersPerHourAtPeak = (v.peakPowerHp * 0.7457 * bsfc) / (density * 1000);
+  return litersPerHourAtPeak;
+};
+
+const inferTankSizeLiters = (v: VehicleProfile) => {
+  const baseline = v.curbWeightKg < 1450 ? 48 : v.curbWeightKg < 1800 ? 60 : v.curbWeightKg < 2300 ? 72 : 95;
+  return baseline + (v.powertrain === "diesel" ? 10 : 0);
+};
+
+const scenarioSpeedKph = (state: DrivingState, t: number, duration: number, v: VehicleProfile) => {
+  const vMax = Math.max(80, v.topSpeedKph);
+  const fracToHundred = Math.min(0.95, 100 / vMax);
+  const tau60 = Math.max(0.6, v.zeroTo100Sec / -Math.log(1 - fracToHundred));
+
+  switch (state) {
+    case "launch_0_60": {
+      const accelPhase = Math.min(1, t / Math.max(0.5, v.zeroTo100Sec));
+      let speed = 100 * (1 - Math.exp(-3.0 * accelPhase));
+      if (t > v.zeroTo100Sec) speed = Math.min(vMax, 100 + Math.min(20, (t - v.zeroTo100Sec) * 4));
+      return speed;
+    }
+    case "top_speed_run":
+      return dragLimitedSpeed(vMax, t, tau60);
+    case "regen_braking": {
+      const k = Math.min(1, t / duration);
+      return Math.max(0, 80 - k * 75);
+    }
+    case "highway_cruise":
+      return v.cruiseKph;
+    case "city_stop_go": {
+      const phase = (t % 30) / 30;
+      if (phase < 0.4) return phase * 2.5 * 35;
+      if (phase < 0.7) return 35 + Math.sin(phase * 10) * 3;
+      return Math.max(0, 35 - (phase - 0.7) * 116);
+    }
+    case "burnout":
+      return 0;
+    case "drag_pass": {
+      const accelPhase = Math.min(1, t / Math.max(0.5, v.zeroTo100Sec * 2.4));
+      return (vMax * 0.6) * (1 - Math.exp(-2.6 * accelPhase));
+    }
+    case "track_lap": {
+      const lap = (t % 25) / 25;
+      if (lap < 0.4) return lap * 2.5 * (vMax * 0.85);
+      if (lap < 0.55) return vMax * 0.85 - (lap - 0.4) * 6 * (vMax * 0.5);
+      if (lap < 0.85) return 80 + Math.sin(lap * 12) * 30;
+      return Math.max(0, (1 - lap) * 6 * (vMax * 0.5));
+    }
+    case "idle_ac_on":
+    case "charging_20_80":
+      return 0;
+    default:
+      return 40 + Math.sin(t * 0.5) * 10;
+  }
+};
+
+const computeVehicleMotion = (t: number, ctx: ShapeCtx): MotionSnapshot => {
+  const { state, duration, vehicle: v, rand: r } = ctx;
+  const sampleDt = 0.02;
+  const rawSpeed = scenarioSpeedKph(state, t, duration, v);
+  const prevSpeed = scenarioSpeedKph(state, Math.max(0, t - sampleDt), duration, v);
+  const nextSpeed = scenarioSpeedKph(state, Math.min(duration, t + sampleDt), duration, v);
+  const speedKph = Math.max(0, rawSpeed + gauss(r, 0.05));
+  const accelMps2 = ((nextSpeed - prevSpeed) / (2 * sampleDt)) / 3.6;
+  const shift = computeShiftEvent(v, Math.max(0, rawSpeed), Math.max(0, prevSpeed));
+  const boosted = v.induction === "turbo" || v.induction === "twin_turbo" || v.induction === "supercharged";
+  const tankLiters = inferTankSizeLiters(v);
+  const fullLoadFuelLph = litersPer100KmAtFullLoad(v);
+
+  let accelPedal = 0;
+  let brakeBar = 0;
+  let throttle = 0;
+  let load = 0;
+  let rpm = shift.rpm;
+  let gear = shift.gear;
+
+  switch (state) {
+    case "launch_0_60": {
+      const onThrottle = t <= v.zeroTo100Sec + 0.2;
+      accelPedal = onThrottle ? 96 : 34;
+      throttle = onThrottle ? 93 : 24;
+      load = onThrottle ? 92 : 28;
+      brakeBar = 0;
+      break;
+    }
+    case "top_speed_run": {
+      const speedFrac = clamp(speedKph / Math.max(1, v.topSpeedKph), 0, 1);
+      accelPedal = clamp(100 - speedFrac * 2.5, 96, 100);
+      throttle = clamp(88 + speedFrac * 10, 88, 100);
+      load = clamp(90 + speedFrac * 9, 90, 99);
+      brakeBar = 0;
+      break;
+    }
+    case "drag_pass": {
+      accelPedal = 100;
+      throttle = 100;
+      load = 99;
+      brakeBar = 0;
+      break;
+    }
+    case "burnout": {
+      const swing = (Math.sin(t * 3) + 1) / 2;
+      accelPedal = 62 + swing * 34;
+      throttle = 58 + swing * 38;
+      load = 74 + swing * 22;
+      brakeBar = 18;
+      gear = 1;
+      rpm = clamp(v.idleRpm + swing * (v.redlineRpm - v.idleRpm) * 0.82, v.idleRpm, v.redlineRpm * 0.96);
+      break;
+    }
+    case "track_lap": {
+      const lap = (t % 25) / 25;
+      accelPedal = lap < 0.4 ? 97 : lap < 0.55 ? 0 : 38 + Math.max(0, Math.sin(lap * 8)) * 44;
+      throttle = lap < 0.4 ? 94 : lap < 0.55 ? 4 : 36 + Math.max(0, Math.sin(lap * 8)) * 46;
+      brakeBar = lap >= 0.4 && lap < 0.55 ? 58 : 0;
+      load = lap < 0.4 ? 95 : lap < 0.55 ? 8 : 46 + Math.max(0, Math.sin(lap * 7)) * 38;
+      break;
+    }
+    case "highway_cruise":
+      accelPedal = 17 + Math.sin(t * 0.3) * 2;
+      throttle = 15 + Math.sin(t * 0.3) * 3;
+      brakeBar = 0;
+      load = 26 + Math.max(0, speedKph - v.cruiseKph) * 0.06;
+      gear = selectGear(v, speedKph).gear;
+      rpm = selectGear(v, speedKph).rpm;
+      break;
+    case "regen_braking":
+      accelPedal = 0;
+      throttle = 0;
+      brakeBar = v.hasRegen ? 5 : 18;
+      load = 4;
+      gear = Math.max(1, Math.min(v.gearCount, selectGear(v, Math.max(speedKph, 20)).gear));
+      rpm = speedKph > 4 ? selectGear(v, Math.max(speedKph, 8)).rpm : v.idleRpm;
+      break;
+    case "idle_ac_on":
+      accelPedal = 0;
+      throttle = 0;
+      brakeBar = 1;
+      gear = 0;
+      rpm = v.powertrain === "bev" ? 0 : v.idleRpm + Math.sin(t * 2) * 25;
+      load = 10;
+      break;
+    case "charging_20_80":
+      accelPedal = 0;
+      throttle = 0;
+      brakeBar = 0;
+      gear = 0;
+      rpm = 0;
+      load = 0;
+      break;
+    case "city_stop_go": {
+      const phase = (t % 30) / 30;
+      accelPedal = speedKph > 5 && phase < 0.6 ? 18 + Math.max(0, accelMps2) * 8 : 0;
+      throttle = speedKph > 5 && phase < 0.6 ? 16 + Math.max(0, accelMps2) * 10 : 0;
+      brakeBar = speedKph < 5 && phase > 0.7 ? 8 : 0;
+      load = speedKph > 5 ? 18 + Math.max(0, accelMps2) * 18 : 8;
+      gear = Math.min(v.gearCount, speedKph > 25 ? 3 : speedKph > 10 ? 2 : 1);
+      rpm = selectGear(v, Math.max(speedKph, 8)).rpm;
+      break;
+    }
+    default:
+      accelPedal = 20;
+      throttle = 18;
+      brakeBar = 0;
+      load = 26;
+      gear = Math.min(v.gearCount, 3);
+      rpm = selectGear(v, Math.max(speedKph, 20)).rpm;
+  }
+
+  if (state !== "burnout" && state !== "idle_ac_on" && state !== "charging_20_80") {
+    const selected = selectGear(v, Math.max(speedKph, speedKph > 0 ? 4 : 0));
+    gear = speedKph < 0.5 && v.powertrain !== "bev" ? 1 : selected.gear;
+    rpm = selected.rpm;
+  }
+
+  if (shift.shiftBlend > 0 && speedKph > 5 && gear > 1) {
+    const prevGearRpm = v.rpmPerKphByGear[Math.max(0, gear - 2)] * speedKph;
+    const nextGearRpm = v.rpmPerKphByGear[gear - 1] * speedKph;
+    rpm = lerp(prevGearRpm, nextGearRpm, 0.82);
+    throttle *= 0.62;
+    load *= 0.82;
+  }
+
+  rpm = v.powertrain === "bev" ? 0 : clamp(rpm + gauss(r, 8), speedKph < 0.5 ? v.idleRpm : v.idleRpm * 0.9, v.redlineRpm);
+  accelPedal = clamp(accelPedal + gauss(r, 0.3), 0, 100);
+  throttle = clamp(throttle + gauss(r, 0.35), 0, 100);
+  brakeBar = clamp(brakeBar + gauss(r, 0.08), 0, 200);
+  load = clamp(load + gauss(r, 0.5), 0, 100);
+
+  const powerFraction = clamp((throttle / 100) * (load / 100) * Math.max(0.18, rpm / Math.max(v.redlineRpm, 1)), 0, 1.05);
+  const mafBase = v.powertrain === "diesel" ? 7 : 4.5;
+  const mafPeak = clamp(v.peakPowerHp * (v.powertrain === "diesel" ? 0.42 : 0.55), 55, v.powertrain === "diesel" ? 720 : 600);
+  const maf = v.powertrain === "bev"
+    ? 0
+    : clamp(mafBase + powerFraction * mafPeak + Math.max(0, accelMps2) * 6 + gauss(r, 1.4), mafBase, v.powertrain === "diesel" ? 720 : 600);
+  const lambdaBase = state === "highway_cruise" || state === "idle_ac_on" ? 1.0 : powerFraction > 0.7 ? (boosted ? 0.79 : 0.86) : powerFraction > 0.4 ? 0.92 : 1.0;
+  const lambda = v.powertrain === "bev" ? 1 : clamp(lambdaBase + gauss(r, 0.006), 0.7, 1.15);
+  const fuelRateLph = v.powertrain === "bev"
+    ? 0
+    : clamp(fullLoadFuelLph * Math.pow(powerFraction, 0.92) * (v.powertrain === "diesel" ? 0.92 : 1) + Math.max(0, accelMps2) * 0.7 + (state === "idle_ac_on" ? 1.2 : 0), 0, 130);
+  const fuelLevelDropPct = v.powertrain === "bev" ? 0 : (fuelRateLph * Math.max(0, t)) / 3600 / tankLiters * 100;
+  const fuelLevelPct = v.powertrain === "bev" ? 0 : clamp(72 - fuelLevelDropPct, 0, 100);
+
+  const thermalLoad = clamp(powerFraction * (state === "track_lap" ? 0.92 : state === "highway_cruise" ? 0.42 : state === "idle_ac_on" ? 0.12 : 1), 0, 1);
+  const coolantBase = state === "idle_ac_on" ? 88 : 86;
+  const coolantC = v.powertrain === "bev" ? 0 : clamp(coolantBase + thermalIntegral(thermalLoad, t, 34) * (state === "top_speed_run" ? 20 : 16) + gauss(r, 0.15), 70, 118);
+  const oilC = v.powertrain === "bev" ? 0 : clamp(90 + thermalIntegral(thermalLoad, t, 52) * (state === "top_speed_run" || state === "track_lap" ? 34 : 24) + gauss(r, 0.18), 72, 155);
+  const oilPressureBar = v.powertrain === "bev" ? 0 : clamp((rpm / 1000) * 0.78 + (oilC > 120 ? -0.18 : 0) + gauss(r, 0.04), speedKph < 1 ? 1.2 : 2.2, 8.5);
+  const iatBase = state === "idle_ac_on" ? 30 : 28;
+  const chargeHeat = boosted ? 26 + powerFraction * 34 : 10 + powerFraction * 14;
+  const iatC = v.powertrain === "bev" ? 0 : clamp(iatBase + thermalIntegral(thermalLoad, t, boosted ? 7 : 11) * chargeHeat + speedKph * (boosted ? 0.012 : 0.004) + gauss(r, 0.2), 18, 100);
+  const egtBase = v.powertrain === "diesel" ? 240 : 320;
+  const egtPeak = v.powertrain === "diesel" ? 760 : boosted ? 930 : 790;
+  const egtC = v.powertrain === "bev"
+    ? 0
+    : clamp(egtBase + thermalIntegral(thermalLoad, t, 4.6) * (egtPeak - egtBase) + load * 1.1 + gauss(r, 4), 120, egtPeak);
+
+  let boostKpa = 0;
+  let wastegateDutyPct = 0;
+  let turboShaftRpm = 0;
+  if (boosted) {
+    const peakBoost = v.induction === "twin_turbo" ? 225 : v.induction === "supercharged" ? 135 : 185;
+    const lagBlend = v.induction === "supercharged" ? 1 : 1 - Math.exp(-Math.max(0.02, t) / 0.45);
+    const boostLoad = clamp((throttle / 100) * 1.05 * lagBlend, 0, 1);
+    boostKpa = clamp(boostLoad * peakBoost + gauss(r, 1.8), -8, peakBoost + 10);
+    wastegateDutyPct = clamp(18 + boostLoad * 72 + gauss(r, 1.4), 0, 100);
+    turboShaftRpm = clamp(boostLoad * (v.induction === "twin_turbo" ? 188000 : v.induction === "supercharged" ? 72000 : 172000) + gauss(r, 1800), 0, 240000);
+  }
+
+  const packCurrentA = v.packKwh > 0
+    ? clamp((powerFraction * v.peakMotorTorqueNm * 0.55) * (state === "regen_braking" ? -0.4 : 1), -500, 1500)
+    : 0;
+
+  return {
+    speedKph,
+    accelPedal,
+    brakeBar,
+    gear,
+    rpm,
+    throttle,
+    load,
+    shiftBlend: shift.shiftBlend,
+    inShift: shift.inShift,
+    maf,
+    lambda,
+    fuelRateLph,
+    fuelLevelPct,
+    coolantC,
+    oilC,
+    oilPressureBar,
+    iatC,
+    egtC,
+    boostKpa,
+    wastegateDutyPct,
+    turboShaftRpm,
+    packCurrentA,
+  };
 };
 
 // Traction-limited launch slip: returns extra km/h on the driven axle
