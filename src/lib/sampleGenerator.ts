@@ -489,7 +489,12 @@ const stateLabel: Record<DrivingState, string> = {
   custom: "Custom driving state",
 };
 
-const buildSummary = (req: SampleRequest, frames: FrameDef[], stats: SampleOutput["stats"]): string => {
+const buildSummary = (
+  req: SampleRequest,
+  frames: FrameDef[],
+  stats: SampleOutput["stats"],
+  topSpeedKph: number,
+): string => {
   const sigCount = frames.reduce((n, f) => n + f.signals.length, 0);
   const lines = [
     `Synthetic Sample Summary`,
@@ -508,6 +513,13 @@ const buildSummary = (req: SampleRequest, frames: FrameDef[], stats: SampleOutpu
     case "launch_0_60":
       lines.push("- Rising VehicleSpeed and TorqueRequest, near-zero steering, mild SOC drop, gear progression 1→6.");
       break;
+    case "top_speed_run": {
+      const mph = Math.round(topSpeedKph * 0.621371);
+      lines.push(
+        `- Full launch from 0 → ~${Math.round(topSpeedKph)} km/h (~${mph} mph), gear progression to top, sustained max accelerator, near-zero steering, notable SOC / thermal rise.`,
+      );
+      break;
+    }
     case "idle_ac_on":
       lines.push("- Stationary speed/wheels, near-zero torque, light HVAC current draw, stable thermal signals.");
       break;
