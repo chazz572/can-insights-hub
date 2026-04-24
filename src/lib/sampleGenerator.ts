@@ -175,10 +175,10 @@ const buildFrames = (): FrameDef[] => [
     dlc: 8,
     cycleMs: 20,
     signals: [
-      { name: "WheelSpeed_FL", startBit: 0, length: 16, factor: 0.01, offset: 0, min: 0, max: 260, unit: "km/h" },
-      { name: "WheelSpeed_FR", startBit: 16, length: 16, factor: 0.01, offset: 0, min: 0, max: 260, unit: "km/h" },
-      { name: "WheelSpeed_RL", startBit: 32, length: 16, factor: 0.01, offset: 0, min: 0, max: 260, unit: "km/h" },
-      { name: "WheelSpeed_RR", startBit: 48, length: 16, factor: 0.01, offset: 0, min: 0, max: 260, unit: "km/h" },
+      { name: "WheelSpeed_FL", startBit: 0, length: 16, factor: 0.01, offset: 0, min: 0, max: 500, unit: "km/h" },
+      { name: "WheelSpeed_FR", startBit: 16, length: 16, factor: 0.01, offset: 0, min: 0, max: 500, unit: "km/h" },
+      { name: "WheelSpeed_RL", startBit: 32, length: 16, factor: 0.01, offset: 0, min: 0, max: 500, unit: "km/h" },
+      { name: "WheelSpeed_RR", startBit: 48, length: 16, factor: 0.01, offset: 0, min: 0, max: 500, unit: "km/h" },
     ],
     shape: (t, ctx) => {
       const r = ctx.rand;
@@ -190,9 +190,11 @@ const buildFrames = (): FrameDef[] => [
             ? 112
             : ctx.state === "launch_0_60"
               ? 97 * (1 - Math.pow(1 - Math.min(1, t / Math.max(1, ctx.duration * 0.85)), 1.6))
-              : ctx.state === "regen_braking"
-                ? Math.max(0, 80 - (t / ctx.duration) * 75)
-                : 30 + Math.sin(t * 0.5) * 10;
+              : ctx.state === "top_speed_run"
+                ? ctx.topSpeedKph * (1 - Math.exp(-t / Math.max(2, ctx.duration * 0.55)))
+                : ctx.state === "regen_braking"
+                  ? Math.max(0, 80 - (t / ctx.duration) * 75)
+                  : 30 + Math.sin(t * 0.5) * 10;
       const j = () => (r() - 0.5) * 0.4;
       return {
         WheelSpeed_FL: Math.max(0, base + j()),
