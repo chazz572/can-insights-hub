@@ -14,12 +14,33 @@ export type DrivingState =
   | "track_lap"
   | "custom";
 
+export interface VehicleSpecOverride {
+  powertrain?: Powertrain;
+  topSpeedKph?: number;
+  zeroTo100Sec?: number;
+  sixtyTo130Sec?: number;
+  redlineRpm?: number;
+  idleRpm?: number;
+  gearCount?: number;
+  gearRatios?: number[];
+  finalDrive?: number;
+  packKwh?: number;
+  nominalPackVolts?: number;
+  peakPowerHp?: number;
+  peakMotorTorqueNm?: number;
+  curbWeightKg?: number;
+  induction?: VehicleProfile["induction"];
+  drivetrain?: VehicleProfile["drivetrain"];
+  tireRadiusM?: number;
+}
+
 export interface SampleRequest {
   vehicleDescription: string;
   drivingState: DrivingState;
   customStateNotes?: string;
   durationSec: number;
   seed?: number;
+  specOverride?: VehicleSpecOverride;
 }
 
 export interface SampleOutput {
@@ -159,6 +180,7 @@ const NAMED_VEHICLES: NamedSpec[] = [
 
   // ====== Corvette / GM ======
   { match: /(c8 z06|corvette z06|z06)/i, powertrain: "ice", topSpeedKph: 312, zeroTo100Sec: 2.6, sixtyTo130Sec: 5.5, redlineRpm: 8600, idleRpm: 800, gearCount: 8, gearRatios: [4.71, 3.13, 2.10, 1.67, 1.29, 1.00, 0.84, 0.67], finalDrive: 5.17, peakPowerHp: 670, peakMotorTorqueNm: 623, curbWeightKg: 1660, induction: "na", drivetrain: "rwd", tireRadiusM: 0.342 },
+  { match: /(zr1x|c8 zr1x|corvette zr1x)/i, powertrain: "phev", topSpeedKph: 378, zeroTo100Sec: 2.0, redlineRpm: 8000, gearCount: 8, peakPowerHp: 1250, peakMotorTorqueNm: 1370, packKwh: 1.9, nominalPackVolts: 80, curbWeightKg: 1860, induction: "twin_turbo", drivetrain: "awd", tireRadiusM: 0.342 },
   { match: /(c8 zr1|zr1)/i, powertrain: "ice", topSpeedKph: 374, zeroTo100Sec: 2.3, redlineRpm: 8000, gearCount: 8, peakPowerHp: 1064, peakMotorTorqueNm: 1123, curbWeightKg: 1715, induction: "twin_turbo", drivetrain: "rwd", tireRadiusM: 0.342 },
   { match: /(c8 e-?ray|e-?ray)/i, powertrain: "hybrid", topSpeedKph: 290, zeroTo100Sec: 2.5, redlineRpm: 6500, gearCount: 8, peakPowerHp: 655, peakMotorTorqueNm: 720, packKwh: 1.9, nominalPackVolts: 80, curbWeightKg: 1765, induction: "na", drivetrain: "awd", tireRadiusM: 0.342 },
   { match: /(c8|stingray|corvette)/i, powertrain: "ice", topSpeedKph: 312, zeroTo100Sec: 2.9, redlineRpm: 6500, gearCount: 8, peakPowerHp: 495, peakMotorTorqueNm: 637, curbWeightKg: 1530, induction: "na", drivetrain: "rwd", tireRadiusM: 0.342 },
@@ -203,6 +225,7 @@ const NAMED_VEHICLES: NamedSpec[] = [
   { match: /(gr corolla|gr yaris)/i, powertrain: "ice", topSpeedKph: 230, zeroTo100Sec: 4.9, redlineRpm: 7000, gearCount: 6, peakPowerHp: 300, peakMotorTorqueNm: 370, curbWeightKg: 1474, induction: "turbo", drivetrain: "awd", tireRadiusM: 0.327 },
   { match: /(civic type r|type r)/i, powertrain: "ice", topSpeedKph: 275, zeroTo100Sec: 5.4, redlineRpm: 7000, gearCount: 6, peakPowerHp: 315, peakMotorTorqueNm: 420, curbWeightKg: 1429, induction: "turbo", drivetrain: "fwd", tireRadiusM: 0.337 },
   { match: /(sti|wrx sti)/i, powertrain: "ice", topSpeedKph: 255, zeroTo100Sec: 4.9, redlineRpm: 6700, gearCount: 6, peakPowerHp: 310, peakMotorTorqueNm: 393, curbWeightKg: 1568, induction: "turbo", drivetrain: "awd", tireRadiusM: 0.327 },
+  { match: /\b(wrx|impreza wrx|subaru wrx)\b/i, powertrain: "ice", topSpeedKph: 240, zeroTo100Sec: 5.4, redlineRpm: 6500, gearCount: 6, peakPowerHp: 271, peakMotorTorqueNm: 350, curbWeightKg: 1565, induction: "turbo", drivetrain: "awd", tireRadiusM: 0.327 },
   { match: /(gtr|nissan gt-?r|r35)/i, powertrain: "ice", topSpeedKph: 315, zeroTo100Sec: 2.9, redlineRpm: 7100, gearCount: 6, peakPowerHp: 565, peakMotorTorqueNm: 633, curbWeightKg: 1755, induction: "twin_turbo", drivetrain: "awd", tireRadiusM: 0.347 },
   { match: /(civic\b|corolla\b)/i, powertrain: "ice", topSpeedKph: 200, zeroTo100Sec: 8.5, redlineRpm: 6800, gearCount: 6, peakPowerHp: 158, peakMotorTorqueNm: 187, curbWeightKg: 1300, induction: "na", drivetrain: "fwd", tireRadiusM: 0.317 },
 
@@ -256,7 +279,7 @@ const computeRpmPerKphTable = (
 };
 
 // Build a fictional-but-plausible profile from the user's description.
-const buildVehicleProfile = (desc: string): VehicleProfile => {
+const buildVehicleProfile = (desc: string, override?: VehicleSpecOverride): VehicleProfile => {
   const s = desc.toLowerCase();
   const has = (re: RegExp) => re.test(s);
 
@@ -395,6 +418,28 @@ const buildVehicleProfile = (desc: string): VehicleProfile => {
     if (named.induction) induction = named.induction;
     if (named.drivetrain) drivetrain = named.drivetrain;
     if (named.tireRadiusM) tireRadiusM = named.tireRadiusM;
+    cruiseKph = Math.min(135, Math.max(95, Math.round(topSpeedKph * 0.45)));
+  }
+
+  // Apply AI-derived / caller override (highest priority)
+  if (override) {
+    if (override.powertrain) powertrain = override.powertrain;
+    if (override.topSpeedKph) topSpeedKph = override.topSpeedKph;
+    if (override.zeroTo100Sec) zeroTo100Sec = override.zeroTo100Sec;
+    if (override.sixtyTo130Sec) sixtyTo130Sec = override.sixtyTo130Sec;
+    if (override.redlineRpm) redlineRpm = override.redlineRpm;
+    if (override.idleRpm) idleRpm = override.idleRpm;
+    if (override.gearCount) gearCount = override.gearCount;
+    if (override.gearRatios && override.gearRatios.length) gearRatios = override.gearRatios;
+    if (override.finalDrive) finalDrive = override.finalDrive;
+    if (override.packKwh !== undefined) packKwh = override.packKwh;
+    if (override.nominalPackVolts) nominalPackVolts = override.nominalPackVolts;
+    if (override.peakPowerHp) peakPowerHp = override.peakPowerHp;
+    if (override.peakMotorTorqueNm) peakMotorTorqueNm = override.peakMotorTorqueNm;
+    if (override.curbWeightKg) curbWeightKg = override.curbWeightKg;
+    if (override.induction) induction = override.induction;
+    if (override.drivetrain) drivetrain = override.drivetrain;
+    if (override.tireRadiusM) tireRadiusM = override.tireRadiusM;
     cruiseKph = Math.min(135, Math.max(95, Math.round(topSpeedKph * 0.45)));
   }
 
@@ -1514,7 +1559,7 @@ const buildSummary = (
 export const generateSample = (req: SampleRequest): SampleOutput => {
   const seed = req.seed ?? Math.floor(Math.random() * 2 ** 31);
   const rand = mulberry32(seed);
-  const vehicle = buildVehicleProfile(req.vehicleDescription);
+  const vehicle = buildVehicleProfile(req.vehicleDescription, req.specOverride);
   const frames = buildFrames(vehicle);
   const duration = Math.max(2, Math.min(120, req.durationSec));
   const dbc = buildDbc(frames, req.vehicleDescription);
