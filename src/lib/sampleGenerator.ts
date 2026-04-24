@@ -469,16 +469,44 @@ const buildIceFrames = (): FrameDef[] => [
       let load = 8;
       switch (ctx.state) {
         case "launch_0_60": {
-          const inAccel = t <= v.zeroTo100Sec;
-          // Sawtooth-style RPM climb with shifts
+          // Use real gear-ratio-based RPM mapping
           const accelPhase = Math.min(1, t / Math.max(0.5, v.zeroTo100Sec));
           const speed = 100 * (1 - Math.exp(-3.0 * accelPhase));
-          const gear = Math.min(gearTopIdx, 1 + Math.floor((speed / 110) * Math.min(6, gearTopIdx)));
-          const gearRatioDrop = 0.65; // RPM drops to 65% on upshift
-          const baseRpm = idleRpm + (redline - idleRpm) * Math.pow(gearRatioDrop, gear - 1);
-          rpm = inAccel ? baseRpm + (redline - baseRpm) * (accelPhase) : redline * 0.55;
-          throttle = inAccel ? 95 + (r() - 0.5) * 2 : 30;
-          load = inAccel ? 92 : 35;
+          const sel = selectGear(v, speed);
+          rpm = Math.min(redline, sel.rpm + Math.sin(t * 8) * 60);
+          throttle = t <= v.zeroTo100Sec ? 95 + (r() - 0.5) * 2 : 30;
+          load = t <= v.zeroTo100Sec ? 92 : 35;
+          break;
+        }
+        case "drag_pass": {
+          // Quarter mile: full launch, hard shifts, RPM sawtooth between redline and ~70%
+          const accelPhase = Math.min(1, t / Math.max(0.5, v.zeroTo100Sec * 2.4));
+          const speed = (v.topSpeedKph * 0.6) * (1 - Math.exp(-2.6 * accelPhase));
+          const sel = selectGear(v, speed);
+          rpm = Math.min(redline, sel.rpm + Math.sin(t * 12) * 80);
+          throttle = 100;
+          load = 98;
+          break;
+        }
+        case "burnout": {
+          // Stationary wheels-spinning: very high RPM cycling, throttle stabbing
+          const swing = (Math.sin(t * 3) + 1) / 2; // 0..1
+          rpm = idleRpm + swing * (redline - idleRpm) * 0.85 + (r() - 0.5) * 200;
+          throttle = 60 + swing * 35;
+          load = 70 + swing * 25;
+          break;
+        }
+        case "track_lap": {
+          // Lap pattern: ~25s lap, accelerate / brake / corner repeatedly
+          const lap = (t % 25) / 25;
+          const targetSpeed = lap < 0.4 ? lap * 2.5 * (v.topSpeedKph * 0.85)
+            : lap < 0.55 ? v.topSpeedKph * 0.85 - (lap - 0.4) * 6 * (v.topSpeedKph * 0.5)
+            : lap < 0.85 ? 80 + Math.sin(lap * 12) * 30
+            : (1 - lap) * 6 * (v.topSpeedKph * 0.5);
+          const sel = selectGear(v, Math.max(20, targetSpeed));
+          rpm = Math.min(redline, sel.rpm + Math.sin(t * 9) * 100);
+          throttle = lap < 0.4 ? 95 : lap < 0.55 ? 5 : 60 + Math.sin(lap * 8) * 30;
+          load = lap < 0.4 ? 95 : lap < 0.55 ? 8 : 60;
           break;
         }
         case "top_speed_run": {
@@ -486,8 +514,10 @@ const buildIceFrames = (): FrameDef[] => [
           const fracToHundred = Math.min(0.95, 100 / vMax);
           const tau60 = Math.max(0.6, v.zeroTo100Sec / -Math.log(1 - fracToHundred));
           const fracV = 1 - Math.exp(-t / tau60);
-          // Climbs through gears, RPM swings each shift, settles near redline*0.95 in top gear
-          rpm = idleRpm + (redline * 0.95 - idleRpm) * fracV + Math.sin(t * 1.6) * 250;
+          const speed = vMax * fracV;
+          const sel = selectGear(v, speed);
+          // Use real per-gear RPM with shift-induced sawtooth
+          rpm = Math.min(redline, sel.rpm + Math.sin(t * 4) * 120);
           throttle = 100 - fracV * 3;
           load = 95;
           break;
@@ -502,11 +532,13 @@ const buildIceFrames = (): FrameDef[] => [
           throttle = 0;
           load = 5;
           break;
-        case "highway_cruise":
-          rpm = 1900 + Math.sin(t * 0.3) * 60 + (r() - 0.5) * 20;
+        case "highway_cruise": {
+          const sel = selectGear(v, v.cruiseKph);
+          rpm = sel.rpm + Math.sin(t * 0.3) * 60 + (r() - 0.5) * 20;
           throttle = 18 + Math.sin(t * 0.3) * 2;
           load = 32;
           break;
+        }
         case "charging_20_80": // ICE doesn't charge — engine off
           rpm = 0;
           throttle = 0;
