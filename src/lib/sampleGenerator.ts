@@ -312,6 +312,12 @@ const buildFrames = (): FrameDef[] => [
           req = 480 * (1 - k * 0.4) + (r() - 0.5) * 6;
           break;
         }
+        case "top_speed_run": {
+          // Strong torque at launch, tapering as drag dominates near Vmax
+          const fracV = 1 - Math.exp(-t / Math.max(2, ctx.duration * 0.55));
+          req = 950 * (1 - 0.55 * fracV) + (r() - 0.5) * 10;
+          break;
+        }
         case "regen_braking":
           req = -180 + (r() - 0.5) * 8;
           break;
