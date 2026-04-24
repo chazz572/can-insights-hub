@@ -58,17 +58,43 @@ export const formatSpeed = (kph: number, unit: SpeedUnit = getSpeedUnit(), digit
 export const convertSpeedsInText = (text: string, unit: SpeedUnit): string => {
   if (unit === "kph") return text;
 
-  // First swap "<X> km/h (~<Y> mph)" → "<Y> mph (~<X> km/h)"
+  // Sentinel keeps "km/h" tokens we've already placed safe from later passes.
+  const SENTINEL = "\u0001KMHSAFE\u0001";
+
+  // 1) Swap "<X> km/h (~<Y> mph)" → "<Y> mph (~<X> km/h)" using sentinel
   let out = text.replace(
     /(\d+(?:\.\d+)?)\s*km\/h\s*\(~\s*(\d+(?:\.\d+)?)\s*mph\)/g,
-    (_, kph, mph) => `${mph} mph (~${kph} km/h)`,
+    (_, kph, mph) => `${mph} mph (~${kph} ${SENTINEL})`,
   );
 
-  // Then convert any remaining bare "<X> km/h" → "<Y> mph"
+  // 2) Convert any remaining bare "<X> km/h" → "<Y> mph"
   out = out.replace(/(\d+(?:\.\d+)?)\s*km\/h/g, (_, kph) => {
     const mph = Math.round(Number(kph) * KPH_TO_MPH);
     return `${mph} mph`;
   });
 
+  // 3) Restore the protected km/h tokens
+  out = out.split(SENTINEL).join("km/h");
+
+  // Re-label the canonical 0–100 km/h benchmark (now "0–62 mph") to the
+  // customary "0–60 mph" equivalent. Handles both en-dash and hyphen.
+  out = out.replace(/0\s*[–-]\s*62\s*mph/g, "0–60 mph");
+
+  // Convert "<X> kg" → "<Y> lb" (curb weight, payloads, etc.)
+  out = out.replace(/(\d+(?:\.\d+)?)\s*kg\b/g, (_, kg) => {
+    const lb = Math.round(Number(kg) * 2.20462);
+    return `${lb} lb`;
+  });
+
+  // Convert small "<X> m" values (e.g. tire radius 0.353 m) → inches.
+  out = out.replace(/(\d+(?:\.\d{1,3})?)\s*m\b(?!\w)/g, (match, m) => {
+    const meters = Number(m);
+    if (Number.isNaN(meters) || meters > 5) return match;
+    const inches = (meters * 39.3701).toFixed(1);
+    return `${inches} in`;
+  });
+
   return out;
 };
+
+
