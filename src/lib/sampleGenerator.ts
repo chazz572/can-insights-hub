@@ -8,6 +8,7 @@ export type DrivingState =
   | "highway_cruise"
   | "charging_20_80"
   | "city_stop_go"
+  | "top_speed_run"
   | "custom";
 
 export interface SampleRequest {
@@ -65,7 +66,21 @@ interface ShapeCtx {
   state: DrivingState;
   duration: number;
   rand: () => number;
+  topSpeedKph: number;
 }
+
+// Heuristic — fully fictional; just maps loose vehicle keywords to a plausible top speed.
+const inferTopSpeedKph = (desc: string): number => {
+  const s = desc.toLowerCase();
+  if (/(hyper|bugatti|chiron|veyron|koenig|jesko)/.test(s)) return 420;
+  if (/(super|lambo|huracan|aventador|ferrari|mclaren|gt3|gt2|911 turbo|porsche.*turbo)/.test(s)) return 330;
+  if (/(plaid|model s plaid|taycan turbo|amg|m3|m5|rs[ -]?\d|sport sedan|performance)/.test(s)) return 280;
+  if (/(model s|model 3|model y|ev sedan|ev hatchback|ev crossover|polestar|lucid|ev sport)/.test(s)) return 250;
+  if (/(truck|f-?150|silverado|ram|pickup|suv|crossover|minivan|van)/.test(s)) return 180;
+  if (/(econ|compact|hatch|civic|corolla|sedan|generic ev sedan|generic)/.test(s)) return 210;
+  if (/(motorcycle|bike|sport bike)/.test(s)) return 290;
+  return 220;
+};
 
 // Generic, safe, fictional frame catalog
 const buildFrames = (): FrameDef[] => [
@@ -75,7 +90,7 @@ const buildFrames = (): FrameDef[] => [
     dlc: 8,
     cycleMs: 20,
     signals: [
-      { name: "VehicleSpeed", startBit: 0, length: 16, factor: 0.01, offset: 0, min: 0, max: 250, unit: "km/h" },
+      { name: "VehicleSpeed", startBit: 0, length: 16, factor: 0.01, offset: 0, min: 0, max: 500, unit: "km/h" },
       { name: "AcceleratorPedal", startBit: 16, length: 8, factor: 0.4, offset: 0, min: 0, max: 100, unit: "%" },
       { name: "BrakePressure", startBit: 24, length: 16, factor: 0.1, offset: 0, min: 0, max: 200, unit: "bar" },
       { name: "GearPosition", startBit: 40, length: 4, factor: 1, offset: 0, min: 0, max: 8, unit: "" },
@@ -97,6 +112,16 @@ const buildFrames = (): FrameDef[] => [
           pedal = 95 - k * 10 + (r() - 0.5) * 2;
           brake = 0;
           gear = 1 + Math.floor(k * 5);
+          break;
+        }
+        case "top_speed_run": {
+          // 0 -> topSpeed asymptotic; pedal pinned, gears step up across run
+          const vMax = ctx.topSpeedKph;
+          const tau = Math.max(2, d * 0.55);
+          speed = vMax * (1 - Math.exp(-t / tau));
+          pedal = 100 - Math.max(0, (speed / vMax) * 4) + (r() - 0.5) * 0.6;
+          brake = 0;
+          gear = 1 + Math.min(7, Math.floor((speed / vMax) * 7));
           break;
         }
         case "idle_ac_on":
@@ -150,10 +175,10 @@ const buildFrames = (): FrameDef[] => [
     dlc: 8,
     cycleMs: 20,
     signals: [
-      { name: "WheelSpeed_FL", startBit: 0, length: 16, factor: 0.01, offset: 0, min: 0, max: 260, unit: "km/h" },
-      { name: "WheelSpeed_FR", startBit: 16, length: 16, factor: 0.01, offset: 0, min: 0, max: 260, unit: "km/h" },
-      { name: "WheelSpeed_RL", startBit: 32, length: 16, factor: 0.01, offset: 0, min: 0, max: 260, unit: "km/h" },
-      { name: "WheelSpeed_RR", startBit: 48, length: 16, factor: 0.01, offset: 0, min: 0, max: 260, unit: "km/h" },
+      { name: "WheelSpeed_FL", startBit: 0, length: 16, factor: 0.01, offset: 0, min: 0, max: 500, unit: "km/h" },
+      { name: "WheelSpeed_FR", startBit: 16, length: 16, factor: 0.01, offset: 0, min: 0, max: 500, unit: "km/h" },
+      { name: "WheelSpeed_RL", startBit: 32, length: 16, factor: 0.01, offset: 0, min: 0, max: 500, unit: "km/h" },
+      { name: "WheelSpeed_RR", startBit: 48, length: 16, factor: 0.01, offset: 0, min: 0, max: 500, unit: "km/h" },
     ],
     shape: (t, ctx) => {
       const r = ctx.rand;
@@ -165,9 +190,11 @@ const buildFrames = (): FrameDef[] => [
             ? 112
             : ctx.state === "launch_0_60"
               ? 97 * (1 - Math.pow(1 - Math.min(1, t / Math.max(1, ctx.duration * 0.85)), 1.6))
-              : ctx.state === "regen_braking"
-                ? Math.max(0, 80 - (t / ctx.duration) * 75)
-                : 30 + Math.sin(t * 0.5) * 10;
+              : ctx.state === "top_speed_run"
+                ? ctx.topSpeedKph * (1 - Math.exp(-t / Math.max(2, ctx.duration * 0.55)))
+                : ctx.state === "regen_braking"
+                  ? Math.max(0, 80 - (t / ctx.duration) * 75)
+                  : 30 + Math.sin(t * 0.5) * 10;
       const j = () => (r() - 0.5) * 0.4;
       return {
         WheelSpeed_FL: Math.max(0, base + j()),
@@ -283,6 +310,12 @@ const buildFrames = (): FrameDef[] => [
         case "launch_0_60": {
           const k = Math.min(1, t / Math.max(1, ctx.duration * 0.85));
           req = 480 * (1 - k * 0.4) + (r() - 0.5) * 6;
+          break;
+        }
+        case "top_speed_run": {
+          // Strong torque at launch, tapering as drag dominates near Vmax
+          const fracV = 1 - Math.exp(-t / Math.max(2, ctx.duration * 0.55));
+          req = 950 * (1 - 0.55 * fracV) + (r() - 0.5) * 10;
           break;
         }
         case "regen_braking":
@@ -430,10 +463,11 @@ const buildLog = (
   duration: number,
   rand: () => number,
   state: DrivingState,
+  topSpeedKph: number,
 ): { log: string; messageCount: number } => {
   // candump-style: (timestamp) can0 ID#DATA
   const lines: string[] = [];
-  const ctx: ShapeCtx = { state, duration, rand };
+  const ctx: ShapeCtx = { state, duration, rand, topSpeedKph };
   const counters: Record<number, number> = {};
   // schedule: emit each frame at its cycleMs
   let messageCount = 0;
@@ -469,10 +503,16 @@ const stateLabel: Record<DrivingState, string> = {
   highway_cruise: "Highway cruise",
   charging_20_80: "DC charging 20% → 80%",
   city_stop_go: "City stop-and-go",
+  top_speed_run: "Top speed run (0 → Vmax)",
   custom: "Custom driving state",
 };
 
-const buildSummary = (req: SampleRequest, frames: FrameDef[], stats: SampleOutput["stats"]): string => {
+const buildSummary = (
+  req: SampleRequest,
+  frames: FrameDef[],
+  stats: SampleOutput["stats"],
+  topSpeedKph: number,
+): string => {
   const sigCount = frames.reduce((n, f) => n + f.signals.length, 0);
   const lines = [
     `Synthetic Sample Summary`,
@@ -491,6 +531,13 @@ const buildSummary = (req: SampleRequest, frames: FrameDef[], stats: SampleOutpu
     case "launch_0_60":
       lines.push("- Rising VehicleSpeed and TorqueRequest, near-zero steering, mild SOC drop, gear progression 1→6.");
       break;
+    case "top_speed_run": {
+      const mph = Math.round(topSpeedKph * 0.621371);
+      lines.push(
+        `- Full launch from 0 → ~${Math.round(topSpeedKph)} km/h (~${mph} mph), gear progression to top, sustained max accelerator, near-zero steering, notable SOC / thermal rise.`,
+      );
+      break;
+    }
     case "idle_ac_on":
       lines.push("- Stationary speed/wheels, near-zero torque, light HVAC current draw, stable thermal signals.");
       break;
@@ -519,20 +566,22 @@ export const generateSample = (req: SampleRequest): SampleOutput => {
   const rand = mulberry32(seed);
   const frames = buildFrames();
   const duration = Math.max(2, Math.min(120, req.durationSec));
+  const topSpeedKph = inferTopSpeedKph(req.vehicleDescription);
   const dbc = buildDbc(frames, req.vehicleDescription);
-  const { log, messageCount } = buildLog(frames, duration, rand, req.drivingState);
+  const { log, messageCount } = buildLog(frames, duration, rand, req.drivingState, topSpeedKph);
   const stats = {
     messages: messageCount,
     uniqueIds: frames.length,
     durationSec: duration,
     avgRateHz: messageCount / duration,
   };
-  const summary = buildSummary(req, frames, stats);
+  const summary = buildSummary(req, frames, stats, topSpeedKph);
   return { dbc, log, summary, stats };
 };
 
 export const drivingStateOptions: Array<{ value: DrivingState; label: string }> = [
   { value: "launch_0_60", label: "0–60 launch" },
+  { value: "top_speed_run", label: "Top speed run (0 → Vmax)" },
   { value: "idle_ac_on", label: "Idle with HVAC on" },
   { value: "regen_braking", label: "Regen braking" },
   { value: "highway_cruise", label: "Highway cruise (70 mph)" },
