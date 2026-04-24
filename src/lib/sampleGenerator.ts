@@ -390,7 +390,7 @@ const buildVehicleProfile = (desc: string, override?: VehicleSpecOverride): Vehi
   let redlineRpm = topSpeedKph >= 320 ? 8500 : topSpeedKph >= 280 ? 8000 : topSpeedKph >= 240 ? 7200 : 6500;
   if (powertrain === "diesel") redlineRpm = 4500;
   if (powertrain === "bev") redlineRpm = 18000;
-  let idleRpm = powertrain === "diesel" ? 700 : 800;
+  let idleRpm = powertrain === "bev" ? 0 : powertrain === "diesel" ? 700 : 800;
   let peakPowerHp = Math.round(peakMotorTorqueNm * 0.6);
   let induction: VehicleProfile["induction"] = powertrain === "bev" ? "electric" : has(/(turbo|tt|biturbo)/) ? "turbo" : has(/(supercharg|whipple|kompressor)/) ? "supercharged" : "na";
   let drivetrain: VehicleProfile["drivetrain"] = has(/\bawd\b|quattro|4matic|x-?drive|sh-?awd|all[- ]wheel/) ? "awd" : has(/\bfwd\b|front[- ]wheel/) ? "fwd" : "rwd";
@@ -474,16 +474,20 @@ const buildVehicleProfile = (desc: string, override?: VehicleSpecOverride): Vehi
 // and below redline*0.95.
 const selectGear = (v: VehicleProfile, speedKph: number): { gear: number; rpm: number } => {
   if (v.rpmPerKphByGear.length <= 1) {
-    const rpm = Math.max(v.idleRpm, v.rpmPerKphByGear[0] * speedKph);
+    const minRpm = v.powertrain === "bev" ? 0 : v.idleRpm;
+    const rpm = Math.max(minRpm, v.rpmPerKphByGear[0] * speedKph);
     return { gear: 1, rpm: Math.min(v.redlineRpm, rpm) };
   }
   for (let g = v.rpmPerKphByGear.length; g >= 1; g--) {
     const rpm = v.rpmPerKphByGear[g - 1] * speedKph;
-    if (rpm <= v.redlineRpm * 0.95 && (g === 1 || rpm >= v.idleRpm * 1.6)) {
-      return { gear: g, rpm: Math.max(v.idleRpm, rpm) };
+    const minCruiseRpm = v.powertrain === "bev" ? 0 : v.idleRpm * 1.6;
+    const minRpm = v.powertrain === "bev" ? 0 : v.idleRpm;
+    if (rpm <= v.redlineRpm * 0.95 && (g === 1 || rpm >= minCruiseRpm)) {
+      return { gear: g, rpm: Math.max(minRpm, rpm) };
     }
   }
-  return { gear: 1, rpm: Math.max(v.idleRpm, v.rpmPerKphByGear[0] * speedKph) };
+  const minRpm = v.powertrain === "bev" ? 0 : v.idleRpm;
+  return { gear: 1, rpm: Math.max(minRpm, v.rpmPerKphByGear[0] * speedKph) };
 };
 
 // ============================================================================
