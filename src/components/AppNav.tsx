@@ -2,6 +2,7 @@ import { BarChart3, Beaker, Bell, Car, ChartNoAxesCombined, CheckCircle2, Downlo
 import { useEffect, useState } from "react";
 import { Link, NavLink as RouterNavLink, useLocation } from "react-router-dom";
 
+import { SettingsDialog } from "@/components/SettingsDialog";
 import { cn } from "@/lib/utils";
 
 const navClass = ({ isActive, highlight }: { isActive: boolean; highlight?: boolean }) =>
@@ -131,9 +132,13 @@ export const AppNav = () => {
             <button type="button" aria-label="Notifications" onClick={() => showNotice("All systems nominal · No active faults")} className="hidden size-9 place-items-center rounded-sm border border-glass-border bg-secondary text-foreground transition-colors hover:border-primary hover:text-primary sm:grid">
               <Bell className="size-4" />
             </button>
-            <button type="button" aria-label="Settings" onClick={() => showNotice("Open Account for shop settings")} className="hidden size-9 place-items-center rounded-sm border border-glass-border bg-secondary text-foreground transition-colors hover:border-primary hover:text-primary sm:grid">
-              <Settings className="size-4" />
-            </button>
+            <SettingsDialog
+              trigger={
+                <button type="button" aria-label="Settings" className="grid size-9 place-items-center rounded-sm border border-glass-border bg-secondary text-foreground transition-colors hover:border-primary hover:text-primary">
+                  <Settings className="size-4" />
+                </button>
+              }
+            />
             <RouterNavLink to="/auth" className="flex items-center gap-2 rounded-sm border border-glass-border bg-secondary px-3 py-2 font-mono text-xs font-semibold uppercase tracking-wider text-foreground transition-colors hover:border-primary hover:text-primary">
               <UserCircle className="size-4 text-primary" />
               <span className="hidden sm:inline">Tech</span>
