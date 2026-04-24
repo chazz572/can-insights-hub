@@ -767,6 +767,7 @@ const buildFrames = (vehicle: VehicleProfile): FrameDef[] => {
   }
 };
 
+const encodePhysical = (sig: SignalDef, value: number): number => {
   const clamped = Math.max(sig.min, Math.min(sig.max, value));
   const raw = Math.round((clamped - sig.offset) / sig.factor);
   const maxRaw = (1 << sig.length) - 1;
