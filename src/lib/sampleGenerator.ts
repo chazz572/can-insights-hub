@@ -250,13 +250,14 @@ const matchNamedSpec = (desc: string): NamedSpec | null => {
 const computeRpmPerKphTable = (
   gearRatios: number[] | undefined,
   finalDrive: number | undefined,
+  powertrain: Powertrain,
   tireRadiusM: number,
   fallbackGearCount: number,
   redlineRpm: number,
   topSpeedKph: number,
 ): number[] => {
   const r = tireRadiusM;
-  const fd = finalDrive ?? 3.5;
+  const fd = finalDrive ?? (powertrain === "bev" ? 1 : 3.5);
   if (gearRatios && gearRatios.length > 0) {
     return gearRatios.map((gr) => {
       const wheelRpmPerKph = (1000 / 3600) / (2 * Math.PI * r) * 60;
@@ -443,7 +444,7 @@ const buildVehicleProfile = (desc: string, override?: VehicleSpecOverride): Vehi
     cruiseKph = Math.min(135, Math.max(95, Math.round(topSpeedKph * 0.45)));
   }
 
-  const rpmPerKphByGear = computeRpmPerKphTable(gearRatios, finalDrive, tireRadiusM, gearCount, redlineRpm, topSpeedKph);
+  const rpmPerKphByGear = computeRpmPerKphTable(gearRatios, finalDrive, powertrain, tireRadiusM, gearCount, redlineRpm, topSpeedKph);
 
   return {
     description: desc,
