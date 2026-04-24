@@ -14,12 +14,33 @@ export type DrivingState =
   | "track_lap"
   | "custom";
 
+export interface VehicleSpecOverride {
+  powertrain?: Powertrain;
+  topSpeedKph?: number;
+  zeroTo100Sec?: number;
+  sixtyTo130Sec?: number;
+  redlineRpm?: number;
+  idleRpm?: number;
+  gearCount?: number;
+  gearRatios?: number[];
+  finalDrive?: number;
+  packKwh?: number;
+  nominalPackVolts?: number;
+  peakPowerHp?: number;
+  peakMotorTorqueNm?: number;
+  curbWeightKg?: number;
+  induction?: VehicleProfile["induction"];
+  drivetrain?: VehicleProfile["drivetrain"];
+  tireRadiusM?: number;
+}
+
 export interface SampleRequest {
   vehicleDescription: string;
   drivingState: DrivingState;
   customStateNotes?: string;
   durationSec: number;
   seed?: number;
+  specOverride?: VehicleSpecOverride;
 }
 
 export interface SampleOutput {
