@@ -470,24 +470,55 @@ const buildVehicleProfile = (desc: string, override?: VehicleSpecOverride): Vehi
   };
 };
 
-// Pick the best gear given current speed: highest gear whose RPM is still above idle*1.4
-// and below redline*0.95.
-const selectGear = (v: VehicleProfile, speedKph: number): { gear: number; rpm: number } => {
+// Pick the best gear given current speed and load context.
+// RPM-SPEED-GEAR CONSISTENCY RULE:
+//   - For ICE: enforce RPM ≥ 3000 when speedKph > 180 (production cars downshift to stay
+//     in the power band at sustained high speed). The only exception is when ALL of the
+//     vehicle's available gears physically can't reach 3000 rpm at that speed (ultra-tall
+//     gearing) — then we use the lowest available gear that stays under redline.
+//   - Under high load (load >= 0.7) at any speed, prefer a gear that keeps RPM ≥
+//     idle * 2.5 so the engine is in its torque band, not lugging.
+const selectGear = (
+  v: VehicleProfile,
+  speedKph: number,
+  loadHint: number = 0.2,
+): { gear: number; rpm: number } => {
+  const isBev = v.powertrain === "bev";
+  const minRpm = isBev ? 0 : v.idleRpm;
   if (v.rpmPerKphByGear.length <= 1) {
-    const minRpm = v.powertrain === "bev" ? 0 : v.idleRpm;
     const rpm = Math.max(minRpm, v.rpmPerKphByGear[0] * speedKph);
     return { gear: 1, rpm: Math.min(v.redlineRpm, rpm) };
   }
+  // Per-rule minimum RPM at this speed
+  let perRuleMinRpm = isBev ? 0 : v.idleRpm * 1.6;
+  if (!isBev) {
+    if (speedKph > 180) perRuleMinRpm = Math.max(perRuleMinRpm, 3000);
+    if (loadHint >= 0.7) perRuleMinRpm = Math.max(perRuleMinRpm, v.idleRpm * 2.5);
+    if (loadHint >= 0.9) perRuleMinRpm = Math.max(perRuleMinRpm, v.redlineRpm * 0.55);
+  }
+  // Pass 1: highest gear satisfying minRpm constraint AND under redline
   for (let g = v.rpmPerKphByGear.length; g >= 1; g--) {
     const rpm = v.rpmPerKphByGear[g - 1] * speedKph;
-    const minCruiseRpm = v.powertrain === "bev" ? 0 : v.idleRpm * 1.6;
-    const minRpm = v.powertrain === "bev" ? 0 : v.idleRpm;
-    if (rpm <= v.redlineRpm * 0.95 && (g === 1 || rpm >= minCruiseRpm)) {
+    if (rpm <= v.redlineRpm * 0.95 && (g === 1 || rpm >= perRuleMinRpm)) {
       return { gear: g, rpm: Math.max(minRpm, rpm) };
     }
   }
-  const minRpm = v.powertrain === "bev" ? 0 : v.idleRpm;
-  return { gear: 1, rpm: Math.max(minRpm, v.rpmPerKphByGear[0] * speedKph) };
+  // Pass 2 (relaxed): no gear satisfies the rule — pick the gear giving RPM closest to
+  // the target (keeps physics consistent even on ultra-tall hypercar gearing).
+  let bestGear = 1;
+  let bestRpm = v.rpmPerKphByGear[0] * speedKph;
+  let bestDist = Math.abs(bestRpm - perRuleMinRpm);
+  for (let g = 1; g <= v.rpmPerKphByGear.length; g++) {
+    const rpm = v.rpmPerKphByGear[g - 1] * speedKph;
+    if (rpm > v.redlineRpm * 0.95) continue;
+    const dist = Math.abs(rpm - perRuleMinRpm);
+    if (dist < bestDist) {
+      bestDist = dist;
+      bestGear = g;
+      bestRpm = rpm;
+    }
+  }
+  return { gear: bestGear, rpm: Math.max(minRpm, bestRpm) };
 };
 
 // ============================================================================
