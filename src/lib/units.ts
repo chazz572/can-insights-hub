@@ -70,5 +70,26 @@ export const convertSpeedsInText = (text: string, unit: SpeedUnit): string => {
     return `${mph} mph`;
   });
 
+  // "0–100 km/h" was just rewritten to "0–100 mph" by the previous rule when
+  // the source string used a non-breaking dash. Re-label the spec phrase so the
+  // benchmark stays the canonical "0–60 mph" customary equivalent.
+  out = out.replace(/0\s*[–-]\s*100\s*mph/g, "0–60 mph");
+
+  // Convert "<X> kg" → "<Y> lb" (curb weight, payloads, etc.)
+  out = out.replace(/(\d+(?:\.\d+)?)\s*kg\b/g, (_, kg) => {
+    const lb = Math.round(Number(kg) * 2.20462);
+    return `${lb} lb`;
+  });
+
+  // Convert "<X> m" tire-radius style values → inches.
+  // Only match values < 5 to avoid clobbering large meter counts.
+  out = out.replace(/(\d+(?:\.\d{1,3})?)\s*m\b(?!\w)/g, (match, m) => {
+    const meters = Number(m);
+    if (Number.isNaN(meters) || meters > 5) return match;
+    const inches = (meters * 39.3701).toFixed(1);
+    return `${inches} in`;
+  });
+
   return out;
 };
+
