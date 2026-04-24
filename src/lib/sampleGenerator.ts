@@ -737,12 +737,23 @@ const buildIceFrames = (): FrameDef[] => [
       const k = Math.min(1, t / ctx.duration);
       // Cumulative thermal rise — temps integrate over time, not just k of duration
       const tempRiseRate = heat * 0.4; // °C per second under load
+      // Realism: 1st-order thermal integrator with cooldown after lift; oil lags coolant.
+      // loadFactor 0..1, scenario-specific.
+      const isHighLoad = ctx.state === "launch_0_60" || ctx.state === "top_speed_run" || ctx.state === "drag_pass" || ctx.state === "burnout";
+      const isMid = ctx.state === "track_lap" || ctx.state === "highway_cruise";
+      const loadFactor = isHighLoad ? 0.95 : isMid ? (ctx.state === "track_lap" ? 0.75 : 0.35) : 0.08;
+      const coolantRise = thermalIntegral(loadFactor, t, 28) * 28; // up to ~+28°C
+      const oilRise = thermalIntegral(loadFactor, t, 55) * 50; // slower, larger ceiling
+      const iatRise = thermalIntegral(loadFactor, t, 6) * (v.induction !== "na" ? 38 : 18);
+      const egtRise = thermalIntegral(loadFactor, t, 4) * egtSpan;
+      // Slight cooldown after burst — if we're not at peak load and t > 5s, decay
+      const cooldown = !isHighLoad && t > 5 ? Math.exp(-(t - 5) / 30) : 1;
       return {
-        CoolantTemp: 88 + Math.min(22, t * tempRiseRate * 0.25) + (r() - 0.5) * 0.6,
-        OilTemp: 95 + Math.min(45, t * tempRiseRate * 0.5) + (r() - 0.5) * 0.6,
-        OilPressure: 3.2 + heat * 1.4 + (r() - 0.5) * 0.1,
-        IntakeAirTemp: 32 + heat * 12 * k + (v.induction !== "na" ? heat * 14 * k : 0) + (r() - 0.5) * 0.5,
-        ExhaustGasTemp: egtBase + heat * egtSpan * k + (r() - 0.5) * 8,
+        CoolantTemp: quantize(88 + coolantRise * cooldown + gauss(r, 0.15), 0.5),
+        OilTemp: quantize(95 + oilRise * cooldown + gauss(r, 0.2), 0.5),
+        OilPressure: quantize(3.2 + loadFactor * 1.4 + gauss(r, 0.05), 0.05),
+        IntakeAirTemp: quantize(32 + iatRise + gauss(r, 0.2), 0.5),
+        ExhaustGasTemp: quantize(egtBase + egtRise + gauss(r, 4), 1),
       };
     },
   },
