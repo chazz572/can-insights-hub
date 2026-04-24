@@ -1173,6 +1173,9 @@ const stateLabel: Record<DrivingState, string> = {
   charging_20_80: "DC charging 20% → 80%",
   city_stop_go: "City stop-and-go",
   top_speed_run: "Top speed run (0 → Vmax)",
+  burnout: "Burnout (stationary, wheels spinning)",
+  drag_pass: "Drag pass (1/4 mile)",
+  track_lap: "Track lap (mixed throttle/brake/corner)",
   custom: "Custom driving state",
 };
 
