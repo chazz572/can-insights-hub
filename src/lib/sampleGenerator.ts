@@ -692,13 +692,26 @@ const buildSummary = (
   req: SampleRequest,
   frames: FrameDef[],
   stats: SampleOutput["stats"],
-  topSpeedKph: number,
+  vehicle: VehicleProfile,
 ): string => {
   const sigCount = frames.reduce((n, f) => n + f.signals.length, 0);
+  const ptLabel: Record<Powertrain, string> = {
+    bev: "Battery Electric",
+    phev: "Plug-in Hybrid",
+    hybrid: "Hybrid",
+    ice: "Internal Combustion",
+    diesel: "Diesel",
+  };
+  const mph = (k: number) => Math.round(k * 0.621371);
   const lines = [
     `Synthetic Sample Summary`,
     `------------------------`,
     `Vehicle profile: ${req.vehicleDescription} (fictional, generic)`,
+    `  Powertrain: ${ptLabel[vehicle.powertrain]}`,
+    `  Inferred top speed: ${vehicle.topSpeedKph} km/h (~${mph(vehicle.topSpeedKph)} mph)`,
+    `  Inferred 0–100 km/h: ${vehicle.zeroTo100Sec.toFixed(1)} s`,
+    `  Gears: ${vehicle.gearCount}${vehicle.packKwh > 0 ? ` · Pack: ${vehicle.packKwh} kWh @ ~${vehicle.nominalPackVolts}V` : ""}`,
+    `  Peak motor/engine torque: ${vehicle.peakMotorTorqueNm} Nm · Curb weight: ${vehicle.curbWeightKg} kg`,
     `Driving state: ${stateLabel[req.drivingState]}${req.customStateNotes ? ` — ${req.customStateNotes}` : ""}`,
     `Duration: ${stats.durationSec.toFixed(1)}s`,
     `Frames defined: ${frames.length}`,
@@ -710,26 +723,38 @@ const buildSummary = (
   ];
   switch (req.drivingState) {
     case "launch_0_60":
-      lines.push("- Rising VehicleSpeed and TorqueRequest, near-zero steering, mild SOC drop, gear progression 1→6.");
-      break;
-    case "top_speed_run": {
-      const mph = Math.round(topSpeedKph * 0.621371);
       lines.push(
-        `- Full launch from 0 → ~${Math.round(topSpeedKph)} km/h (~${mph} mph), gear progression to top, sustained max accelerator, near-zero steering, notable SOC / thermal rise.`,
+        `- Accelerates 0 → 100 km/h in ~${vehicle.zeroTo100Sec.toFixed(1)} s, peak torque near ${vehicle.peakMotorTorqueNm} Nm, gear progression up to ${Math.min(6, vehicle.gearCount)}.`,
       );
       break;
-    }
+    case "top_speed_run":
+      lines.push(
+        `- Full launch from 0 → ~${vehicle.topSpeedKph} km/h (~${mph(vehicle.topSpeedKph)} mph), gear progression to top (${vehicle.gearCount}), torque tapers as drag dominates near Vmax.`,
+      );
+      break;
     case "idle_ac_on":
       lines.push("- Stationary speed/wheels, near-zero torque, light HVAC current draw, stable thermal signals.");
       break;
     case "regen_braking":
-      lines.push("- Decelerating wheel speeds, negative TorqueRequest, slowly rising BatterySOC, low brake pressure.");
+      if (vehicle.hasRegen) {
+        lines.push("- Decelerating wheel speeds, negative TorqueRequest, slowly rising BatterySOC, low brake pressure.");
+      } else {
+        lines.push("- ICE coast-down with service braking (no regen) — decelerating wheels, near-zero torque, brake pressure rises.");
+      }
       break;
     case "highway_cruise":
-      lines.push("- Stable speed near 112 km/h, small steering oscillations, gentle SOC decay, steady torque.");
+      lines.push(
+        `- Stable speed near ${vehicle.cruiseKph} km/h (~${mph(vehicle.cruiseKph)} mph), small steering oscillations, gentle SOC decay, steady torque.`,
+      );
       break;
     case "charging_20_80":
-      lines.push("- Stationary vehicle, negative battery current (charging), SOC ramps 20% → 80%, mild thermal rise.");
+      if (vehicle.packKwh > 0) {
+        lines.push(
+          `- Stationary vehicle, DC fast charging on ~${vehicle.nominalPackVolts}V pack (${vehicle.packKwh} kWh), SOC ramps 20% → 80%, mild thermal rise.`,
+        );
+      } else {
+        lines.push("- Stationary vehicle (no traction battery present); 12 V system stable.");
+      }
       break;
     case "city_stop_go":
       lines.push("- Repeated accel/coast/brake cycles, occasional turn signals, varying gear and steering inputs.");
@@ -747,9 +772,9 @@ export const generateSample = (req: SampleRequest): SampleOutput => {
   const rand = mulberry32(seed);
   const frames = buildFrames();
   const duration = Math.max(2, Math.min(120, req.durationSec));
-  const topSpeedKph = inferTopSpeedKph(req.vehicleDescription);
+  const vehicle = buildVehicleProfile(req.vehicleDescription);
   const dbc = buildDbc(frames, req.vehicleDescription);
-  const { log, messageCount } = buildLog(frames, duration, rand, req.drivingState, topSpeedKph);
+  const { log, messageCount } = buildLog(frames, duration, rand, req.drivingState, vehicle);
   const stats = {
     messages: messageCount,
     uniqueIds: frames.length,
