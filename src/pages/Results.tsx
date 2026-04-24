@@ -650,9 +650,28 @@ const Results = () => {
           <div className="grid gap-6 xl:grid-cols-[1.25fr_0.75fr]">
             <AnalysisCard title="Summary" icon={<MessageSquareText className="size-5" />}>
               <div className="grid gap-4">
-                <PipelineBadge type={fileType} label={pipelineLabel} />
-                <div className="min-w-0 max-w-full overflow-hidden break-all rounded-lg border border-primary/30 bg-gradient-subtle p-3 text-xs font-medium leading-6 text-foreground shadow-glow backdrop-blur [overflow-wrap:anywhere] sm:break-words sm:p-4 sm:text-sm">{shortPlainSummary}</div>
-                <div className="min-w-0 max-w-full overflow-hidden rounded-lg border border-glass-border bg-glass p-4 text-sm leading-7 text-foreground backdrop-blur whitespace-pre-wrap [overflow-wrap:anywhere]">{renderText(summaryText)}</div>
+                <div className="flex items-center justify-between gap-2">
+                  <PipelineBadge type={fileType} label={pipelineLabel} />
+                  <div className="inline-flex items-center gap-1 rounded-sm border border-glass-border bg-background/60 p-1 font-mono text-[10px] uppercase tracking-wider">
+                    <span className="px-2 text-muted-foreground">Units</span>
+                    <button
+                      type="button"
+                      onClick={() => setSpeedUnit("kph")}
+                      className={`rounded-sm px-2 py-1 transition-colors ${speedUnit === "kph" ? "bg-primary text-primary-foreground" : "text-foreground hover:bg-secondary"}`}
+                    >
+                      km/h
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setSpeedUnit("mph")}
+                      className={`rounded-sm px-2 py-1 transition-colors ${speedUnit === "mph" ? "bg-primary text-primary-foreground" : "text-foreground hover:bg-secondary"}`}
+                    >
+                      mph
+                    </button>
+                  </div>
+                </div>
+                <div className="min-w-0 max-w-full overflow-hidden break-all rounded-lg border border-primary/30 bg-gradient-subtle p-3 text-xs font-medium leading-6 text-foreground shadow-glow backdrop-blur [overflow-wrap:anywhere] sm:break-words sm:p-4 sm:text-sm">{convertSpeedsInText(shortPlainSummary, speedUnit)}</div>
+                <div className="min-w-0 max-w-full overflow-hidden rounded-lg border border-glass-border bg-glass p-4 text-sm leading-7 text-foreground backdrop-blur whitespace-pre-wrap [overflow-wrap:anywhere]">{renderTextU(summaryText, speedUnit)}</div>
               </div>
             </AnalysisCard>
             <AnalysisCard title={fileType === "dbc" ? "DBC Structure" : fileType === "log_dbc" ? "Decoded Signal Activity" : "Raw Bus Activity"} description={fileType === "dbc" ? "Message and signal definitions only." : fileType === "log_dbc" ? "Physical units from DBC-backed decoding." : "Timing and frame intensity without physical decoding."} icon={<BarChart3 className="size-5" />}>
