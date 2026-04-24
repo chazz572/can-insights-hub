@@ -750,7 +750,23 @@ const buildCommonFrames = (): FrameDef[] => [
   },
 ];
 
-const encodePhysical = (sig: SignalDef, value: number): number => {
+// Powertrain-aware frame selector
+const buildFrames = (vehicle: VehicleProfile): FrameDef[] => {
+  const common = buildCommonFrames();
+  switch (vehicle.powertrain) {
+    case "bev":
+      return [...common, ...buildEvFrames()];
+    case "ice":
+    case "diesel":
+      return [...common, ...buildIceFrames()];
+    case "hybrid":
+    case "phev":
+      return [...common, ...buildEvFrames(), ...buildIceFrames()];
+    default:
+      return common;
+  }
+};
+
   const clamped = Math.max(sig.min, Math.min(sig.max, value));
   const raw = Math.round((clamped - sig.offset) / sig.factor);
   const maxRaw = (1 << sig.length) - 1;
