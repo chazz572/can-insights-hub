@@ -60,7 +60,7 @@ const SampleGenerator = () => {
           vehicleDescription: vehicle.trim(),
           drivingState: state,
           customStateNotes: notes.trim() || undefined,
-          durationSec: duration,
+          durationSec: Number(durationText) || 15,
         });
         setResult(out);
         toast.success(`Generated ${out.stats.messages.toLocaleString()} synthetic CAN messages.`);
@@ -145,8 +145,14 @@ const SampleGenerator = () => {
               type="number"
               min={2}
               max={120}
-              value={duration}
-              onChange={(e) => setDuration(Number(e.target.value) || 15)}
+              value={durationText}
+              onChange={(e) => setDurationText(e.target.value)}
+              onBlur={() => {
+                const n = Number(durationText);
+                if (!Number.isFinite(n) || n < 2) setDurationText("2");
+                else if (n > 120) setDurationText("120");
+                else setDurationText(String(Math.round(n)));
+              }}
             />
             <p className="text-xs text-muted-foreground">2–120 s. Longer logs take a moment to generate.</p>
           </div>
