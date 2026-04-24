@@ -72,14 +72,24 @@ export interface VehicleProfile {
   powertrain: Powertrain;
   topSpeedKph: number;
   zeroTo100Sec: number; // 0->100 km/h
+  sixtyTo130Sec: number; // 60->130 mph (roll-on power)
+  redlineRpm: number;
+  idleRpm: number;
   gearCount: number; // 1 for most BEVs, 5-10 for ICE
+  // Final-drive ratio * gear ratio per gear (RPM per km/h ≈ ratio*1000/(60*tireCirc_m*3.6))
+  // We store rpmPerKphByGear[gear-1] precomputed for realism.
+  rpmPerKphByGear: number[];
   packKwh: number; // 0 for pure ICE
   nominalPackVolts: number; // ~400 typical, ~800 for high-perf EV
+  peakPowerHp: number;
   peakMotorTorqueNm: number;
   curbWeightKg: number;
   cruiseKph: number; // typical highway cruise
   hvacIdleAmps: number;
   hasRegen: boolean;
+  induction: "na" | "turbo" | "twin_turbo" | "supercharged" | "electric";
+  drivetrain: "fwd" | "rwd" | "awd";
+  tireRadiusM: number;
 }
 
 interface ShapeCtx {
@@ -90,6 +100,160 @@ interface ShapeCtx {
   // legacy alias kept for any older references
   topSpeedKph: number;
 }
+
+// ============================================================================
+// Real-vehicle knowledge base (fictional CAN, but accurate performance specs).
+// Each entry is matched against the user's free-text description.
+// Specs are public-knowledge ballpark figures used purely to shape physics.
+// ============================================================================
+interface NamedSpec {
+  match: RegExp;
+  powertrain?: Powertrain;
+  topSpeedKph?: number;
+  zeroTo100Sec?: number;
+  sixtyTo130Sec?: number;
+  redlineRpm?: number;
+  idleRpm?: number;
+  gearCount?: number;
+  finalDrive?: number;
+  gearRatios?: number[]; // 1st..Nth
+  packKwh?: number;
+  nominalPackVolts?: number;
+  peakPowerHp?: number;
+  peakMotorTorqueNm?: number;
+  curbWeightKg?: number;
+  induction?: VehicleProfile["induction"];
+  drivetrain?: VehicleProfile["drivetrain"];
+  tireRadiusM?: number;
+}
+
+const NAMED_VEHICLES: NamedSpec[] = [
+  // ====== Tesla / EV halo ======
+  { match: /(model s plaid|plaid)/i, powertrain: "bev", topSpeedKph: 322, zeroTo100Sec: 2.1, sixtyTo130Sec: 4.5, redlineRpm: 20000, gearCount: 1, gearRatios: [9.0], peakPowerHp: 1020, peakMotorTorqueNm: 1420, packKwh: 100, nominalPackVolts: 400, curbWeightKg: 2162, induction: "electric", drivetrain: "awd", tireRadiusM: 0.353 },
+  { match: /(model 3 performance|m3p)/i, powertrain: "bev", topSpeedKph: 261, zeroTo100Sec: 3.1, sixtyTo130Sec: 7.8, gearCount: 1, gearRatios: [9.0], peakPowerHp: 510, peakMotorTorqueNm: 660, packKwh: 82, nominalPackVolts: 400, curbWeightKg: 1844, induction: "electric", drivetrain: "awd", tireRadiusM: 0.342 },
+  { match: /(taycan turbo s)/i, powertrain: "bev", topSpeedKph: 260, zeroTo100Sec: 2.6, sixtyTo130Sec: 6.2, gearCount: 2, gearRatios: [15.56, 8.05], peakPowerHp: 750, peakMotorTorqueNm: 1050, packKwh: 93, nominalPackVolts: 800, curbWeightKg: 2295, induction: "electric", drivetrain: "awd", tireRadiusM: 0.358 },
+  { match: /(rivian r1[ts])/i, powertrain: "bev", topSpeedKph: 201, zeroTo100Sec: 3.0, sixtyTo130Sec: 8.5, gearCount: 1, gearRatios: [10.5], peakPowerHp: 835, peakMotorTorqueNm: 1231, packKwh: 135, nominalPackVolts: 400, curbWeightKg: 3060, induction: "electric", drivetrain: "awd", tireRadiusM: 0.402 },
+  { match: /(lucid air sapphire|lucid.*sapphire)/i, powertrain: "bev", topSpeedKph: 330, zeroTo100Sec: 1.95, sixtyTo130Sec: 4.0, gearCount: 1, gearRatios: [9.5], peakPowerHp: 1234, peakMotorTorqueNm: 1700, packKwh: 118, nominalPackVolts: 924, curbWeightKg: 2380, induction: "electric", drivetrain: "awd", tireRadiusM: 0.358 },
+  { match: /(cybertruck)/i, powertrain: "bev", topSpeedKph: 209, zeroTo100Sec: 2.6, gearCount: 1, gearRatios: [9.0], peakPowerHp: 845, peakMotorTorqueNm: 1420, packKwh: 123, nominalPackVolts: 400, curbWeightKg: 3104, induction: "electric", drivetrain: "awd", tireRadiusM: 0.418 },
+  { match: /(f-?150 lightning|lightning)/i, powertrain: "bev", topSpeedKph: 180, zeroTo100Sec: 4.0, gearCount: 1, gearRatios: [9.5], peakPowerHp: 580, peakMotorTorqueNm: 1050, packKwh: 131, nominalPackVolts: 400, curbWeightKg: 2948, induction: "electric", drivetrain: "awd", tireRadiusM: 0.412 },
+
+  // ====== Hypercars ======
+  { match: /(bugatti chiron|chiron)/i, powertrain: "ice", topSpeedKph: 420, zeroTo100Sec: 2.4, sixtyTo130Sec: 3.5, redlineRpm: 6700, gearCount: 7, gearRatios: [3.46, 2.30, 1.71, 1.30, 1.00, 0.83, 0.69], finalDrive: 3.07, peakPowerHp: 1500, peakMotorTorqueNm: 1600, curbWeightKg: 1995, induction: "twin_turbo", drivetrain: "awd", tireRadiusM: 0.378 },
+  { match: /(rimac nevera|nevera)/i, powertrain: "bev", topSpeedKph: 412, zeroTo100Sec: 1.85, sixtyTo130Sec: 3.0, gearCount: 2, gearRatios: [12.5, 6.5], peakPowerHp: 1914, peakMotorTorqueNm: 2360, packKwh: 120, nominalPackVolts: 800, curbWeightKg: 2150, induction: "electric", drivetrain: "awd", tireRadiusM: 0.358 },
+  { match: /(koenig|jesko)/i, powertrain: "ice", topSpeedKph: 480, zeroTo100Sec: 2.5, redlineRpm: 8500, gearCount: 9, peakPowerHp: 1600, peakMotorTorqueNm: 1500, curbWeightKg: 1420, induction: "twin_turbo", drivetrain: "rwd", tireRadiusM: 0.353 },
+
+  // ====== Ferrari / Lambo / McLaren ======
+  { match: /(sf90)/i, powertrain: "phev", topSpeedKph: 340, zeroTo100Sec: 2.5, redlineRpm: 8000, gearCount: 8, peakPowerHp: 986, peakMotorTorqueNm: 800, packKwh: 8, nominalPackVolts: 350, curbWeightKg: 1570, induction: "twin_turbo", drivetrain: "awd", tireRadiusM: 0.347 },
+  { match: /(296 gtb|296)/i, powertrain: "phev", topSpeedKph: 330, zeroTo100Sec: 2.9, redlineRpm: 8500, gearCount: 8, peakPowerHp: 819, peakMotorTorqueNm: 740, packKwh: 7.45, nominalPackVolts: 350, curbWeightKg: 1470, induction: "twin_turbo", drivetrain: "rwd", tireRadiusM: 0.342 },
+  { match: /(f8 tributo|f8\b)/i, powertrain: "ice", topSpeedKph: 340, zeroTo100Sec: 2.9, redlineRpm: 8000, gearCount: 7, peakPowerHp: 710, peakMotorTorqueNm: 770, curbWeightKg: 1330, induction: "twin_turbo", drivetrain: "rwd", tireRadiusM: 0.342 },
+  { match: /(huracan)/i, powertrain: "ice", topSpeedKph: 325, zeroTo100Sec: 2.9, redlineRpm: 8500, gearCount: 7, peakPowerHp: 631, peakMotorTorqueNm: 600, curbWeightKg: 1422, induction: "na", drivetrain: "awd", tireRadiusM: 0.347 },
+  { match: /(aventador|revuelto)/i, powertrain: "ice", topSpeedKph: 350, zeroTo100Sec: 2.5, redlineRpm: 9500, gearCount: 8, peakPowerHp: 1001, peakMotorTorqueNm: 725, curbWeightKg: 1772, induction: "na", drivetrain: "awd", tireRadiusM: 0.358 },
+  { match: /(720s|765lt)/i, powertrain: "ice", topSpeedKph: 341, zeroTo100Sec: 2.7, redlineRpm: 8500, gearCount: 7, peakPowerHp: 755, peakMotorTorqueNm: 800, curbWeightKg: 1339, induction: "twin_turbo", drivetrain: "rwd", tireRadiusM: 0.342 },
+
+  // ====== Porsche ======
+  { match: /(911 turbo s)/i, powertrain: "ice", topSpeedKph: 330, zeroTo100Sec: 2.7, sixtyTo130Sec: 5.0, redlineRpm: 7200, gearCount: 8, gearRatios: [3.91, 2.29, 1.58, 1.19, 0.97, 0.83, 0.68, 0.57], finalDrive: 3.44, peakPowerHp: 640, peakMotorTorqueNm: 800, curbWeightKg: 1640, induction: "twin_turbo", drivetrain: "awd", tireRadiusM: 0.342 },
+  { match: /(gt3 rs)/i, powertrain: "ice", topSpeedKph: 296, zeroTo100Sec: 3.2, redlineRpm: 9000, gearCount: 7, peakPowerHp: 518, peakMotorTorqueNm: 465, curbWeightKg: 1450, induction: "na", drivetrain: "rwd", tireRadiusM: 0.342 },
+  { match: /(gt3\b)/i, powertrain: "ice", topSpeedKph: 318, zeroTo100Sec: 3.4, redlineRpm: 9000, gearCount: 7, peakPowerHp: 502, peakMotorTorqueNm: 470, curbWeightKg: 1418, induction: "na", drivetrain: "rwd", tireRadiusM: 0.342 },
+  { match: /(911 turbo|992 turbo)/i, powertrain: "ice", topSpeedKph: 320, zeroTo100Sec: 2.8, redlineRpm: 7200, gearCount: 8, peakPowerHp: 572, peakMotorTorqueNm: 750, curbWeightKg: 1640, induction: "twin_turbo", drivetrain: "awd", tireRadiusM: 0.342 },
+  { match: /(carrera s|carrera 4s|992)/i, powertrain: "ice", topSpeedKph: 308, zeroTo100Sec: 3.7, redlineRpm: 7500, gearCount: 8, peakPowerHp: 443, peakMotorTorqueNm: 530, curbWeightKg: 1515, induction: "twin_turbo", drivetrain: "rwd", tireRadiusM: 0.342 },
+
+  // ====== Corvette / GM ======
+  { match: /(c8 z06|corvette z06|z06)/i, powertrain: "ice", topSpeedKph: 312, zeroTo100Sec: 2.6, sixtyTo130Sec: 5.5, redlineRpm: 8600, idleRpm: 800, gearCount: 8, gearRatios: [4.71, 3.13, 2.10, 1.67, 1.29, 1.00, 0.84, 0.67], finalDrive: 5.17, peakPowerHp: 670, peakMotorTorqueNm: 623, curbWeightKg: 1660, induction: "na", drivetrain: "rwd", tireRadiusM: 0.342 },
+  { match: /(c8 zr1|zr1)/i, powertrain: "ice", topSpeedKph: 374, zeroTo100Sec: 2.3, redlineRpm: 8000, gearCount: 8, peakPowerHp: 1064, peakMotorTorqueNm: 1123, curbWeightKg: 1715, induction: "twin_turbo", drivetrain: "rwd", tireRadiusM: 0.342 },
+  { match: /(c8 e-?ray|e-?ray)/i, powertrain: "hybrid", topSpeedKph: 290, zeroTo100Sec: 2.5, redlineRpm: 6500, gearCount: 8, peakPowerHp: 655, peakMotorTorqueNm: 720, packKwh: 1.9, nominalPackVolts: 80, curbWeightKg: 1765, induction: "na", drivetrain: "awd", tireRadiusM: 0.342 },
+  { match: /(c8|stingray|corvette)/i, powertrain: "ice", topSpeedKph: 312, zeroTo100Sec: 2.9, redlineRpm: 6500, gearCount: 8, peakPowerHp: 495, peakMotorTorqueNm: 637, curbWeightKg: 1530, induction: "na", drivetrain: "rwd", tireRadiusM: 0.342 },
+  { match: /(camaro zl1)/i, powertrain: "ice", topSpeedKph: 320, zeroTo100Sec: 3.5, redlineRpm: 6600, gearCount: 10, peakPowerHp: 650, peakMotorTorqueNm: 881, curbWeightKg: 1882, induction: "supercharged", drivetrain: "rwd", tireRadiusM: 0.347 },
+  { match: /(cts-?v|cadillac.*blackwing|ct5-?v blackwing)/i, powertrain: "ice", topSpeedKph: 322, zeroTo100Sec: 3.4, redlineRpm: 6500, gearCount: 10, peakPowerHp: 668, peakMotorTorqueNm: 893, curbWeightKg: 1976, induction: "supercharged", drivetrain: "rwd", tireRadiusM: 0.347 },
+
+  // ====== Mopar ======
+  { match: /(demon 170|demon)/i, powertrain: "ice", topSpeedKph: 346, zeroTo100Sec: 1.66, redlineRpm: 6500, gearCount: 8, peakPowerHp: 1025, peakMotorTorqueNm: 1281, curbWeightKg: 1995, induction: "supercharged", drivetrain: "rwd", tireRadiusM: 0.358 },
+  { match: /(hellcat redeye|redeye)/i, powertrain: "ice", topSpeedKph: 327, zeroTo100Sec: 3.4, redlineRpm: 6300, gearCount: 8, peakPowerHp: 797, peakMotorTorqueNm: 959, curbWeightKg: 2018, induction: "supercharged", drivetrain: "rwd", tireRadiusM: 0.358 },
+  { match: /(hellcat|charger srt|challenger srt)/i, powertrain: "ice", topSpeedKph: 322, zeroTo100Sec: 3.6, redlineRpm: 6200, gearCount: 8, peakPowerHp: 717, peakMotorTorqueNm: 881, curbWeightKg: 2018, induction: "supercharged", drivetrain: "rwd", tireRadiusM: 0.358 },
+  { match: /(trackhawk|grand cherokee srt)/i, powertrain: "ice", topSpeedKph: 290, zeroTo100Sec: 3.5, redlineRpm: 6200, gearCount: 8, peakPowerHp: 707, peakMotorTorqueNm: 875, curbWeightKg: 2433, induction: "supercharged", drivetrain: "awd", tireRadiusM: 0.379 },
+
+  // ====== Ford ======
+  { match: /(gt500|shelby gt500|mustang gt500)/i, powertrain: "ice", topSpeedKph: 290, zeroTo100Sec: 3.3, sixtyTo130Sec: 5.4, redlineRpm: 7500, gearCount: 7, peakPowerHp: 760, peakMotorTorqueNm: 847, curbWeightKg: 1875, induction: "supercharged", drivetrain: "rwd", tireRadiusM: 0.353 },
+  { match: /(gt350|shelby gt350)/i, powertrain: "ice", topSpeedKph: 290, zeroTo100Sec: 4.0, redlineRpm: 8250, gearCount: 6, peakPowerHp: 526, peakMotorTorqueNm: 582, curbWeightKg: 1707, induction: "na", drivetrain: "rwd", tireRadiusM: 0.347 },
+  { match: /(mustang dark horse|dark horse)/i, powertrain: "ice", topSpeedKph: 267, zeroTo100Sec: 4.1, redlineRpm: 7500, gearCount: 10, peakPowerHp: 500, peakMotorTorqueNm: 566, curbWeightKg: 1796, induction: "na", drivetrain: "rwd", tireRadiusM: 0.347 },
+  { match: /(mustang gt|s650|s550 gt)/i, powertrain: "ice", topSpeedKph: 250, zeroTo100Sec: 4.3, redlineRpm: 7500, gearCount: 10, peakPowerHp: 480, peakMotorTorqueNm: 563, curbWeightKg: 1727, induction: "na", drivetrain: "rwd", tireRadiusM: 0.347 },
+  { match: /(ford gt\b|2017 ford gt)/i, powertrain: "ice", topSpeedKph: 348, zeroTo100Sec: 2.8, redlineRpm: 7250, gearCount: 7, peakPowerHp: 660, peakMotorTorqueNm: 746, curbWeightKg: 1385, induction: "twin_turbo", drivetrain: "rwd", tireRadiusM: 0.347 },
+  { match: /(raptor r)/i, powertrain: "ice", topSpeedKph: 290, zeroTo100Sec: 3.6, redlineRpm: 7000, gearCount: 10, peakPowerHp: 720, peakMotorTorqueNm: 868, curbWeightKg: 2735, induction: "supercharged", drivetrain: "awd", tireRadiusM: 0.422 },
+  { match: /(raptor|f-?150 raptor)/i, powertrain: "ice", topSpeedKph: 250, zeroTo100Sec: 5.1, redlineRpm: 6000, gearCount: 10, peakPowerHp: 450, peakMotorTorqueNm: 691, curbWeightKg: 2667, induction: "twin_turbo", drivetrain: "awd", tireRadiusM: 0.422 },
+  { match: /(f-?150)/i, powertrain: "ice", topSpeedKph: 175, zeroTo100Sec: 6.0, redlineRpm: 6000, gearCount: 10, peakPowerHp: 400, peakMotorTorqueNm: 678, curbWeightKg: 2200, induction: "twin_turbo", drivetrain: "awd", tireRadiusM: 0.402 },
+
+  // ====== BMW ======
+  { match: /(m5 cs)/i, powertrain: "ice", topSpeedKph: 305, zeroTo100Sec: 2.9, sixtyTo130Sec: 5.6, redlineRpm: 7200, gearCount: 8, peakPowerHp: 627, peakMotorTorqueNm: 750, curbWeightKg: 1825, induction: "twin_turbo", drivetrain: "awd", tireRadiusM: 0.347 },
+  { match: /(m5\b)/i, powertrain: "ice", topSpeedKph: 305, zeroTo100Sec: 3.1, redlineRpm: 7200, gearCount: 8, peakPowerHp: 600, peakMotorTorqueNm: 750, curbWeightKg: 1885, induction: "twin_turbo", drivetrain: "awd", tireRadiusM: 0.347 },
+  { match: /(m4 cs|m3 cs)/i, powertrain: "ice", topSpeedKph: 302, zeroTo100Sec: 3.2, redlineRpm: 7200, gearCount: 8, peakPowerHp: 543, peakMotorTorqueNm: 650, curbWeightKg: 1745, induction: "twin_turbo", drivetrain: "awd", tireRadiusM: 0.347 },
+  { match: /(m3 comp|m4 comp|m3\b|m4\b)/i, powertrain: "ice", topSpeedKph: 290, zeroTo100Sec: 3.5, redlineRpm: 7200, gearCount: 8, peakPowerHp: 503, peakMotorTorqueNm: 650, curbWeightKg: 1730, induction: "twin_turbo", drivetrain: "awd", tireRadiusM: 0.347 },
+  { match: /(m2\b)/i, powertrain: "ice", topSpeedKph: 285, zeroTo100Sec: 4.0, redlineRpm: 7200, gearCount: 8, peakPowerHp: 453, peakMotorTorqueNm: 550, curbWeightKg: 1700, induction: "twin_turbo", drivetrain: "rwd", tireRadiusM: 0.342 },
+
+  // ====== Mercedes-AMG ======
+  { match: /(amg gt black|gt black series)/i, powertrain: "ice", topSpeedKph: 325, zeroTo100Sec: 3.1, redlineRpm: 7200, gearCount: 7, peakPowerHp: 720, peakMotorTorqueNm: 800, curbWeightKg: 1670, induction: "twin_turbo", drivetrain: "rwd", tireRadiusM: 0.347 },
+  { match: /(amg gt 63|gt63)/i, powertrain: "ice", topSpeedKph: 315, zeroTo100Sec: 3.0, redlineRpm: 7000, gearCount: 9, peakPowerHp: 630, peakMotorTorqueNm: 900, curbWeightKg: 2070, induction: "twin_turbo", drivetrain: "awd", tireRadiusM: 0.347 },
+  { match: /(e63 s|c63 s|s63)/i, powertrain: "ice", topSpeedKph: 290, zeroTo100Sec: 3.4, redlineRpm: 7000, gearCount: 9, peakPowerHp: 603, peakMotorTorqueNm: 850, curbWeightKg: 1995, induction: "twin_turbo", drivetrain: "awd", tireRadiusM: 0.347 },
+
+  // ====== Audi RS ======
+  { match: /(rs6|rs7)/i, powertrain: "ice", topSpeedKph: 305, zeroTo100Sec: 3.4, redlineRpm: 6800, gearCount: 8, peakPowerHp: 621, peakMotorTorqueNm: 850, curbWeightKg: 2150, induction: "twin_turbo", drivetrain: "awd", tireRadiusM: 0.347 },
+  { match: /(rs[ -]?e-?tron gt)/i, powertrain: "bev", topSpeedKph: 250, zeroTo100Sec: 3.3, gearCount: 2, gearRatios: [15.56, 8.05], peakPowerHp: 637, peakMotorTorqueNm: 830, packKwh: 93, nominalPackVolts: 800, curbWeightKg: 2347, induction: "electric", drivetrain: "awd", tireRadiusM: 0.353 },
+  { match: /(rs3)/i, powertrain: "ice", topSpeedKph: 290, zeroTo100Sec: 3.6, redlineRpm: 7000, gearCount: 7, peakPowerHp: 401, peakMotorTorqueNm: 500, curbWeightKg: 1570, induction: "turbo", drivetrain: "awd", tireRadiusM: 0.337 },
+
+  // ====== Toyota / Honda / Subaru ======
+  { match: /(gr supra|supra)/i, powertrain: "ice", topSpeedKph: 250, zeroTo100Sec: 3.9, redlineRpm: 7000, gearCount: 8, peakPowerHp: 382, peakMotorTorqueNm: 500, curbWeightKg: 1542, induction: "turbo", drivetrain: "rwd", tireRadiusM: 0.347 },
+  { match: /(gr corolla|gr yaris)/i, powertrain: "ice", topSpeedKph: 230, zeroTo100Sec: 4.9, redlineRpm: 7000, gearCount: 6, peakPowerHp: 300, peakMotorTorqueNm: 370, curbWeightKg: 1474, induction: "turbo", drivetrain: "awd", tireRadiusM: 0.327 },
+  { match: /(civic type r|type r)/i, powertrain: "ice", topSpeedKph: 275, zeroTo100Sec: 5.4, redlineRpm: 7000, gearCount: 6, peakPowerHp: 315, peakMotorTorqueNm: 420, curbWeightKg: 1429, induction: "turbo", drivetrain: "fwd", tireRadiusM: 0.337 },
+  { match: /(sti|wrx sti)/i, powertrain: "ice", topSpeedKph: 255, zeroTo100Sec: 4.9, redlineRpm: 6700, gearCount: 6, peakPowerHp: 310, peakMotorTorqueNm: 393, curbWeightKg: 1568, induction: "turbo", drivetrain: "awd", tireRadiusM: 0.327 },
+  { match: /(gtr|nissan gt-?r|r35)/i, powertrain: "ice", topSpeedKph: 315, zeroTo100Sec: 2.9, redlineRpm: 7100, gearCount: 6, peakPowerHp: 565, peakMotorTorqueNm: 633, curbWeightKg: 1755, induction: "twin_turbo", drivetrain: "awd", tireRadiusM: 0.347 },
+  { match: /(civic\b|corolla\b)/i, powertrain: "ice", topSpeedKph: 200, zeroTo100Sec: 8.5, redlineRpm: 6800, gearCount: 6, peakPowerHp: 158, peakMotorTorqueNm: 187, curbWeightKg: 1300, induction: "na", drivetrain: "fwd", tireRadiusM: 0.317 },
+
+  // ====== Diesel trucks ======
+  { match: /(cummins|ram 2500|ram 3500)/i, powertrain: "diesel", topSpeedKph: 175, zeroTo100Sec: 7.5, redlineRpm: 4500, idleRpm: 700, gearCount: 8, peakPowerHp: 420, peakMotorTorqueNm: 1356, curbWeightKg: 3500, induction: "turbo", drivetrain: "awd", tireRadiusM: 0.422 },
+  { match: /(duramax|silverado hd|sierra hd)/i, powertrain: "diesel", topSpeedKph: 180, zeroTo100Sec: 7.5, redlineRpm: 4500, gearCount: 10, peakPowerHp: 470, peakMotorTorqueNm: 1234, curbWeightKg: 3500, induction: "turbo", drivetrain: "awd", tireRadiusM: 0.422 },
+  { match: /(powerstroke|f-?250|f-?350|super duty)/i, powertrain: "diesel", topSpeedKph: 175, zeroTo100Sec: 7.5, redlineRpm: 4500, gearCount: 10, peakPowerHp: 500, peakMotorTorqueNm: 1424, curbWeightKg: 3500, induction: "turbo", drivetrain: "awd", tireRadiusM: 0.422 },
+
+  // ====== Hybrids ======
+  { match: /(prius)/i, powertrain: "hybrid", topSpeedKph: 180, zeroTo100Sec: 7.0, redlineRpm: 5200, gearCount: 1, gearRatios: [1], peakPowerHp: 196, peakMotorTorqueNm: 188, packKwh: 1.3, nominalPackVolts: 207, curbWeightKg: 1485, induction: "na", drivetrain: "fwd", tireRadiusM: 0.327 },
+];
+
+const matchNamedSpec = (desc: string): NamedSpec | null => {
+  for (const spec of NAMED_VEHICLES) {
+    if (spec.match.test(desc)) return spec;
+  }
+  return null;
+};
+
+// Compute rpm-per-kph for each gear from gear ratios + final drive + tire radius.
+// Wheel rpm = speed_mps / (2π·r) · 60 ; engine rpm = wheel_rpm · ratio · finalDrive
+const computeRpmPerKphTable = (
+  gearRatios: number[] | undefined,
+  finalDrive: number | undefined,
+  tireRadiusM: number,
+  fallbackGearCount: number,
+  redlineRpm: number,
+  topSpeedKph: number,
+): number[] => {
+  const r = tireRadiusM;
+  const fd = finalDrive ?? 3.5;
+  if (gearRatios && gearRatios.length > 0) {
+    return gearRatios.map((gr) => {
+      const wheelRpmPerKph = (1000 / 3600) / (2 * Math.PI * r) * 60;
+      return wheelRpmPerKph * gr * fd;
+    });
+  }
+  // Synthesize a plausible ratio set: top gear sized so redline ≈ topSpeed
+  const wheelRpmPerKph = (1000 / 3600) / (2 * Math.PI * r) * 60;
+  const topGearEffective = (redlineRpm * 0.92) / Math.max(80, topSpeedKph) / wheelRpmPerKph;
+  const ratios: number[] = [];
+  const n = Math.max(1, fallbackGearCount);
+  // Geometric progression from ~3.5x top to top
+  const first = topGearEffective * Math.min(8, n) * 0.9;
+  for (let i = 0; i < n; i++) {
+    const frac = n === 1 ? 1 : i / (n - 1);
+    const ratio = first * Math.pow(topGearEffective / Math.max(0.001, first), frac);
+    ratios.push(wheelRpmPerKph * ratio);
+  }
+  return ratios;
+};
 
 // Build a fictional-but-plausible profile from the user's description.
 const buildVehicleProfile = (desc: string): VehicleProfile => {
