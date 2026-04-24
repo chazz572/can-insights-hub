@@ -9,6 +9,9 @@ export type DrivingState =
   | "charging_20_80"
   | "city_stop_go"
   | "top_speed_run"
+  | "burnout"
+  | "drag_pass"
+  | "track_lap"
   | "custom";
 
 export interface SampleRequest {
