@@ -66,7 +66,21 @@ interface ShapeCtx {
   state: DrivingState;
   duration: number;
   rand: () => number;
+  topSpeedKph: number;
 }
+
+// Heuristic — fully fictional; just maps loose vehicle keywords to a plausible top speed.
+const inferTopSpeedKph = (desc: string): number => {
+  const s = desc.toLowerCase();
+  if (/(hyper|bugatti|chiron|veyron|koenig|jesko)/.test(s)) return 420;
+  if (/(super|lambo|huracan|aventador|ferrari|mclaren|gt3|gt2|911 turbo|porsche.*turbo)/.test(s)) return 330;
+  if (/(plaid|model s plaid|taycan turbo|amg|m3|m5|rs[ -]?\d|sport sedan|performance)/.test(s)) return 280;
+  if (/(model s|model 3|model y|ev sedan|ev hatchback|ev crossover|polestar|lucid|ev sport)/.test(s)) return 250;
+  if (/(truck|f-?150|silverado|ram|pickup|suv|crossover|minivan|van)/.test(s)) return 180;
+  if (/(econ|compact|hatch|civic|corolla|sedan|generic ev sedan|generic)/.test(s)) return 210;
+  if (/(motorcycle|bike|sport bike)/.test(s)) return 290;
+  return 220;
+};
 
 // Generic, safe, fictional frame catalog
 const buildFrames = (): FrameDef[] => [
