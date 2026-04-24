@@ -114,6 +114,16 @@ const buildFrames = (): FrameDef[] => [
           gear = 1 + Math.floor(k * 5);
           break;
         }
+        case "top_speed_run": {
+          // 0 -> topSpeed asymptotic; pedal pinned, gears step up across run
+          const vMax = ctx.topSpeedKph;
+          const tau = Math.max(2, d * 0.55);
+          speed = vMax * (1 - Math.exp(-t / tau));
+          pedal = 100 - Math.max(0, (speed / vMax) * 4) + (r() - 0.5) * 0.6;
+          brake = 0;
+          gear = 1 + Math.min(7, Math.floor((speed / vMax) * 7));
+          break;
+        }
         case "idle_ac_on":
           speed = 0;
           pedal = 0;
