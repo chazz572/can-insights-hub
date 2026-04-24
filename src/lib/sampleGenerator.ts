@@ -451,7 +451,7 @@ const buildIceFrames = (): FrameDef[] => [
     dlc: 8,
     cycleMs: 20,
     signals: [
-      { name: "EngineRPM", startBit: 0, length: 16, factor: 1, offset: 0, min: 0, max: 9000, unit: "rpm" },
+      { name: "EngineRPM", startBit: 0, length: 16, factor: 1, offset: 0, min: 0, max: 12000, unit: "rpm" },
       { name: "ThrottlePosition", startBit: 16, length: 8, factor: 0.4, offset: 0, min: 0, max: 100, unit: "%" },
       { name: "EngineLoad", startBit: 24, length: 8, factor: 0.4, offset: 0, min: 0, max: 100, unit: "%" },
       { name: "IgnitionAdvance", startBit: 32, length: 8, factor: 0.5, offset: -64, min: -64, max: 64, unit: "deg" },
