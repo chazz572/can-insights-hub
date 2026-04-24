@@ -536,20 +536,22 @@ export const generateSample = (req: SampleRequest): SampleOutput => {
   const rand = mulberry32(seed);
   const frames = buildFrames();
   const duration = Math.max(2, Math.min(120, req.durationSec));
+  const topSpeedKph = inferTopSpeedKph(req.vehicleDescription);
   const dbc = buildDbc(frames, req.vehicleDescription);
-  const { log, messageCount } = buildLog(frames, duration, rand, req.drivingState);
+  const { log, messageCount } = buildLog(frames, duration, rand, req.drivingState, topSpeedKph);
   const stats = {
     messages: messageCount,
     uniqueIds: frames.length,
     durationSec: duration,
     avgRateHz: messageCount / duration,
   };
-  const summary = buildSummary(req, frames, stats);
+  const summary = buildSummary(req, frames, stats, topSpeedKph);
   return { dbc, log, summary, stats };
 };
 
 export const drivingStateOptions: Array<{ value: DrivingState; label: string }> = [
   { value: "launch_0_60", label: "0–60 launch" },
+  { value: "top_speed_run", label: "Top speed run (0 → Vmax)" },
   { value: "idle_ac_on", label: "Idle with HVAC on" },
   { value: "regen_braking", label: "Regen braking" },
   { value: "highway_cruise", label: "Highway cruise (70 mph)" },
