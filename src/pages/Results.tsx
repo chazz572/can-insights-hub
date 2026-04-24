@@ -802,7 +802,7 @@ const Results = () => {
               <CollapsiblePanel title="Driver Behavior" icon={<Car className="size-5" />}><JsonTable data={diagnostics.driver_behavior} /></CollapsiblePanel>
               <CollapsiblePanel title="Event Timeline" icon={<TimerReset className="size-5" />}><JsonTable data={diagnostics.event_timeline} /></CollapsiblePanel>
               <CollapsiblePanel title="Partial DBC Draft Available" icon={<Download className="size-5" />}><pre className="whitespace-pre-wrap rounded-lg border border-glass-border bg-glass p-4 text-sm text-foreground">{partialDbcDraft}</pre></CollapsiblePanel>
-              <CollapsiblePanel title="Mechanic Summary" icon={<Wrench className="size-5" />} defaultOpen><MechanicSummary data={diagnostics.mechanic_summary} /></CollapsiblePanel>
+              <CollapsiblePanel title="Mechanic Summary" icon={<Wrench className="size-5" />} defaultOpen><MechanicSummary data={diagnostics.mechanic_summary} unit={speedUnit} /></CollapsiblePanel>
             </div>
           </AnalysisCard>
           </> : null}
