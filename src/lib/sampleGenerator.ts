@@ -683,7 +683,16 @@ const computeVehicleMotion = (t: number, ctx: ShapeCtx): MotionSnapshot => {
   const nextSpeed = scenarioSpeedKph(state, Math.min(duration, t + sampleDt), duration, v);
   const speedKph = Math.max(0, rawSpeed + gauss(r, 0.05));
   const accelMps2 = ((nextSpeed - prevSpeed) / (2 * sampleDt)) / 3.6;
-  const shift = computeShiftEvent(v, Math.max(0, rawSpeed), Math.max(0, prevSpeed));
+  // Load hint per scenario — drives gear selection so the engine stays in the
+  // power band on top-speed runs and launches (RPM-SPEED-GEAR CONSISTENCY RULE).
+  const loadHint =
+    state === "top_speed_run" || state === "drag_pass" || state === "launch_0_60" ? 0.95 :
+    state === "track_lap" ? 0.8 :
+    state === "burnout" ? 0.9 :
+    state === "highway_cruise" ? 0.25 :
+    state === "city_stop_go" ? 0.4 :
+    0.3;
+  const shift = computeShiftEvent(v, Math.max(0, rawSpeed), Math.max(0, prevSpeed), loadHint);
   const boosted = v.induction === "turbo" || v.induction === "twin_turbo" || v.induction === "supercharged";
   const tankLiters = inferTankSizeLiters(v);
   const fullLoadFuelLph = litersPer100KmAtFullLoad(v);
