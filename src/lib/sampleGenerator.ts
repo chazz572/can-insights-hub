@@ -485,6 +485,7 @@ const stateLabel: Record<DrivingState, string> = {
   highway_cruise: "Highway cruise",
   charging_20_80: "DC charging 20% → 80%",
   city_stop_go: "City stop-and-go",
+  top_speed_run: "Top speed run (0 → Vmax)",
   custom: "Custom driving state",
 };
 
