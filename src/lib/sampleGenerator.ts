@@ -440,6 +440,84 @@ const selectGear = (v: VehicleProfile, speedKph: number): { gear: number; rpm: n
   return { gear: 1, rpm: Math.max(v.idleRpm, v.rpmPerKphByGear[0] * speedKph) };
 };
 
+// ============================================================================
+// Realism helpers — shift events, slip, thermal integrator, quantization, drag
+// ============================================================================
+
+// Deterministic small noise from rand (gaussian-ish via two uniforms)
+const gauss = (rand: () => number, sigma = 1) => (rand() + rand() + rand() - 1.5) * 2 * sigma;
+
+// Quantize value to ADC step — simulates real sensor resolution.
+const quantize = (value: number, step: number) => Math.round(value / step) * step;
+
+// Smooth sub-Hz wobble (used for traction control / ABS-like modulation).
+const wobble = (t: number, hz: number, amp: number) => Math.sin(t * hz * 2 * Math.PI) * amp;
+
+// Computes shift event blend for a given speed sweep.
+// Returns 0..1 where 1 = mid-shift (torque cut, RPM dipping). 50ms shift events at gear boundaries.
+interface ShiftInfo {
+  gear: number;
+  rpm: number;
+  shiftBlend: number; // 0..1 — how "mid-shift" we are
+  inShift: boolean;
+}
+const computeShiftEvent = (
+  v: VehicleProfile,
+  speedKph: number,
+  prevSpeedKph: number,
+): ShiftInfo => {
+  const sel = selectGear(v, speedKph);
+  const prev = selectGear(v, prevSpeedKph);
+  if (sel.gear !== prev.gear && sel.gear > prev.gear) {
+    // Right at a shift boundary — emit a brief blend
+    return { gear: sel.gear, rpm: sel.rpm, shiftBlend: 1, inShift: true };
+  }
+  // Detect proximity to redline in lower gear (about-to-shift)
+  const upper = v.rpmPerKphByGear[sel.gear - 1] * speedKph;
+  if (upper > v.redlineRpm * 0.92 && sel.gear < v.rpmPerKphByGear.length) {
+    return { gear: sel.gear, rpm: upper, shiftBlend: 0.4, inShift: false };
+  }
+  return { gear: sel.gear, rpm: sel.rpm, shiftBlend: 0, inShift: false };
+};
+
+// Aerodynamic-drag-aware speed: limits acceleration as v approaches Vmax with a
+// drag exponent steeper than the simple time constant.
+const dragLimitedSpeed = (vMax: number, t: number, tau: number): number => {
+  // Two-stage: traction-limited early, drag-limited late.
+  const linear = vMax * (1 - Math.exp(-t / tau));
+  // Apply quadratic drag squeeze near top
+  const frac = linear / vMax;
+  const dragSqueeze = 1 - 0.18 * Math.pow(frac, 3);
+  return linear * dragSqueeze;
+};
+
+// Per-vehicle thermal integrator (cumulative heat, decays slowly when off-throttle).
+// We don't have stateful instances so we approximate with closed-form integration of
+// throttle/load over t — enough realism for short logs.
+const thermalIntegral = (
+  loadFactor: number, // 0..1 instantaneous load
+  t: number,
+  capacityScale: number, // larger = slower rise
+): number => {
+  // 1st-order: T(t) = T_steady * (1 - exp(-t / tau))
+  const tau = capacityScale * (1.2 - loadFactor * 0.6);
+  return loadFactor * (1 - Math.exp(-Math.max(0, t) / Math.max(0.1, tau)));
+};
+
+// Traction-limited launch slip: returns extra km/h on the driven axle
+// during the first portion of acceleration. Scales with torque/weight ratio.
+const launchSlipKph = (v: VehicleProfile, t: number, scenarioPeak: number): number => {
+  const twr = v.peakMotorTorqueNm / Math.max(800, v.curbWeightKg);
+  const slipWindow = Math.max(0.6, v.zeroTo100Sec * 0.5);
+  if (t > slipWindow) return 0;
+  const decay = 1 - t / slipWindow;
+  // Traction-control oscillation at ~12 Hz during launch
+  const tcWobble = (1 + Math.sin(t * 12 * 2 * Math.PI) * 0.5);
+  return scenarioPeak * decay * twr * tcWobble * 6;
+};
+
+
+
 // Backwards-compatible helper
 const inferTopSpeedKph = (desc: string): number => buildVehicleProfile(desc).topSpeedKph;
 
@@ -556,11 +634,21 @@ const buildIceFrames = (): FrameDef[] => [
           throttle = 22;
           load = 30;
       }
+      // Realism: shift dip + ignition retard under load + jitter + quantization
+      // Estimate "is in shift" by detecting near-redline crossings via deterministic sin pulse
+      const shiftPulse = Math.max(0, Math.sin(t * 4.0 + Math.PI / 2)) > 0.985 ? 1 : 0;
+      const shiftDip = shiftPulse * (rpm * 0.32); // brief 32% RPM drop
+      const rpmFinal = Math.max(0, Math.min(redline + 50, rpm - shiftDip + gauss(r, 1.2)));
+      const loadClamped = Math.max(0, Math.min(100, load + gauss(r, 0.4)));
+      // Ignition advance: drops under heavy load (knock retard), rises at light load
+      const baseAdvance = 24 - (loadClamped / 100) * 22; // 24° at idle → ~2° at WOT
+      const advance = baseAdvance + gauss(r, 0.5);
+      const throttleJ = Math.max(0, Math.min(100, throttle + gauss(r, 0.3)));
       return {
-        EngineRPM: Math.max(0, Math.min(redline + 200, rpm)),
-        ThrottlePosition: throttle,
-        EngineLoad: load,
-        IgnitionAdvance: 12 + (r() - 0.5) * 4,
+        EngineRPM: quantize(rpmFinal, 4), // ECU typically reports in ~4 rpm steps
+        ThrottlePosition: quantize(throttleJ, 0.4),
+        EngineLoad: quantize(loadClamped, 0.4),
+        IgnitionAdvance: quantize(advance, 0.5),
       };
     },
   },
@@ -649,12 +737,23 @@ const buildIceFrames = (): FrameDef[] => [
       const k = Math.min(1, t / ctx.duration);
       // Cumulative thermal rise — temps integrate over time, not just k of duration
       const tempRiseRate = heat * 0.4; // °C per second under load
+      // Realism: 1st-order thermal integrator with cooldown after lift; oil lags coolant.
+      // loadFactor 0..1, scenario-specific.
+      const isHighLoad = ctx.state === "launch_0_60" || ctx.state === "top_speed_run" || ctx.state === "drag_pass" || ctx.state === "burnout";
+      const isMid = ctx.state === "track_lap" || ctx.state === "highway_cruise";
+      const loadFactor = isHighLoad ? 0.95 : isMid ? (ctx.state === "track_lap" ? 0.75 : 0.35) : 0.08;
+      const coolantRise = thermalIntegral(loadFactor, t, 28) * 28; // up to ~+28°C
+      const oilRise = thermalIntegral(loadFactor, t, 55) * 50; // slower, larger ceiling
+      const iatRise = thermalIntegral(loadFactor, t, 6) * (v.induction !== "na" ? 38 : 18);
+      const egtRise = thermalIntegral(loadFactor, t, 4) * egtSpan;
+      // Slight cooldown after burst — if we're not at peak load and t > 5s, decay
+      const cooldown = !isHighLoad && t > 5 ? Math.exp(-(t - 5) / 30) : 1;
       return {
-        CoolantTemp: 88 + Math.min(22, t * tempRiseRate * 0.25) + (r() - 0.5) * 0.6,
-        OilTemp: 95 + Math.min(45, t * tempRiseRate * 0.5) + (r() - 0.5) * 0.6,
-        OilPressure: 3.2 + heat * 1.4 + (r() - 0.5) * 0.1,
-        IntakeAirTemp: 32 + heat * 12 * k + (v.induction !== "na" ? heat * 14 * k : 0) + (r() - 0.5) * 0.5,
-        ExhaustGasTemp: egtBase + heat * egtSpan * k + (r() - 0.5) * 8,
+        CoolantTemp: quantize(88 + coolantRise * cooldown + gauss(r, 0.15), 0.5),
+        OilTemp: quantize(95 + oilRise * cooldown + gauss(r, 0.2), 0.5),
+        OilPressure: quantize(3.2 + loadFactor * 1.4 + gauss(r, 0.05), 0.05),
+        IntakeAirTemp: quantize(32 + iatRise + gauss(r, 0.2), 0.5),
+        ExhaustGasTemp: quantize(egtBase + egtRise + gauss(r, 4), 1),
       };
     },
   },
@@ -1000,7 +1099,17 @@ const buildCommonFrames = (): FrameDef[] => [
           brake = 0;
           gear = Math.min(gearTopIdx, 3);
       }
-      return { VehicleSpeed: speed, AcceleratorPedal: pedal, BrakePressure: brake, GearPosition: gear };
+      // Apply drag-aware top-speed squeeze and small pedal/brake jitter + quantization
+      const dragSqueeze = speed > vMax * 0.6 ? 1 - 0.12 * Math.pow(speed / vMax, 3) : 1;
+      const speedFinal = Math.max(0, speed * dragSqueeze + gauss(r, 0.05));
+      const pedalFinal = Math.max(0, Math.min(100, pedal + gauss(r, 0.25)));
+      const brakeFinal = Math.max(0, brake + gauss(r, 0.08));
+      return {
+        VehicleSpeed: quantize(speedFinal, 0.01),
+        AcceleratorPedal: quantize(pedalFinal, 0.4),
+        BrakePressure: quantize(brakeFinal, 0.1),
+        GearPosition: gear,
+      };
     },
   },
   {
@@ -1054,24 +1163,31 @@ const buildCommonFrames = (): FrameDef[] => [
         default:
           base = 30 + Math.sin(t * 0.5) * 10;
       }
-      const j = () => (r() - 0.5) * 0.4;
-      // Wheel slip: driven wheels spin faster than non-driven during launch/burnout
+      // Per-wheel small jitter; left/right divergence under load
       const driveAxle = v.drivetrain;
       let slipDriven = 0;
-      if (ctx.state === "burnout") slipDriven = 80 + Math.sin(t * 5) * 20; // huge slip
+      if (ctx.state === "burnout") slipDriven = 80 + Math.sin(t * 5) * 20;
       else if (ctx.state === "launch_0_60" && t < v.zeroTo100Sec * 0.5)
-        slipDriven = Math.max(0, (10 - base * 0.15)); // brief launch slip
+        slipDriven = Math.max(0, (10 - base * 0.15));
       else if (ctx.state === "drag_pass" && t < v.zeroTo100Sec * 0.6)
         slipDriven = Math.max(0, (8 - base * 0.1));
-      const fl = base + j() + (driveAxle === "fwd" || driveAxle === "awd" ? slipDriven * 0.5 : 0);
-      const fr = base + j() + (driveAxle === "fwd" || driveAxle === "awd" ? slipDriven * 0.5 : 0);
-      const rl = base + j() + (driveAxle === "rwd" || driveAxle === "awd" ? slipDriven : 0);
-      const rr = base + j() + (driveAxle === "rwd" || driveAxle === "awd" ? slipDriven : 0);
+      // Traction-control oscillation at ~12-15 Hz when slip > 0
+      const tc = slipDriven > 0.5 ? wobble(t, 13.5, slipDriven * 0.18) : 0;
+      // High-speed micro-slip on driven axle
+      const microSlip = base > vMax * 0.7 ? wobble(t, 7, 0.4) : 0;
+      // Left/right divergence (camber/road crown bias)
+      const lrBias = base * 0.0015;
+      const j = (sigma = 0.15) => gauss(r, sigma);
+      const drivenAdd = slipDriven + tc + microSlip;
+      const fl = base + j() - lrBias + (driveAxle === "fwd" || driveAxle === "awd" ? drivenAdd * 0.5 : 0);
+      const fr = base + j() + lrBias + (driveAxle === "fwd" || driveAxle === "awd" ? drivenAdd * 0.5 : 0);
+      const rl = base + j() - lrBias + (driveAxle === "rwd" || driveAxle === "awd" ? drivenAdd : 0);
+      const rr = base + j() + lrBias + (driveAxle === "rwd" || driveAxle === "awd" ? drivenAdd : 0);
       return {
-        WheelSpeed_FL: Math.max(0, fl),
-        WheelSpeed_FR: Math.max(0, fr),
-        WheelSpeed_RL: Math.max(0, rl),
-        WheelSpeed_RR: Math.max(0, rr),
+        WheelSpeed_FL: quantize(Math.max(0, fl), 0.01),
+        WheelSpeed_FR: quantize(Math.max(0, fr), 0.01),
+        WheelSpeed_RL: quantize(Math.max(0, rl), 0.01),
+        WheelSpeed_RR: quantize(Math.max(0, rr), 0.01),
       };
     },
   },
@@ -1258,9 +1374,11 @@ const buildLog = (
   const startTs = Date.now() / 1000;
   for (const f of frames) {
     counters[f.id] = 0;
-    const jitterBase = f.cycleMs * 0.02; // 2% jitter
+    // Realism: timestamp jitter blends bus-load jitter (cycle-relative) + scheduler jitter (~0.2 ms)
+    const cycleJitter = f.cycleMs * 0.025; // ~2.5% of cycle
+    const schedulerJitterMs = 0.3;
     for (let t = 0; t < duration * 1000; t += f.cycleMs) {
-      const jitter = (rand() - 0.5) * jitterBase;
+      const jitter = (rand() - 0.5) * cycleJitter + (rand() - 0.5) * schedulerJitterMs;
       const tsSec = startTs + (t + jitter) / 1000;
       const tSec = (t + jitter) / 1000;
       const values = f.shape(tSec, ctx);
