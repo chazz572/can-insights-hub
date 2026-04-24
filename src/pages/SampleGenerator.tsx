@@ -37,7 +37,7 @@ const SampleGenerator = () => {
   const [vehicle, setVehicle] = useState("Generic EV sedan");
   const [state, setState] = useState<DrivingState>("launch_0_60");
   const [notes, setNotes] = useState("");
-  const [duration, setDuration] = useState(15);
+  const [durationText, setDurationText] = useState("15");
   const [busy, setBusy] = useState(false);
   const [result, setResult] = useState<SampleOutput | null>(null);
 
