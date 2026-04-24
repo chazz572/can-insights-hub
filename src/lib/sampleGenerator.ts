@@ -634,11 +634,21 @@ const buildIceFrames = (): FrameDef[] => [
           throttle = 22;
           load = 30;
       }
+      // Realism: shift dip + ignition retard under load + jitter + quantization
+      // Estimate "is in shift" by detecting near-redline crossings via deterministic sin pulse
+      const shiftPulse = Math.max(0, Math.sin(t * 4.0 + Math.PI / 2)) > 0.985 ? 1 : 0;
+      const shiftDip = shiftPulse * (rpm * 0.32); // brief 32% RPM drop
+      const rpmFinal = Math.max(0, Math.min(redline + 50, rpm - shiftDip + gauss(r, 1.2)));
+      const loadClamped = Math.max(0, Math.min(100, load + gauss(r, 0.4)));
+      // Ignition advance: drops under heavy load (knock retard), rises at light load
+      const baseAdvance = 24 - (loadClamped / 100) * 22; // 24° at idle → ~2° at WOT
+      const advance = baseAdvance + gauss(r, 0.5);
+      const throttleJ = Math.max(0, Math.min(100, throttle + gauss(r, 0.3)));
       return {
-        EngineRPM: Math.max(0, Math.min(redline + 200, rpm)),
-        ThrottlePosition: throttle,
-        EngineLoad: load,
-        IgnitionAdvance: 12 + (r() - 0.5) * 4,
+        EngineRPM: quantize(rpmFinal, 4), // ECU typically reports in ~4 rpm steps
+        ThrottlePosition: quantize(throttleJ, 0.4),
+        EngineLoad: quantize(loadClamped, 0.4),
+        IgnitionAdvance: quantize(advance, 0.5),
       };
     },
   },
