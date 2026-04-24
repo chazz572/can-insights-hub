@@ -296,7 +296,7 @@ const SampleGenerator = () => {
               <Button
                 variant="secondary"
                 size="sm"
-                onClick={() => downloadText(`${baseName}.dbc`, result.dbc, "text/plain")}
+                onClick={() => downloadText(`${baseName}.dbc`, result.dbc, "application/octet-stream")}
               >
                 <Download className="mr-1.5 size-3.5" /> Download .dbc
               </Button>
