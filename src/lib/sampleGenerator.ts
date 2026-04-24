@@ -1163,24 +1163,31 @@ const buildCommonFrames = (): FrameDef[] => [
         default:
           base = 30 + Math.sin(t * 0.5) * 10;
       }
-      const j = () => (r() - 0.5) * 0.4;
-      // Wheel slip: driven wheels spin faster than non-driven during launch/burnout
+      // Per-wheel small jitter; left/right divergence under load
       const driveAxle = v.drivetrain;
       let slipDriven = 0;
-      if (ctx.state === "burnout") slipDriven = 80 + Math.sin(t * 5) * 20; // huge slip
+      if (ctx.state === "burnout") slipDriven = 80 + Math.sin(t * 5) * 20;
       else if (ctx.state === "launch_0_60" && t < v.zeroTo100Sec * 0.5)
-        slipDriven = Math.max(0, (10 - base * 0.15)); // brief launch slip
+        slipDriven = Math.max(0, (10 - base * 0.15));
       else if (ctx.state === "drag_pass" && t < v.zeroTo100Sec * 0.6)
         slipDriven = Math.max(0, (8 - base * 0.1));
-      const fl = base + j() + (driveAxle === "fwd" || driveAxle === "awd" ? slipDriven * 0.5 : 0);
-      const fr = base + j() + (driveAxle === "fwd" || driveAxle === "awd" ? slipDriven * 0.5 : 0);
-      const rl = base + j() + (driveAxle === "rwd" || driveAxle === "awd" ? slipDriven : 0);
-      const rr = base + j() + (driveAxle === "rwd" || driveAxle === "awd" ? slipDriven : 0);
+      // Traction-control oscillation at ~12-15 Hz when slip > 0
+      const tc = slipDriven > 0.5 ? wobble(t, 13.5, slipDriven * 0.18) : 0;
+      // High-speed micro-slip on driven axle
+      const microSlip = base > vMax * 0.7 ? wobble(t, 7, 0.4) : 0;
+      // Left/right divergence (camber/road crown bias)
+      const lrBias = base * 0.0015;
+      const j = (sigma = 0.15) => gauss(r, sigma);
+      const drivenAdd = slipDriven + tc + microSlip;
+      const fl = base + j() - lrBias + (driveAxle === "fwd" || driveAxle === "awd" ? drivenAdd * 0.5 : 0);
+      const fr = base + j() + lrBias + (driveAxle === "fwd" || driveAxle === "awd" ? drivenAdd * 0.5 : 0);
+      const rl = base + j() - lrBias + (driveAxle === "rwd" || driveAxle === "awd" ? drivenAdd : 0);
+      const rr = base + j() + lrBias + (driveAxle === "rwd" || driveAxle === "awd" ? drivenAdd : 0);
       return {
-        WheelSpeed_FL: Math.max(0, fl),
-        WheelSpeed_FR: Math.max(0, fr),
-        WheelSpeed_RL: Math.max(0, rl),
-        WheelSpeed_RR: Math.max(0, rr),
+        WheelSpeed_FL: quantize(Math.max(0, fl), 0.01),
+        WheelSpeed_FR: quantize(Math.max(0, fr), 0.01),
+        WheelSpeed_RL: quantize(Math.max(0, rl), 0.01),
+        WheelSpeed_RR: quantize(Math.max(0, rr), 0.01),
       };
     },
   },
