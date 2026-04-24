@@ -90,7 +90,7 @@ const buildFrames = (): FrameDef[] => [
     dlc: 8,
     cycleMs: 20,
     signals: [
-      { name: "VehicleSpeed", startBit: 0, length: 16, factor: 0.01, offset: 0, min: 0, max: 250, unit: "km/h" },
+      { name: "VehicleSpeed", startBit: 0, length: 16, factor: 0.01, offset: 0, min: 0, max: 500, unit: "km/h" },
       { name: "AcceleratorPedal", startBit: 16, length: 8, factor: 0.4, offset: 0, min: 0, max: 100, unit: "%" },
       { name: "BrakePressure", startBit: 24, length: 16, factor: 0.1, offset: 0, min: 0, max: 200, unit: "bar" },
       { name: "GearPosition", startBit: 40, length: 4, factor: 1, offset: 0, min: 0, max: 8, unit: "" },
