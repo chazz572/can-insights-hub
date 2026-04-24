@@ -334,16 +334,21 @@ const buildFrames = (): FrameDef[] => [
     ],
     shape: (t, ctx) => {
       const r = ctx.rand;
-      // mirror VEH_Speed approx
+      const v = ctx.vehicle;
+      const vMax = Math.max(80, v.topSpeedKph);
+      const fracToHundred = Math.min(0.95, 100 / vMax);
+      const tau60 = Math.max(0.6, v.zeroTo100Sec / -Math.log(1 - fracToHundred));
+      // mirror VEH_Speed
       const base =
         ctx.state === "idle_ac_on" || ctx.state === "charging_20_80"
           ? 0
           : ctx.state === "highway_cruise"
-            ? 112
+            ? v.cruiseKph
             : ctx.state === "launch_0_60"
-              ? 97 * (1 - Math.pow(1 - Math.min(1, t / Math.max(1, ctx.duration * 0.85)), 1.6))
+              ? 100 * (1 - Math.exp(-3.0 * Math.min(1, t / Math.max(0.5, v.zeroTo100Sec)))) +
+                (t > v.zeroTo100Sec ? Math.min(20, (t - v.zeroTo100Sec) * 4) : 0)
               : ctx.state === "top_speed_run"
-                ? ctx.topSpeedKph * (1 - Math.exp(-t / Math.max(2, ctx.duration * 0.55)))
+                ? vMax * (1 - Math.exp(-t / tau60))
                 : ctx.state === "regen_braking"
                   ? Math.max(0, 80 - (t / ctx.duration) * 75)
                   : 30 + Math.sin(t * 0.5) * 10;
