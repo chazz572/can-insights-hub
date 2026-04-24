@@ -13,6 +13,7 @@ import Compare from "./pages/Compare.tsx";
 import Engineering from "./pages/Engineering.tsx";
 import Fleet from "./pages/Fleet.tsx";
 import Reports from "./pages/Reports.tsx";
+import SampleGenerator from "./pages/SampleGenerator.tsx";
 import Visualize from "./pages/Visualize.tsx";
 import Workspace from "./pages/Workspace.tsx";
 import NotFound from "./pages/NotFound.tsx";
@@ -38,6 +39,7 @@ const App = () => {
               <Route path="/engineering" element={<Engineering />} />
               <Route path="/fleet" element={<Fleet />} />
               <Route path="/reports" element={<Reports />} />
+              <Route path="/sample-generator" element={<SampleGenerator />} />
               <Route path="/visualize" element={<Visualize />} />
               <Route path="/results/:file_id" element={<Results />} />
               {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
