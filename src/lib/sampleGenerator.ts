@@ -972,10 +972,11 @@ const buildEvFrames = (): FrameDef[] => [
     shape: (t, ctx) => {
       const r = ctx.rand;
       const v = ctx.vehicle;
+      const motion = computeVehicleMotion(t, ctx);
       const packV = v.nominalPackVolts;
       const peakPackAmps = Math.max(120, Math.min(1500, v.peakMotorTorqueNm * 1.4));
       let soc = 70;
-      let current = 0;
+      let current = motion.packCurrentA;
       let temp = 28;
       switch (ctx.state) {
         case "charging_20_80": {
@@ -987,22 +988,18 @@ const buildEvFrames = (): FrameDef[] => [
         }
         case "launch_0_60":
           soc = 78 - (t / ctx.duration) * 0.4;
-          current = Math.min(peakPackAmps, 280 + v.peakMotorTorqueNm * 0.2) + (r() - 0.5) * 10;
           temp = 32 + (t / ctx.duration) * 3;
           break;
         case "top_speed_run":
           soc = 78 - (t / ctx.duration) * 1.5;
-          current = Math.min(peakPackAmps, peakPackAmps * 0.8) + (r() - 0.5) * 12;
           temp = 35 + (t / ctx.duration) * 8;
           break;
         case "regen_braking":
           soc = 65 + (t / ctx.duration) * 0.3;
-          current = -Math.min(peakPackAmps * 0.4, 100) + (r() - 0.5) * 6;
           temp = 30;
           break;
         case "highway_cruise":
           soc = 72 - (t / ctx.duration) * 0.6;
-          current = 60 + (r() - 0.5) * 4;
           temp = 32;
           break;
         case "idle_ac_on":
@@ -1012,12 +1009,10 @@ const buildEvFrames = (): FrameDef[] => [
           break;
         case "city_stop_go":
           soc = 70 - (t / ctx.duration) * 0.4;
-          current = 30 + Math.sin(t) * 20;
           temp = 31;
           break;
         default:
           soc = 70;
-          current = 20;
       }
       return {
         BatterySOC: soc,
@@ -1042,57 +1037,33 @@ const buildEvFrames = (): FrameDef[] => [
     shape: (t, ctx) => {
       const r = ctx.rand;
       const v = ctx.vehicle;
+      const motion = computeVehicleMotion(t, ctx);
       const peak = v.peakMotorTorqueNm;
-      const vMax = Math.max(80, v.topSpeedKph);
-      // Approx motor RPM tracks vehicle speed (single-speed reducer for most BEVs)
-      const speedToMotorRpm = 75; // rpm per km/h, fictional gearing
+      const speedToMotorRpm = v.rpmPerKphByGear[0] ?? 75;
       let req = 0;
-      let speed = 0;
       switch (ctx.state) {
-        case "launch_0_60": {
-          const inAccel = t <= v.zeroTo100Sec;
-          req = inAccel ? peak * 0.95 + (r() - 0.5) * 6 : peak * 0.25;
-          const accelPhase = Math.min(1, t / Math.max(0.5, v.zeroTo100Sec));
-          speed = 100 * (1 - Math.exp(-3.0 * accelPhase));
+        case "launch_0_60":
+        case "top_speed_run":
+        case "drag_pass":
+          req = peak * clamp(motion.accelPedal / 100, 0, 1);
           break;
-        }
-        case "top_speed_run": {
-          const fracToHundred = Math.min(0.95, 100 / vMax);
-          const tau60 = Math.max(0.6, v.zeroTo100Sec / -Math.log(1 - fracToHundred));
-          const fracV = 1 - Math.exp(-t / tau60);
-          req = peak * (1 - 0.55 * fracV) + (r() - 0.5) * 10;
-          speed = vMax * fracV;
-          break;
-        }
         case "regen_braking":
           req = -Math.min(peak * 0.35, 250) + (r() - 0.5) * 8;
-          speed = Math.max(0, 80 - (t / ctx.duration) * 75);
           break;
         case "highway_cruise":
-          req = Math.min(peak * 0.15, 120) + Math.sin(t * 0.3) * 8;
-          speed = v.cruiseKph;
-          break;
-        case "idle_ac_on":
-          req = 0;
-          speed = 0;
-          break;
-        case "charging_20_80":
-          req = 0;
-          speed = 0;
+          req = Math.min(peak * 0.18, 140) + Math.sin(t * 0.3) * 8;
           break;
         case "city_stop_go":
           req = Math.min(peak * 0.25, 200) + Math.sin(t * 0.5) * 60;
-          speed = 25 + Math.sin(t * 0.5) * 15;
           break;
         default:
-          req = 50;
-          speed = 40;
+          req = 0;
       }
       req = Math.max(-peak, Math.min(peak, req));
       return {
         TorqueRequest: req,
         TorqueActual: req * 0.97 + (r() - 0.5) * 4,
-        MotorRPM: Math.max(0, speed * speedToMotorRpm),
+        MotorRPM: Math.max(0, motion.speedKph * speedToMotorRpm),
         MotorTemp: 45 + (t / ctx.duration) * 8,
       };
     },
