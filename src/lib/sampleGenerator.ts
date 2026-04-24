@@ -8,6 +8,7 @@ export type DrivingState =
   | "highway_cruise"
   | "charging_20_80"
   | "city_stop_go"
+  | "top_speed_run"
   | "custom";
 
 export interface SampleRequest {
