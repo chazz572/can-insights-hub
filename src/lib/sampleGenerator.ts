@@ -1000,7 +1000,6 @@ export const generateSample = (req: SampleRequest): SampleOutput => {
   const vehicle = buildVehicleProfile(req.vehicleDescription);
   const frames = buildFrames(vehicle);
   const duration = Math.max(2, Math.min(120, req.durationSec));
-  const vehicle = buildVehicleProfile(req.vehicleDescription);
   const dbc = buildDbc(frames, req.vehicleDescription);
   const { log, messageCount } = buildLog(frames, duration, rand, req.drivingState, vehicle);
   const stats = {
