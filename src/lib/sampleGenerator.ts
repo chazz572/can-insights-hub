@@ -180,6 +180,7 @@ const NAMED_VEHICLES: NamedSpec[] = [
 
   // ====== Corvette / GM ======
   { match: /(c8 z06|corvette z06|z06)/i, powertrain: "ice", topSpeedKph: 312, zeroTo100Sec: 2.6, sixtyTo130Sec: 5.5, redlineRpm: 8600, idleRpm: 800, gearCount: 8, gearRatios: [4.71, 3.13, 2.10, 1.67, 1.29, 1.00, 0.84, 0.67], finalDrive: 5.17, peakPowerHp: 670, peakMotorTorqueNm: 623, curbWeightKg: 1660, induction: "na", drivetrain: "rwd", tireRadiusM: 0.342 },
+  { match: /(zr1x|c8 zr1x|corvette zr1x)/i, powertrain: "phev", topSpeedKph: 378, zeroTo100Sec: 2.0, redlineRpm: 8000, gearCount: 8, peakPowerHp: 1250, peakMotorTorqueNm: 1370, packKwh: 1.9, nominalPackVolts: 80, curbWeightKg: 1860, induction: "twin_turbo", drivetrain: "awd", tireRadiusM: 0.342 },
   { match: /(c8 zr1|zr1)/i, powertrain: "ice", topSpeedKph: 374, zeroTo100Sec: 2.3, redlineRpm: 8000, gearCount: 8, peakPowerHp: 1064, peakMotorTorqueNm: 1123, curbWeightKg: 1715, induction: "twin_turbo", drivetrain: "rwd", tireRadiusM: 0.342 },
   { match: /(c8 e-?ray|e-?ray)/i, powertrain: "hybrid", topSpeedKph: 290, zeroTo100Sec: 2.5, redlineRpm: 6500, gearCount: 8, peakPowerHp: 655, peakMotorTorqueNm: 720, packKwh: 1.9, nominalPackVolts: 80, curbWeightKg: 1765, induction: "na", drivetrain: "awd", tireRadiusM: 0.342 },
   { match: /(c8|stingray|corvette)/i, powertrain: "ice", topSpeedKph: 312, zeroTo100Sec: 2.9, redlineRpm: 6500, gearCount: 8, peakPowerHp: 495, peakMotorTorqueNm: 637, curbWeightKg: 1530, induction: "na", drivetrain: "rwd", tireRadiusM: 0.342 },
