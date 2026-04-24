@@ -440,6 +440,84 @@ const selectGear = (v: VehicleProfile, speedKph: number): { gear: number; rpm: n
   return { gear: 1, rpm: Math.max(v.idleRpm, v.rpmPerKphByGear[0] * speedKph) };
 };
 
+// ============================================================================
+// Realism helpers — shift events, slip, thermal integrator, quantization, drag
+// ============================================================================
+
+// Deterministic small noise from rand (gaussian-ish via two uniforms)
+const gauss = (rand: () => number, sigma = 1) => (rand() + rand() + rand() - 1.5) * 2 * sigma;
+
+// Quantize value to ADC step — simulates real sensor resolution.
+const quantize = (value: number, step: number) => Math.round(value / step) * step;
+
+// Smooth sub-Hz wobble (used for traction control / ABS-like modulation).
+const wobble = (t: number, hz: number, amp: number) => Math.sin(t * hz * 2 * Math.PI) * amp;
+
+// Computes shift event blend for a given speed sweep.
+// Returns 0..1 where 1 = mid-shift (torque cut, RPM dipping). 50ms shift events at gear boundaries.
+interface ShiftInfo {
+  gear: number;
+  rpm: number;
+  shiftBlend: number; // 0..1 — how "mid-shift" we are
+  inShift: boolean;
+}
+const computeShiftEvent = (
+  v: VehicleProfile,
+  speedKph: number,
+  prevSpeedKph: number,
+): ShiftInfo => {
+  const sel = selectGear(v, speedKph);
+  const prev = selectGear(v, prevSpeedKph);
+  if (sel.gear !== prev.gear && sel.gear > prev.gear) {
+    // Right at a shift boundary — emit a brief blend
+    return { gear: sel.gear, rpm: sel.rpm, shiftBlend: 1, inShift: true };
+  }
+  // Detect proximity to redline in lower gear (about-to-shift)
+  const upper = v.rpmPerKphByGear[sel.gear - 1] * speedKph;
+  if (upper > v.redlineRpm * 0.92 && sel.gear < v.rpmPerKphByGear.length) {
+    return { gear: sel.gear, rpm: upper, shiftBlend: 0.4, inShift: false };
+  }
+  return { gear: sel.gear, rpm: sel.rpm, shiftBlend: 0, inShift: false };
+};
+
+// Aerodynamic-drag-aware speed: limits acceleration as v approaches Vmax with a
+// drag exponent steeper than the simple time constant.
+const dragLimitedSpeed = (vMax: number, t: number, tau: number): number => {
+  // Two-stage: traction-limited early, drag-limited late.
+  const linear = vMax * (1 - Math.exp(-t / tau));
+  // Apply quadratic drag squeeze near top
+  const frac = linear / vMax;
+  const dragSqueeze = 1 - 0.18 * Math.pow(frac, 3);
+  return linear * dragSqueeze;
+};
+
+// Per-vehicle thermal integrator (cumulative heat, decays slowly when off-throttle).
+// We don't have stateful instances so we approximate with closed-form integration of
+// throttle/load over t — enough realism for short logs.
+const thermalIntegral = (
+  loadFactor: number, // 0..1 instantaneous load
+  t: number,
+  capacityScale: number, // larger = slower rise
+): number => {
+  // 1st-order: T(t) = T_steady * (1 - exp(-t / tau))
+  const tau = capacityScale * (1.2 - loadFactor * 0.6);
+  return loadFactor * (1 - Math.exp(-Math.max(0, t) / Math.max(0.1, tau)));
+};
+
+// Traction-limited launch slip: returns extra km/h on the driven axle
+// during the first portion of acceleration. Scales with torque/weight ratio.
+const launchSlipKph = (v: VehicleProfile, t: number, scenarioPeak: number): number => {
+  const twr = v.peakMotorTorqueNm / Math.max(800, v.curbWeightKg);
+  const slipWindow = Math.max(0.6, v.zeroTo100Sec * 0.5);
+  if (t > slipWindow) return 0;
+  const decay = 1 - t / slipWindow;
+  // Traction-control oscillation at ~12 Hz during launch
+  const tcWobble = (1 + Math.sin(t * 12 * 2 * Math.PI) * 0.5);
+  return scenarioPeak * decay * twr * tcWobble * 6;
+};
+
+
+
 // Backwards-compatible helper
 const inferTopSpeedKph = (desc: string): number => buildVehicleProfile(desc).topSpeedKph;
 
