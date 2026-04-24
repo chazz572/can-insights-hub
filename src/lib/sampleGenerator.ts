@@ -9,6 +9,9 @@ export type DrivingState =
   | "charging_20_80"
   | "city_stop_go"
   | "top_speed_run"
+  | "burnout"
+  | "drag_pass"
+  | "track_lap"
   | "custom";
 
 export interface SampleRequest {
@@ -69,14 +72,24 @@ export interface VehicleProfile {
   powertrain: Powertrain;
   topSpeedKph: number;
   zeroTo100Sec: number; // 0->100 km/h
+  sixtyTo130Sec: number; // 60->130 mph (roll-on power)
+  redlineRpm: number;
+  idleRpm: number;
   gearCount: number; // 1 for most BEVs, 5-10 for ICE
+  // Final-drive ratio * gear ratio per gear (RPM per km/h ≈ ratio*1000/(60*tireCirc_m*3.6))
+  // We store rpmPerKphByGear[gear-1] precomputed for realism.
+  rpmPerKphByGear: number[];
   packKwh: number; // 0 for pure ICE
   nominalPackVolts: number; // ~400 typical, ~800 for high-perf EV
+  peakPowerHp: number;
   peakMotorTorqueNm: number;
   curbWeightKg: number;
   cruiseKph: number; // typical highway cruise
   hvacIdleAmps: number;
   hasRegen: boolean;
+  induction: "na" | "turbo" | "twin_turbo" | "supercharged" | "electric";
+  drivetrain: "fwd" | "rwd" | "awd";
+  tireRadiusM: number;
 }
 
 interface ShapeCtx {
@@ -87,6 +100,160 @@ interface ShapeCtx {
   // legacy alias kept for any older references
   topSpeedKph: number;
 }
+
+// ============================================================================
+// Real-vehicle knowledge base (fictional CAN, but accurate performance specs).
+// Each entry is matched against the user's free-text description.
+// Specs are public-knowledge ballpark figures used purely to shape physics.
+// ============================================================================
+interface NamedSpec {
+  match: RegExp;
+  powertrain?: Powertrain;
+  topSpeedKph?: number;
+  zeroTo100Sec?: number;
+  sixtyTo130Sec?: number;
+  redlineRpm?: number;
+  idleRpm?: number;
+  gearCount?: number;
+  finalDrive?: number;
+  gearRatios?: number[]; // 1st..Nth
+  packKwh?: number;
+  nominalPackVolts?: number;
+  peakPowerHp?: number;
+  peakMotorTorqueNm?: number;
+  curbWeightKg?: number;
+  induction?: VehicleProfile["induction"];
+  drivetrain?: VehicleProfile["drivetrain"];
+  tireRadiusM?: number;
+}
+
+const NAMED_VEHICLES: NamedSpec[] = [
+  // ====== Tesla / EV halo ======
+  { match: /(model s plaid|plaid)/i, powertrain: "bev", topSpeedKph: 322, zeroTo100Sec: 2.1, sixtyTo130Sec: 4.5, redlineRpm: 20000, gearCount: 1, gearRatios: [9.0], peakPowerHp: 1020, peakMotorTorqueNm: 1420, packKwh: 100, nominalPackVolts: 400, curbWeightKg: 2162, induction: "electric", drivetrain: "awd", tireRadiusM: 0.353 },
+  { match: /(model 3 performance|m3p)/i, powertrain: "bev", topSpeedKph: 261, zeroTo100Sec: 3.1, sixtyTo130Sec: 7.8, gearCount: 1, gearRatios: [9.0], peakPowerHp: 510, peakMotorTorqueNm: 660, packKwh: 82, nominalPackVolts: 400, curbWeightKg: 1844, induction: "electric", drivetrain: "awd", tireRadiusM: 0.342 },
+  { match: /(taycan turbo s)/i, powertrain: "bev", topSpeedKph: 260, zeroTo100Sec: 2.6, sixtyTo130Sec: 6.2, gearCount: 2, gearRatios: [15.56, 8.05], peakPowerHp: 750, peakMotorTorqueNm: 1050, packKwh: 93, nominalPackVolts: 800, curbWeightKg: 2295, induction: "electric", drivetrain: "awd", tireRadiusM: 0.358 },
+  { match: /(rivian r1[ts])/i, powertrain: "bev", topSpeedKph: 201, zeroTo100Sec: 3.0, sixtyTo130Sec: 8.5, gearCount: 1, gearRatios: [10.5], peakPowerHp: 835, peakMotorTorqueNm: 1231, packKwh: 135, nominalPackVolts: 400, curbWeightKg: 3060, induction: "electric", drivetrain: "awd", tireRadiusM: 0.402 },
+  { match: /(lucid air sapphire|lucid.*sapphire)/i, powertrain: "bev", topSpeedKph: 330, zeroTo100Sec: 1.95, sixtyTo130Sec: 4.0, gearCount: 1, gearRatios: [9.5], peakPowerHp: 1234, peakMotorTorqueNm: 1700, packKwh: 118, nominalPackVolts: 924, curbWeightKg: 2380, induction: "electric", drivetrain: "awd", tireRadiusM: 0.358 },
+  { match: /(cybertruck)/i, powertrain: "bev", topSpeedKph: 209, zeroTo100Sec: 2.6, gearCount: 1, gearRatios: [9.0], peakPowerHp: 845, peakMotorTorqueNm: 1420, packKwh: 123, nominalPackVolts: 400, curbWeightKg: 3104, induction: "electric", drivetrain: "awd", tireRadiusM: 0.418 },
+  { match: /(f-?150 lightning|lightning)/i, powertrain: "bev", topSpeedKph: 180, zeroTo100Sec: 4.0, gearCount: 1, gearRatios: [9.5], peakPowerHp: 580, peakMotorTorqueNm: 1050, packKwh: 131, nominalPackVolts: 400, curbWeightKg: 2948, induction: "electric", drivetrain: "awd", tireRadiusM: 0.412 },
+
+  // ====== Hypercars ======
+  { match: /(bugatti chiron|chiron)/i, powertrain: "ice", topSpeedKph: 420, zeroTo100Sec: 2.4, sixtyTo130Sec: 3.5, redlineRpm: 6700, gearCount: 7, gearRatios: [3.46, 2.30, 1.71, 1.30, 1.00, 0.83, 0.69], finalDrive: 3.07, peakPowerHp: 1500, peakMotorTorqueNm: 1600, curbWeightKg: 1995, induction: "twin_turbo", drivetrain: "awd", tireRadiusM: 0.378 },
+  { match: /(rimac nevera|nevera)/i, powertrain: "bev", topSpeedKph: 412, zeroTo100Sec: 1.85, sixtyTo130Sec: 3.0, gearCount: 2, gearRatios: [12.5, 6.5], peakPowerHp: 1914, peakMotorTorqueNm: 2360, packKwh: 120, nominalPackVolts: 800, curbWeightKg: 2150, induction: "electric", drivetrain: "awd", tireRadiusM: 0.358 },
+  { match: /(koenig|jesko)/i, powertrain: "ice", topSpeedKph: 480, zeroTo100Sec: 2.5, redlineRpm: 8500, gearCount: 9, peakPowerHp: 1600, peakMotorTorqueNm: 1500, curbWeightKg: 1420, induction: "twin_turbo", drivetrain: "rwd", tireRadiusM: 0.353 },
+
+  // ====== Ferrari / Lambo / McLaren ======
+  { match: /(sf90)/i, powertrain: "phev", topSpeedKph: 340, zeroTo100Sec: 2.5, redlineRpm: 8000, gearCount: 8, peakPowerHp: 986, peakMotorTorqueNm: 800, packKwh: 8, nominalPackVolts: 350, curbWeightKg: 1570, induction: "twin_turbo", drivetrain: "awd", tireRadiusM: 0.347 },
+  { match: /(296 gtb|296)/i, powertrain: "phev", topSpeedKph: 330, zeroTo100Sec: 2.9, redlineRpm: 8500, gearCount: 8, peakPowerHp: 819, peakMotorTorqueNm: 740, packKwh: 7.45, nominalPackVolts: 350, curbWeightKg: 1470, induction: "twin_turbo", drivetrain: "rwd", tireRadiusM: 0.342 },
+  { match: /(f8 tributo|f8\b)/i, powertrain: "ice", topSpeedKph: 340, zeroTo100Sec: 2.9, redlineRpm: 8000, gearCount: 7, peakPowerHp: 710, peakMotorTorqueNm: 770, curbWeightKg: 1330, induction: "twin_turbo", drivetrain: "rwd", tireRadiusM: 0.342 },
+  { match: /(huracan)/i, powertrain: "ice", topSpeedKph: 325, zeroTo100Sec: 2.9, redlineRpm: 8500, gearCount: 7, peakPowerHp: 631, peakMotorTorqueNm: 600, curbWeightKg: 1422, induction: "na", drivetrain: "awd", tireRadiusM: 0.347 },
+  { match: /(aventador|revuelto)/i, powertrain: "ice", topSpeedKph: 350, zeroTo100Sec: 2.5, redlineRpm: 9500, gearCount: 8, peakPowerHp: 1001, peakMotorTorqueNm: 725, curbWeightKg: 1772, induction: "na", drivetrain: "awd", tireRadiusM: 0.358 },
+  { match: /(720s|765lt)/i, powertrain: "ice", topSpeedKph: 341, zeroTo100Sec: 2.7, redlineRpm: 8500, gearCount: 7, peakPowerHp: 755, peakMotorTorqueNm: 800, curbWeightKg: 1339, induction: "twin_turbo", drivetrain: "rwd", tireRadiusM: 0.342 },
+
+  // ====== Porsche ======
+  { match: /(911 turbo s)/i, powertrain: "ice", topSpeedKph: 330, zeroTo100Sec: 2.7, sixtyTo130Sec: 5.0, redlineRpm: 7200, gearCount: 8, gearRatios: [3.91, 2.29, 1.58, 1.19, 0.97, 0.83, 0.68, 0.57], finalDrive: 3.44, peakPowerHp: 640, peakMotorTorqueNm: 800, curbWeightKg: 1640, induction: "twin_turbo", drivetrain: "awd", tireRadiusM: 0.342 },
+  { match: /(gt3 rs)/i, powertrain: "ice", topSpeedKph: 296, zeroTo100Sec: 3.2, redlineRpm: 9000, gearCount: 7, peakPowerHp: 518, peakMotorTorqueNm: 465, curbWeightKg: 1450, induction: "na", drivetrain: "rwd", tireRadiusM: 0.342 },
+  { match: /(gt3\b)/i, powertrain: "ice", topSpeedKph: 318, zeroTo100Sec: 3.4, redlineRpm: 9000, gearCount: 7, peakPowerHp: 502, peakMotorTorqueNm: 470, curbWeightKg: 1418, induction: "na", drivetrain: "rwd", tireRadiusM: 0.342 },
+  { match: /(911 turbo|992 turbo)/i, powertrain: "ice", topSpeedKph: 320, zeroTo100Sec: 2.8, redlineRpm: 7200, gearCount: 8, peakPowerHp: 572, peakMotorTorqueNm: 750, curbWeightKg: 1640, induction: "twin_turbo", drivetrain: "awd", tireRadiusM: 0.342 },
+  { match: /(carrera s|carrera 4s|992)/i, powertrain: "ice", topSpeedKph: 308, zeroTo100Sec: 3.7, redlineRpm: 7500, gearCount: 8, peakPowerHp: 443, peakMotorTorqueNm: 530, curbWeightKg: 1515, induction: "twin_turbo", drivetrain: "rwd", tireRadiusM: 0.342 },
+
+  // ====== Corvette / GM ======
+  { match: /(c8 z06|corvette z06|z06)/i, powertrain: "ice", topSpeedKph: 312, zeroTo100Sec: 2.6, sixtyTo130Sec: 5.5, redlineRpm: 8600, idleRpm: 800, gearCount: 8, gearRatios: [4.71, 3.13, 2.10, 1.67, 1.29, 1.00, 0.84, 0.67], finalDrive: 5.17, peakPowerHp: 670, peakMotorTorqueNm: 623, curbWeightKg: 1660, induction: "na", drivetrain: "rwd", tireRadiusM: 0.342 },
+  { match: /(c8 zr1|zr1)/i, powertrain: "ice", topSpeedKph: 374, zeroTo100Sec: 2.3, redlineRpm: 8000, gearCount: 8, peakPowerHp: 1064, peakMotorTorqueNm: 1123, curbWeightKg: 1715, induction: "twin_turbo", drivetrain: "rwd", tireRadiusM: 0.342 },
+  { match: /(c8 e-?ray|e-?ray)/i, powertrain: "hybrid", topSpeedKph: 290, zeroTo100Sec: 2.5, redlineRpm: 6500, gearCount: 8, peakPowerHp: 655, peakMotorTorqueNm: 720, packKwh: 1.9, nominalPackVolts: 80, curbWeightKg: 1765, induction: "na", drivetrain: "awd", tireRadiusM: 0.342 },
+  { match: /(c8|stingray|corvette)/i, powertrain: "ice", topSpeedKph: 312, zeroTo100Sec: 2.9, redlineRpm: 6500, gearCount: 8, peakPowerHp: 495, peakMotorTorqueNm: 637, curbWeightKg: 1530, induction: "na", drivetrain: "rwd", tireRadiusM: 0.342 },
+  { match: /(camaro zl1)/i, powertrain: "ice", topSpeedKph: 320, zeroTo100Sec: 3.5, redlineRpm: 6600, gearCount: 10, peakPowerHp: 650, peakMotorTorqueNm: 881, curbWeightKg: 1882, induction: "supercharged", drivetrain: "rwd", tireRadiusM: 0.347 },
+  { match: /(cts-?v|cadillac.*blackwing|ct5-?v blackwing)/i, powertrain: "ice", topSpeedKph: 322, zeroTo100Sec: 3.4, redlineRpm: 6500, gearCount: 10, peakPowerHp: 668, peakMotorTorqueNm: 893, curbWeightKg: 1976, induction: "supercharged", drivetrain: "rwd", tireRadiusM: 0.347 },
+
+  // ====== Mopar ======
+  { match: /(demon 170|demon)/i, powertrain: "ice", topSpeedKph: 346, zeroTo100Sec: 1.66, redlineRpm: 6500, gearCount: 8, peakPowerHp: 1025, peakMotorTorqueNm: 1281, curbWeightKg: 1995, induction: "supercharged", drivetrain: "rwd", tireRadiusM: 0.358 },
+  { match: /(hellcat redeye|redeye)/i, powertrain: "ice", topSpeedKph: 327, zeroTo100Sec: 3.4, redlineRpm: 6300, gearCount: 8, peakPowerHp: 797, peakMotorTorqueNm: 959, curbWeightKg: 2018, induction: "supercharged", drivetrain: "rwd", tireRadiusM: 0.358 },
+  { match: /(hellcat|charger srt|challenger srt)/i, powertrain: "ice", topSpeedKph: 322, zeroTo100Sec: 3.6, redlineRpm: 6200, gearCount: 8, peakPowerHp: 717, peakMotorTorqueNm: 881, curbWeightKg: 2018, induction: "supercharged", drivetrain: "rwd", tireRadiusM: 0.358 },
+  { match: /(trackhawk|grand cherokee srt)/i, powertrain: "ice", topSpeedKph: 290, zeroTo100Sec: 3.5, redlineRpm: 6200, gearCount: 8, peakPowerHp: 707, peakMotorTorqueNm: 875, curbWeightKg: 2433, induction: "supercharged", drivetrain: "awd", tireRadiusM: 0.379 },
+
+  // ====== Ford ======
+  { match: /(gt500|shelby gt500|mustang gt500)/i, powertrain: "ice", topSpeedKph: 290, zeroTo100Sec: 3.3, sixtyTo130Sec: 5.4, redlineRpm: 7500, gearCount: 7, peakPowerHp: 760, peakMotorTorqueNm: 847, curbWeightKg: 1875, induction: "supercharged", drivetrain: "rwd", tireRadiusM: 0.353 },
+  { match: /(gt350|shelby gt350)/i, powertrain: "ice", topSpeedKph: 290, zeroTo100Sec: 4.0, redlineRpm: 8250, gearCount: 6, peakPowerHp: 526, peakMotorTorqueNm: 582, curbWeightKg: 1707, induction: "na", drivetrain: "rwd", tireRadiusM: 0.347 },
+  { match: /(mustang dark horse|dark horse)/i, powertrain: "ice", topSpeedKph: 267, zeroTo100Sec: 4.1, redlineRpm: 7500, gearCount: 10, peakPowerHp: 500, peakMotorTorqueNm: 566, curbWeightKg: 1796, induction: "na", drivetrain: "rwd", tireRadiusM: 0.347 },
+  { match: /(mustang gt|s650|s550 gt)/i, powertrain: "ice", topSpeedKph: 250, zeroTo100Sec: 4.3, redlineRpm: 7500, gearCount: 10, peakPowerHp: 480, peakMotorTorqueNm: 563, curbWeightKg: 1727, induction: "na", drivetrain: "rwd", tireRadiusM: 0.347 },
+  { match: /(ford gt\b|2017 ford gt)/i, powertrain: "ice", topSpeedKph: 348, zeroTo100Sec: 2.8, redlineRpm: 7250, gearCount: 7, peakPowerHp: 660, peakMotorTorqueNm: 746, curbWeightKg: 1385, induction: "twin_turbo", drivetrain: "rwd", tireRadiusM: 0.347 },
+  { match: /(raptor r)/i, powertrain: "ice", topSpeedKph: 290, zeroTo100Sec: 3.6, redlineRpm: 7000, gearCount: 10, peakPowerHp: 720, peakMotorTorqueNm: 868, curbWeightKg: 2735, induction: "supercharged", drivetrain: "awd", tireRadiusM: 0.422 },
+  { match: /(raptor|f-?150 raptor)/i, powertrain: "ice", topSpeedKph: 250, zeroTo100Sec: 5.1, redlineRpm: 6000, gearCount: 10, peakPowerHp: 450, peakMotorTorqueNm: 691, curbWeightKg: 2667, induction: "twin_turbo", drivetrain: "awd", tireRadiusM: 0.422 },
+  { match: /(f-?150)/i, powertrain: "ice", topSpeedKph: 175, zeroTo100Sec: 6.0, redlineRpm: 6000, gearCount: 10, peakPowerHp: 400, peakMotorTorqueNm: 678, curbWeightKg: 2200, induction: "twin_turbo", drivetrain: "awd", tireRadiusM: 0.402 },
+
+  // ====== BMW ======
+  { match: /(m5 cs)/i, powertrain: "ice", topSpeedKph: 305, zeroTo100Sec: 2.9, sixtyTo130Sec: 5.6, redlineRpm: 7200, gearCount: 8, peakPowerHp: 627, peakMotorTorqueNm: 750, curbWeightKg: 1825, induction: "twin_turbo", drivetrain: "awd", tireRadiusM: 0.347 },
+  { match: /(m5\b)/i, powertrain: "ice", topSpeedKph: 305, zeroTo100Sec: 3.1, redlineRpm: 7200, gearCount: 8, peakPowerHp: 600, peakMotorTorqueNm: 750, curbWeightKg: 1885, induction: "twin_turbo", drivetrain: "awd", tireRadiusM: 0.347 },
+  { match: /(m4 cs|m3 cs)/i, powertrain: "ice", topSpeedKph: 302, zeroTo100Sec: 3.2, redlineRpm: 7200, gearCount: 8, peakPowerHp: 543, peakMotorTorqueNm: 650, curbWeightKg: 1745, induction: "twin_turbo", drivetrain: "awd", tireRadiusM: 0.347 },
+  { match: /(m3 comp|m4 comp|m3\b|m4\b)/i, powertrain: "ice", topSpeedKph: 290, zeroTo100Sec: 3.5, redlineRpm: 7200, gearCount: 8, peakPowerHp: 503, peakMotorTorqueNm: 650, curbWeightKg: 1730, induction: "twin_turbo", drivetrain: "awd", tireRadiusM: 0.347 },
+  { match: /(m2\b)/i, powertrain: "ice", topSpeedKph: 285, zeroTo100Sec: 4.0, redlineRpm: 7200, gearCount: 8, peakPowerHp: 453, peakMotorTorqueNm: 550, curbWeightKg: 1700, induction: "twin_turbo", drivetrain: "rwd", tireRadiusM: 0.342 },
+
+  // ====== Mercedes-AMG ======
+  { match: /(amg gt black|gt black series)/i, powertrain: "ice", topSpeedKph: 325, zeroTo100Sec: 3.1, redlineRpm: 7200, gearCount: 7, peakPowerHp: 720, peakMotorTorqueNm: 800, curbWeightKg: 1670, induction: "twin_turbo", drivetrain: "rwd", tireRadiusM: 0.347 },
+  { match: /(amg gt 63|gt63)/i, powertrain: "ice", topSpeedKph: 315, zeroTo100Sec: 3.0, redlineRpm: 7000, gearCount: 9, peakPowerHp: 630, peakMotorTorqueNm: 900, curbWeightKg: 2070, induction: "twin_turbo", drivetrain: "awd", tireRadiusM: 0.347 },
+  { match: /(e63 s|c63 s|s63)/i, powertrain: "ice", topSpeedKph: 290, zeroTo100Sec: 3.4, redlineRpm: 7000, gearCount: 9, peakPowerHp: 603, peakMotorTorqueNm: 850, curbWeightKg: 1995, induction: "twin_turbo", drivetrain: "awd", tireRadiusM: 0.347 },
+
+  // ====== Audi RS ======
+  { match: /(rs6|rs7)/i, powertrain: "ice", topSpeedKph: 305, zeroTo100Sec: 3.4, redlineRpm: 6800, gearCount: 8, peakPowerHp: 621, peakMotorTorqueNm: 850, curbWeightKg: 2150, induction: "twin_turbo", drivetrain: "awd", tireRadiusM: 0.347 },
+  { match: /(rs[ -]?e-?tron gt)/i, powertrain: "bev", topSpeedKph: 250, zeroTo100Sec: 3.3, gearCount: 2, gearRatios: [15.56, 8.05], peakPowerHp: 637, peakMotorTorqueNm: 830, packKwh: 93, nominalPackVolts: 800, curbWeightKg: 2347, induction: "electric", drivetrain: "awd", tireRadiusM: 0.353 },
+  { match: /(rs3)/i, powertrain: "ice", topSpeedKph: 290, zeroTo100Sec: 3.6, redlineRpm: 7000, gearCount: 7, peakPowerHp: 401, peakMotorTorqueNm: 500, curbWeightKg: 1570, induction: "turbo", drivetrain: "awd", tireRadiusM: 0.337 },
+
+  // ====== Toyota / Honda / Subaru ======
+  { match: /(gr supra|supra)/i, powertrain: "ice", topSpeedKph: 250, zeroTo100Sec: 3.9, redlineRpm: 7000, gearCount: 8, peakPowerHp: 382, peakMotorTorqueNm: 500, curbWeightKg: 1542, induction: "turbo", drivetrain: "rwd", tireRadiusM: 0.347 },
+  { match: /(gr corolla|gr yaris)/i, powertrain: "ice", topSpeedKph: 230, zeroTo100Sec: 4.9, redlineRpm: 7000, gearCount: 6, peakPowerHp: 300, peakMotorTorqueNm: 370, curbWeightKg: 1474, induction: "turbo", drivetrain: "awd", tireRadiusM: 0.327 },
+  { match: /(civic type r|type r)/i, powertrain: "ice", topSpeedKph: 275, zeroTo100Sec: 5.4, redlineRpm: 7000, gearCount: 6, peakPowerHp: 315, peakMotorTorqueNm: 420, curbWeightKg: 1429, induction: "turbo", drivetrain: "fwd", tireRadiusM: 0.337 },
+  { match: /(sti|wrx sti)/i, powertrain: "ice", topSpeedKph: 255, zeroTo100Sec: 4.9, redlineRpm: 6700, gearCount: 6, peakPowerHp: 310, peakMotorTorqueNm: 393, curbWeightKg: 1568, induction: "turbo", drivetrain: "awd", tireRadiusM: 0.327 },
+  { match: /(gtr|nissan gt-?r|r35)/i, powertrain: "ice", topSpeedKph: 315, zeroTo100Sec: 2.9, redlineRpm: 7100, gearCount: 6, peakPowerHp: 565, peakMotorTorqueNm: 633, curbWeightKg: 1755, induction: "twin_turbo", drivetrain: "awd", tireRadiusM: 0.347 },
+  { match: /(civic\b|corolla\b)/i, powertrain: "ice", topSpeedKph: 200, zeroTo100Sec: 8.5, redlineRpm: 6800, gearCount: 6, peakPowerHp: 158, peakMotorTorqueNm: 187, curbWeightKg: 1300, induction: "na", drivetrain: "fwd", tireRadiusM: 0.317 },
+
+  // ====== Diesel trucks ======
+  { match: /(cummins|ram 2500|ram 3500)/i, powertrain: "diesel", topSpeedKph: 175, zeroTo100Sec: 7.5, redlineRpm: 4500, idleRpm: 700, gearCount: 8, peakPowerHp: 420, peakMotorTorqueNm: 1356, curbWeightKg: 3500, induction: "turbo", drivetrain: "awd", tireRadiusM: 0.422 },
+  { match: /(duramax|silverado hd|sierra hd)/i, powertrain: "diesel", topSpeedKph: 180, zeroTo100Sec: 7.5, redlineRpm: 4500, gearCount: 10, peakPowerHp: 470, peakMotorTorqueNm: 1234, curbWeightKg: 3500, induction: "turbo", drivetrain: "awd", tireRadiusM: 0.422 },
+  { match: /(powerstroke|f-?250|f-?350|super duty)/i, powertrain: "diesel", topSpeedKph: 175, zeroTo100Sec: 7.5, redlineRpm: 4500, gearCount: 10, peakPowerHp: 500, peakMotorTorqueNm: 1424, curbWeightKg: 3500, induction: "turbo", drivetrain: "awd", tireRadiusM: 0.422 },
+
+  // ====== Hybrids ======
+  { match: /(prius)/i, powertrain: "hybrid", topSpeedKph: 180, zeroTo100Sec: 7.0, redlineRpm: 5200, gearCount: 1, gearRatios: [1], peakPowerHp: 196, peakMotorTorqueNm: 188, packKwh: 1.3, nominalPackVolts: 207, curbWeightKg: 1485, induction: "na", drivetrain: "fwd", tireRadiusM: 0.327 },
+];
+
+const matchNamedSpec = (desc: string): NamedSpec | null => {
+  for (const spec of NAMED_VEHICLES) {
+    if (spec.match.test(desc)) return spec;
+  }
+  return null;
+};
+
+// Compute rpm-per-kph for each gear from gear ratios + final drive + tire radius.
+// Wheel rpm = speed_mps / (2π·r) · 60 ; engine rpm = wheel_rpm · ratio · finalDrive
+const computeRpmPerKphTable = (
+  gearRatios: number[] | undefined,
+  finalDrive: number | undefined,
+  tireRadiusM: number,
+  fallbackGearCount: number,
+  redlineRpm: number,
+  topSpeedKph: number,
+): number[] => {
+  const r = tireRadiusM;
+  const fd = finalDrive ?? 3.5;
+  if (gearRatios && gearRatios.length > 0) {
+    return gearRatios.map((gr) => {
+      const wheelRpmPerKph = (1000 / 3600) / (2 * Math.PI * r) * 60;
+      return wheelRpmPerKph * gr * fd;
+    });
+  }
+  // Synthesize a plausible ratio set: top gear sized so redline ≈ topSpeed
+  const wheelRpmPerKph = (1000 / 3600) / (2 * Math.PI * r) * 60;
+  const topGearEffective = (redlineRpm * 0.92) / Math.max(80, topSpeedKph) / wheelRpmPerKph;
+  const ratios: number[] = [];
+  const n = Math.max(1, fallbackGearCount);
+  // Geometric progression from ~3.5x top to top
+  const first = topGearEffective * Math.min(8, n) * 0.9;
+  for (let i = 0; i < n; i++) {
+    const frac = n === 1 ? 1 : i / (n - 1);
+    const ratio = first * Math.pow(topGearEffective / Math.max(0.001, first), frac);
+    ratios.push(wheelRpmPerKph * ratio);
+  }
+  return ratios;
+};
 
 // Build a fictional-but-plausible profile from the user's description.
 const buildVehicleProfile = (desc: string): VehicleProfile => {
@@ -190,25 +357,87 @@ const buildVehicleProfile = (desc: string): VehicleProfile => {
   else if (has(/(motorcycle|bike|hayabusa|ninja|panigale)/)) curbWeightKg = 220;
 
   // Cruise speed bias (km/h)
-  const cruiseKph = Math.min(135, Math.max(95, Math.round(topSpeedKph * 0.45)));
+  let cruiseKph = Math.min(135, Math.max(95, Math.round(topSpeedKph * 0.45)));
 
   // HVAC idle current (amps on 12V or HV bus depending — kept as simple metric)
   const hvacIdleAmps = powertrain === "bev" ? 14 : 6;
+
+  // Heuristic defaults for new fields
+  let redlineRpm = topSpeedKph >= 320 ? 8500 : topSpeedKph >= 280 ? 8000 : topSpeedKph >= 240 ? 7200 : 6500;
+  if (powertrain === "diesel") redlineRpm = 4500;
+  if (powertrain === "bev") redlineRpm = 18000;
+  let idleRpm = powertrain === "diesel" ? 700 : 800;
+  let peakPowerHp = Math.round(peakMotorTorqueNm * 0.6);
+  let induction: VehicleProfile["induction"] = powertrain === "bev" ? "electric" : has(/(turbo|tt|biturbo)/) ? "turbo" : has(/(supercharg|whipple|kompressor)/) ? "supercharged" : "na";
+  let drivetrain: VehicleProfile["drivetrain"] = has(/\bawd\b|quattro|4matic|x-?drive|sh-?awd|all[- ]wheel/) ? "awd" : has(/\bfwd\b|front[- ]wheel/) ? "fwd" : "rwd";
+  let tireRadiusM = has(/(truck|f-?150|silverado|ram|tundra|raptor|cybertruck)/) ? 0.412 : has(/(suv|escalade|tahoe|range rover)/) ? 0.382 : has(/(econ|civic|corolla|fit|yaris)/) ? 0.317 : 0.342;
+  let sixtyTo130Sec = Math.max(2.5, zeroTo100Sec * 2.6);
+  let gearRatios: number[] | undefined;
+  let finalDrive: number | undefined;
+
+  // Apply named-vehicle override (real-world specs)
+  const named = matchNamedSpec(desc);
+  if (named) {
+    if (named.powertrain) powertrain = named.powertrain;
+    if (named.topSpeedKph) topSpeedKph = named.topSpeedKph;
+    if (named.zeroTo100Sec) zeroTo100Sec = named.zeroTo100Sec;
+    if (named.sixtyTo130Sec) sixtyTo130Sec = named.sixtyTo130Sec;
+    if (named.redlineRpm) redlineRpm = named.redlineRpm;
+    if (named.idleRpm) idleRpm = named.idleRpm;
+    if (named.gearCount) gearCount = named.gearCount;
+    if (named.gearRatios) gearRatios = named.gearRatios;
+    if (named.finalDrive) finalDrive = named.finalDrive;
+    if (named.packKwh !== undefined) packKwh = named.packKwh;
+    if (named.nominalPackVolts) nominalPackVolts = named.nominalPackVolts;
+    if (named.peakPowerHp) peakPowerHp = named.peakPowerHp;
+    if (named.peakMotorTorqueNm) peakMotorTorqueNm = named.peakMotorTorqueNm;
+    if (named.curbWeightKg) curbWeightKg = named.curbWeightKg;
+    if (named.induction) induction = named.induction;
+    if (named.drivetrain) drivetrain = named.drivetrain;
+    if (named.tireRadiusM) tireRadiusM = named.tireRadiusM;
+    cruiseKph = Math.min(135, Math.max(95, Math.round(topSpeedKph * 0.45)));
+  }
+
+  const rpmPerKphByGear = computeRpmPerKphTable(gearRatios, finalDrive, tireRadiusM, gearCount, redlineRpm, topSpeedKph);
 
   return {
     description: desc,
     powertrain,
     topSpeedKph,
     zeroTo100Sec,
+    sixtyTo130Sec,
+    redlineRpm,
+    idleRpm,
     gearCount,
+    rpmPerKphByGear,
     packKwh,
     nominalPackVolts,
+    peakPowerHp,
     peakMotorTorqueNm,
     curbWeightKg,
     cruiseKph,
     hvacIdleAmps,
     hasRegen: powertrain === "bev" || powertrain === "phev" || powertrain === "hybrid",
+    induction,
+    drivetrain,
+    tireRadiusM,
   };
+};
+
+// Pick the best gear given current speed: highest gear whose RPM is still above idle*1.4
+// and below redline*0.95.
+const selectGear = (v: VehicleProfile, speedKph: number): { gear: number; rpm: number } => {
+  if (v.rpmPerKphByGear.length <= 1) {
+    const rpm = Math.max(v.idleRpm, v.rpmPerKphByGear[0] * speedKph);
+    return { gear: 1, rpm: Math.min(v.redlineRpm, rpm) };
+  }
+  for (let g = v.rpmPerKphByGear.length; g >= 1; g--) {
+    const rpm = v.rpmPerKphByGear[g - 1] * speedKph;
+    if (rpm <= v.redlineRpm * 0.95 && (g === 1 || rpm >= v.idleRpm * 1.6)) {
+      return { gear: g, rpm: Math.max(v.idleRpm, rpm) };
+    }
+  }
+  return { gear: 1, rpm: Math.max(v.idleRpm, v.rpmPerKphByGear[0] * speedKph) };
 };
 
 // Backwards-compatible helper
@@ -222,7 +451,7 @@ const buildIceFrames = (): FrameDef[] => [
     dlc: 8,
     cycleMs: 20,
     signals: [
-      { name: "EngineRPM", startBit: 0, length: 16, factor: 1, offset: 0, min: 0, max: 9000, unit: "rpm" },
+      { name: "EngineRPM", startBit: 0, length: 16, factor: 1, offset: 0, min: 0, max: 12000, unit: "rpm" },
       { name: "ThrottlePosition", startBit: 16, length: 8, factor: 0.4, offset: 0, min: 0, max: 100, unit: "%" },
       { name: "EngineLoad", startBit: 24, length: 8, factor: 0.4, offset: 0, min: 0, max: 100, unit: "%" },
       { name: "IgnitionAdvance", startBit: 32, length: 8, factor: 0.5, offset: -64, min: -64, max: 64, unit: "deg" },
@@ -232,24 +461,52 @@ const buildIceFrames = (): FrameDef[] => [
     shape: (t, ctx) => {
       const r = ctx.rand;
       const v = ctx.vehicle;
-      const idleRpm = /(diesel|cummins|duramax|powerstroke|tdi)/.test(v.description.toLowerCase()) ? 750 : 850;
-      const redline = v.topSpeedKph >= 320 ? 8500 : v.topSpeedKph >= 280 ? 8000 : v.topSpeedKph >= 240 ? 7200 : 6500;
+      const idleRpm = v.idleRpm;
+      const redline = v.redlineRpm;
       const gearTopIdx = Math.max(1, v.gearCount);
       let rpm = idleRpm;
       let throttle = 0;
       let load = 8;
       switch (ctx.state) {
         case "launch_0_60": {
-          const inAccel = t <= v.zeroTo100Sec;
-          // Sawtooth-style RPM climb with shifts
+          // Use real gear-ratio-based RPM mapping
           const accelPhase = Math.min(1, t / Math.max(0.5, v.zeroTo100Sec));
           const speed = 100 * (1 - Math.exp(-3.0 * accelPhase));
-          const gear = Math.min(gearTopIdx, 1 + Math.floor((speed / 110) * Math.min(6, gearTopIdx)));
-          const gearRatioDrop = 0.65; // RPM drops to 65% on upshift
-          const baseRpm = idleRpm + (redline - idleRpm) * Math.pow(gearRatioDrop, gear - 1);
-          rpm = inAccel ? baseRpm + (redline - baseRpm) * (accelPhase) : redline * 0.55;
-          throttle = inAccel ? 95 + (r() - 0.5) * 2 : 30;
-          load = inAccel ? 92 : 35;
+          const sel = selectGear(v, speed);
+          rpm = Math.min(redline, sel.rpm + Math.sin(t * 8) * 60);
+          throttle = t <= v.zeroTo100Sec ? 95 + (r() - 0.5) * 2 : 30;
+          load = t <= v.zeroTo100Sec ? 92 : 35;
+          break;
+        }
+        case "drag_pass": {
+          // Quarter mile: full launch, hard shifts, RPM sawtooth between redline and ~70%
+          const accelPhase = Math.min(1, t / Math.max(0.5, v.zeroTo100Sec * 2.4));
+          const speed = (v.topSpeedKph * 0.6) * (1 - Math.exp(-2.6 * accelPhase));
+          const sel = selectGear(v, speed);
+          rpm = Math.min(redline, sel.rpm + Math.sin(t * 12) * 80);
+          throttle = 100;
+          load = 98;
+          break;
+        }
+        case "burnout": {
+          // Stationary wheels-spinning: very high RPM cycling, throttle stabbing
+          const swing = (Math.sin(t * 3) + 1) / 2; // 0..1
+          rpm = idleRpm + swing * (redline - idleRpm) * 0.85 + (r() - 0.5) * 200;
+          throttle = 60 + swing * 35;
+          load = 70 + swing * 25;
+          break;
+        }
+        case "track_lap": {
+          // Lap pattern: ~25s lap, accelerate / brake / corner repeatedly
+          const lap = (t % 25) / 25;
+          const targetSpeed = lap < 0.4 ? lap * 2.5 * (v.topSpeedKph * 0.85)
+            : lap < 0.55 ? v.topSpeedKph * 0.85 - (lap - 0.4) * 6 * (v.topSpeedKph * 0.5)
+            : lap < 0.85 ? 80 + Math.sin(lap * 12) * 30
+            : (1 - lap) * 6 * (v.topSpeedKph * 0.5);
+          const sel = selectGear(v, Math.max(20, targetSpeed));
+          rpm = Math.min(redline, sel.rpm + Math.sin(t * 9) * 100);
+          throttle = lap < 0.4 ? 95 : lap < 0.55 ? 5 : 60 + Math.sin(lap * 8) * 30;
+          load = lap < 0.4 ? 95 : lap < 0.55 ? 8 : 60;
           break;
         }
         case "top_speed_run": {
@@ -257,8 +514,10 @@ const buildIceFrames = (): FrameDef[] => [
           const fracToHundred = Math.min(0.95, 100 / vMax);
           const tau60 = Math.max(0.6, v.zeroTo100Sec / -Math.log(1 - fracToHundred));
           const fracV = 1 - Math.exp(-t / tau60);
-          // Climbs through gears, RPM swings each shift, settles near redline*0.95 in top gear
-          rpm = idleRpm + (redline * 0.95 - idleRpm) * fracV + Math.sin(t * 1.6) * 250;
+          const speed = vMax * fracV;
+          const sel = selectGear(v, speed);
+          // Use real per-gear RPM with shift-induced sawtooth
+          rpm = Math.min(redline, sel.rpm + Math.sin(t * 4) * 120);
           throttle = 100 - fracV * 3;
           load = 95;
           break;
@@ -273,11 +532,13 @@ const buildIceFrames = (): FrameDef[] => [
           throttle = 0;
           load = 5;
           break;
-        case "highway_cruise":
-          rpm = 1900 + Math.sin(t * 0.3) * 60 + (r() - 0.5) * 20;
+        case "highway_cruise": {
+          const sel = selectGear(v, v.cruiseKph);
+          rpm = sel.rpm + Math.sin(t * 0.3) * 60 + (r() - 0.5) * 20;
           throttle = 18 + Math.sin(t * 0.3) * 2;
           load = 32;
           break;
+        }
         case "charging_20_80": // ICE doesn't charge — engine off
           rpm = 0;
           throttle = 0;
@@ -375,14 +636,71 @@ const buildIceFrames = (): FrameDef[] => [
     ],
     shape: (t, ctx) => {
       const r = ctx.rand;
-      const heat = ctx.state === "launch_0_60" || ctx.state === "top_speed_run" ? 1 : ctx.state === "highway_cruise" ? 0.4 : 0.1;
+      const v = ctx.vehicle;
+      // Heat load by scenario (0..1)
+      const heat =
+        ctx.state === "drag_pass" || ctx.state === "burnout" ? 1.1 :
+        ctx.state === "track_lap" ? 0.9 :
+        ctx.state === "launch_0_60" || ctx.state === "top_speed_run" ? 1 :
+        ctx.state === "highway_cruise" ? 0.4 : 0.1;
+      // Diesel runs cooler EGT but higher coolant under load
+      const egtBase = v.powertrain === "diesel" ? 320 : 420;
+      const egtSpan = v.powertrain === "diesel" ? 380 : 480;
       const k = Math.min(1, t / ctx.duration);
+      // Cumulative thermal rise — temps integrate over time, not just k of duration
+      const tempRiseRate = heat * 0.4; // °C per second under load
       return {
-        CoolantTemp: 88 + heat * 8 * k + (r() - 0.5) * 0.6,
-        OilTemp: 95 + heat * 18 * k + (r() - 0.5) * 0.6,
+        CoolantTemp: 88 + Math.min(22, t * tempRiseRate * 0.25) + (r() - 0.5) * 0.6,
+        OilTemp: 95 + Math.min(45, t * tempRiseRate * 0.5) + (r() - 0.5) * 0.6,
         OilPressure: 3.2 + heat * 1.4 + (r() - 0.5) * 0.1,
-        IntakeAirTemp: 32 + heat * 12 * k + (r() - 0.5) * 0.5,
-        ExhaustGasTemp: 420 + heat * 480 * k + (r() - 0.5) * 8,
+        IntakeAirTemp: 32 + heat * 12 * k + (v.induction !== "na" ? heat * 14 * k : 0) + (r() - 0.5) * 0.5,
+        ExhaustGasTemp: egtBase + heat * egtSpan * k + (r() - 0.5) * 8,
+      };
+    },
+  },
+  {
+    id: 0x0D8,
+    name: "ENG_Boost",
+    dlc: 8,
+    cycleMs: 50,
+    signals: [
+      { name: "BoostPressure", startBit: 0, length: 16, factor: 0.01, offset: -100, min: -100, max: 350, unit: "kPa" },
+      { name: "WastegateDuty", startBit: 16, length: 8, factor: 0.5, offset: 0, min: 0, max: 100, unit: "%" },
+      { name: "TurboShaftRpm", startBit: 24, length: 16, factor: 10, offset: 0, min: 0, max: 250000, unit: "rpm" },
+      { name: "Counter_D8", startBit: 48, length: 8, factor: 1, offset: 0, min: 0, max: 255, unit: "" },
+    ],
+    shape: (t, ctx) => {
+      const v = ctx.vehicle;
+      const r = ctx.rand;
+      const boosted = v.induction === "turbo" || v.induction === "twin_turbo" || v.induction === "supercharged";
+      if (!boosted) {
+        return { BoostPressure: 0, WastegateDuty: 0, TurboShaftRpm: 0 };
+      }
+      const peakBoost = v.induction === "twin_turbo" ? 220 : v.induction === "supercharged" ? 130 : 180;
+      let load = 0;
+      switch (ctx.state) {
+        case "launch_0_60":
+        case "drag_pass":
+        case "top_speed_run":
+        case "burnout":
+          load = 0.95; break;
+        case "track_lap": {
+          const lap = (t % 25) / 25;
+          load = lap < 0.4 ? 0.9 : lap < 0.55 ? 0.05 : 0.5;
+          break;
+        }
+        case "highway_cruise": load = 0.15; break;
+        case "city_stop_go": load = 0.3 + Math.sin(t * 0.5) * 0.2; break;
+        default: load = 0.05;
+      }
+      // Lag: superchargers respond instantly, turbos lag 0.4s
+      const lag = v.induction === "supercharged" ? 0 : 0.4;
+      const effLoad = Math.max(0, Math.min(1, load * (1 - Math.exp(-Math.max(0.01, t) / Math.max(0.01, lag)))));
+      const boost = effLoad * peakBoost + (r() - 0.5) * 3;
+      return {
+        BoostPressure: boost,
+        WastegateDuty: load > 0.8 ? 80 + (r() - 0.5) * 5 : 30 * load,
+        TurboShaftRpm: effLoad * 180000,
       };
     },
   },
@@ -650,6 +968,32 @@ const buildCommonFrames = (): FrameDef[] => [
           gear = Math.min(gearTopIdx, speed > 25 ? 3 : speed > 10 ? 2 : 1);
           break;
         }
+        case "burnout":
+          // Stationary, launch-control like — driven wheels handled in VEH_Wheels via slip
+          speed = 0 + (r() - 0.5) * 0.4;
+          pedal = 60 + (Math.sin(t * 3) + 1) * 18;
+          brake = 18 + (r() - 0.5) * 2; // brake torque holding car
+          gear = 1;
+          break;
+        case "drag_pass": {
+          const accelPhase = Math.min(1, t / Math.max(0.5, v.zeroTo100Sec * 2.4));
+          speed = (vMax * 0.6) * (1 - Math.exp(-2.6 * accelPhase));
+          pedal = 100;
+          brake = 0;
+          gear = Math.min(gearTopIdx, 1 + Math.floor((speed / vMax) * gearTopIdx));
+          break;
+        }
+        case "track_lap": {
+          const lap = (t % 25) / 25;
+          if (lap < 0.4) speed = lap * 2.5 * (vMax * 0.85);
+          else if (lap < 0.55) speed = vMax * 0.85 - (lap - 0.4) * 6 * (vMax * 0.5);
+          else if (lap < 0.85) speed = 80 + Math.sin(lap * 12) * 30;
+          else speed = Math.max(0, (1 - lap) * 6 * (vMax * 0.5));
+          pedal = lap < 0.4 ? 95 : lap < 0.55 ? 5 : 60 + Math.sin(lap * 8) * 30;
+          brake = lap >= 0.4 && lap < 0.55 ? 60 + (r() - 0.5) * 6 : 0;
+          gear = Math.min(gearTopIdx, 1 + Math.floor((speed / vMax) * gearTopIdx));
+          break;
+        }
         default:
           speed = 40 + Math.sin(t * 0.5) * 10;
           pedal = 20;
@@ -677,25 +1021,57 @@ const buildCommonFrames = (): FrameDef[] => [
       const fracToHundred = Math.min(0.95, 100 / vMax);
       const tau60 = Math.max(0.6, v.zeroTo100Sec / -Math.log(1 - fracToHundred));
       // mirror VEH_Speed
-      const base =
-        ctx.state === "idle_ac_on" || ctx.state === "charging_20_80"
-          ? 0
-          : ctx.state === "highway_cruise"
-            ? v.cruiseKph
-            : ctx.state === "launch_0_60"
-              ? 100 * (1 - Math.exp(-3.0 * Math.min(1, t / Math.max(0.5, v.zeroTo100Sec)))) +
-                (t > v.zeroTo100Sec ? Math.min(20, (t - v.zeroTo100Sec) * 4) : 0)
-              : ctx.state === "top_speed_run"
-                ? vMax * (1 - Math.exp(-t / tau60))
-                : ctx.state === "regen_braking"
-                  ? Math.max(0, 80 - (t / ctx.duration) * 75)
-                  : 30 + Math.sin(t * 0.5) * 10;
+      let base = 0;
+      switch (ctx.state) {
+        case "idle_ac_on":
+        case "charging_20_80":
+          base = 0; break;
+        case "highway_cruise":
+          base = v.cruiseKph; break;
+        case "launch_0_60":
+          base = 100 * (1 - Math.exp(-3.0 * Math.min(1, t / Math.max(0.5, v.zeroTo100Sec)))) +
+            (t > v.zeroTo100Sec ? Math.min(20, (t - v.zeroTo100Sec) * 4) : 0);
+          break;
+        case "top_speed_run":
+          base = vMax * (1 - Math.exp(-t / tau60)); break;
+        case "regen_braking":
+          base = Math.max(0, 80 - (t / ctx.duration) * 75); break;
+        case "burnout":
+          base = 0; break;
+        case "drag_pass": {
+          const accelPhase = Math.min(1, t / Math.max(0.5, v.zeroTo100Sec * 2.4));
+          base = (vMax * 0.6) * (1 - Math.exp(-2.6 * accelPhase));
+          break;
+        }
+        case "track_lap": {
+          const lap = (t % 25) / 25;
+          if (lap < 0.4) base = lap * 2.5 * (vMax * 0.85);
+          else if (lap < 0.55) base = vMax * 0.85 - (lap - 0.4) * 6 * (vMax * 0.5);
+          else if (lap < 0.85) base = 80 + Math.sin(lap * 12) * 30;
+          else base = Math.max(0, (1 - lap) * 6 * (vMax * 0.5));
+          break;
+        }
+        default:
+          base = 30 + Math.sin(t * 0.5) * 10;
+      }
       const j = () => (r() - 0.5) * 0.4;
+      // Wheel slip: driven wheels spin faster than non-driven during launch/burnout
+      const driveAxle = v.drivetrain;
+      let slipDriven = 0;
+      if (ctx.state === "burnout") slipDriven = 80 + Math.sin(t * 5) * 20; // huge slip
+      else if (ctx.state === "launch_0_60" && t < v.zeroTo100Sec * 0.5)
+        slipDriven = Math.max(0, (10 - base * 0.15)); // brief launch slip
+      else if (ctx.state === "drag_pass" && t < v.zeroTo100Sec * 0.6)
+        slipDriven = Math.max(0, (8 - base * 0.1));
+      const fl = base + j() + (driveAxle === "fwd" || driveAxle === "awd" ? slipDriven * 0.5 : 0);
+      const fr = base + j() + (driveAxle === "fwd" || driveAxle === "awd" ? slipDriven * 0.5 : 0);
+      const rl = base + j() + (driveAxle === "rwd" || driveAxle === "awd" ? slipDriven : 0);
+      const rr = base + j() + (driveAxle === "rwd" || driveAxle === "awd" ? slipDriven : 0);
       return {
-        WheelSpeed_FL: Math.max(0, base + j()),
-        WheelSpeed_FR: Math.max(0, base + j()),
-        WheelSpeed_RL: Math.max(0, base + j()),
-        WheelSpeed_RR: Math.max(0, base + j()),
+        WheelSpeed_FL: Math.max(0, fl),
+        WheelSpeed_FR: Math.max(0, fr),
+        WheelSpeed_RL: Math.max(0, rl),
+        WheelSpeed_RR: Math.max(0, rr),
       };
     },
   },
@@ -912,6 +1288,9 @@ const stateLabel: Record<DrivingState, string> = {
   charging_20_80: "DC charging 20% → 80%",
   city_stop_go: "City stop-and-go",
   top_speed_run: "Top speed run (0 → Vmax)",
+  burnout: "Burnout (stationary, wheels spinning)",
+  drag_pass: "Drag pass (1/4 mile)",
+  track_lap: "Track lap (mixed throttle/brake/corner)",
   custom: "Custom driving state",
 };
 
@@ -938,7 +1317,8 @@ const buildSummary = (
     `  Inferred top speed: ${vehicle.topSpeedKph} km/h (~${mph(vehicle.topSpeedKph)} mph)`,
     `  Inferred 0–100 km/h: ${vehicle.zeroTo100Sec.toFixed(1)} s`,
     `  Gears: ${vehicle.gearCount}${vehicle.packKwh > 0 ? ` · Pack: ${vehicle.packKwh} kWh @ ~${vehicle.nominalPackVolts}V` : ""}`,
-    `  Peak motor/engine torque: ${vehicle.peakMotorTorqueNm} Nm · Curb weight: ${vehicle.curbWeightKg} kg`,
+    `  Peak motor/engine torque: ${vehicle.peakMotorTorqueNm} Nm · Peak power: ${vehicle.peakPowerHp} hp · Curb weight: ${vehicle.curbWeightKg} kg`,
+    `  Induction: ${vehicle.induction.replace("_", " ")} · Drivetrain: ${vehicle.drivetrain.toUpperCase()} · Redline: ${vehicle.redlineRpm} rpm · 60→130 mph: ~${vehicle.sixtyTo130Sec.toFixed(1)} s`,
     `Driving state: ${stateLabel[req.drivingState]}${req.customStateNotes ? ` — ${req.customStateNotes}` : ""}`,
     `Duration: ${stats.durationSec.toFixed(1)}s`,
     `Frames defined: ${frames.length}`,
@@ -986,9 +1366,28 @@ const buildSummary = (
     case "city_stop_go":
       lines.push("- Repeated accel/coast/brake cycles, occasional turn signals, varying gear and steering inputs.");
       break;
+    case "burnout":
+      lines.push(
+        `- Stationary chassis with brake torque held; driven (${vehicle.drivetrain.toUpperCase()}) wheels spin to ~80–100 km/h indicated while non-driven wheels read ~0. Throttle stabs cycle RPM near ${Math.round(vehicle.redlineRpm * 0.85)}.`,
+      );
+      break;
+    case "drag_pass":
+      lines.push(
+        `- Quarter-mile style: hard launch, full pedal, sequential redline shifts through ${vehicle.gearCount} gears, peak HP near ${vehicle.peakPowerHp} hp, trap speed approaching ${Math.round(vehicle.topSpeedKph * 0.6)} km/h (~${mph(Math.round(vehicle.topSpeedKph * 0.6))} mph).`,
+      );
+      break;
+    case "track_lap":
+      lines.push(
+        `- ~25 s lap loop: full-throttle straight, hard braking event, mid-corner throttle modulation with steering oscillations. Coolant/oil temps climb under sustained load.`,
+      );
+      break;
     default:
       lines.push("- Custom mixed behavior with stable plausible payload patterns.");
   }
+  if (vehicle.induction === "turbo" || vehicle.induction === "twin_turbo" || vehicle.induction === "supercharged") {
+    lines.push(`- Forced induction (${vehicle.induction.replace("_", " ")}): boost rises with throttle, EGT and IAT climb under sustained load.`);
+  }
+  lines.push(`- Drivetrain: ${vehicle.drivetrain.toUpperCase()} · Tire radius: ${vehicle.tireRadiusM.toFixed(3)} m · Redline: ${vehicle.redlineRpm} rpm`);
   lines.push("");
   lines.push("All signals are fictional and not derived from any OEM, vendor, or proprietary database.");
   return lines.join("\n");
@@ -1014,7 +1413,10 @@ export const generateSample = (req: SampleRequest): SampleOutput => {
 
 export const drivingStateOptions: Array<{ value: DrivingState; label: string }> = [
   { value: "launch_0_60", label: "0–60 launch" },
+  { value: "drag_pass", label: "Drag pass (1/4 mile)" },
   { value: "top_speed_run", label: "Top speed run (0 → Vmax)" },
+  { value: "burnout", label: "Burnout (stationary, wheels spinning)" },
+  { value: "track_lap", label: "Track lap (mixed)" },
   { value: "idle_ac_on", label: "Idle with HVAC on" },
   { value: "regen_braking", label: "Regen braking" },
   { value: "highway_cruise", label: "Highway cruise (70 mph)" },
