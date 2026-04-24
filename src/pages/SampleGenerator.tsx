@@ -22,55 +22,57 @@ const slug = (s: string) =>
     .replace(/^_+|_+$/g, "")
     .slice(0, 40) || "sample";
 
-const downloadText = async (filename: string, contents: string, mime: string) => {
-  const blob = new Blob([contents], { type: mime });
+const isIOS = () => {
+  if (typeof navigator === "undefined") return false;
+  const ua = navigator.userAgent;
+  const iPadOS = navigator.platform === "MacIntel" && (navigator as Navigator & { maxTouchPoints?: number }).maxTouchPoints! > 1;
+  return /iPad|iPhone|iPod/.test(ua) || iPadOS;
+};
 
-  // Try Web Share API first (works best on mobile, especially iOS)
-  try {
-    const file = new File([blob], filename, { type: mime });
-    const nav = navigator as Navigator & {
-      canShare?: (data: { files: File[] }) => boolean;
-      share?: (data: { files: File[]; title?: string }) => Promise<void>;
-    };
-    if (nav.canShare && nav.share && nav.canShare({ files: [file] })) {
-      await nav.share({ files: [file], title: filename });
-      return;
+const escapeHtml = (s: string) =>
+  s.replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c] as string));
+
+const openInNewTab = (filename: string, contents: string) => {
+  // iOS Safari can't trigger blob downloads, but it CAN open a new tab
+  // and let the user use Share → Save to Files. We open synchronously
+  // (inside the click handler) so the popup blocker doesn't fire.
+  const win = window.open("", "_blank");
+  if (!win) {
+    // Popup blocked — fall back to copying contents to clipboard
+    try {
+      void navigator.clipboard?.writeText(contents);
+      toast.message(`Couldn't open download tab. ${filename} copied to clipboard.`);
+    } catch {
+      toast.error("Browser blocked the download. Allow popups and try again.");
     }
-  } catch (err) {
-    // user cancelled or share failed — fall through to download
-    if ((err as Error)?.name === "AbortError") return;
+    return;
+  }
+  win.document.open();
+  win.document.write(
+    `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${escapeHtml(filename)}</title><style>body{margin:0;font-family:-apple-system,system-ui,sans-serif;background:#111;color:#eee}header{position:sticky;top:0;background:#1a1a1a;padding:12px 16px;border-bottom:1px solid #333;display:flex;align-items:center;gap:12px}h1{font-size:14px;margin:0;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}button{background:#3b82f6;color:#fff;border:0;padding:8px 14px;border-radius:6px;font-size:13px;font-weight:600}pre{margin:0;padding:16px;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:11px;line-height:1.5;white-space:pre-wrap;word-break:break-all}</style></head><body><header><h1>${escapeHtml(filename)}</h1><button onclick="navigator.clipboard.writeText(document.getElementById('c').innerText).then(()=>this.textContent='Copied!')">Copy All</button></header><pre id="c">${escapeHtml(contents)}</pre><script>document.title=${JSON.stringify(filename)};</script></body></html>`,
+  );
+  win.document.close();
+};
+
+const downloadText = (filename: string, contents: string, mime: string) => {
+  // iOS Safari: blob downloads silently fail. Open in a new tab instead so
+  // the user can use Share → Save to Files / Copy.
+  if (isIOS()) {
+    openInNewTab(filename, contents);
+    return;
   }
 
-  // Fallback: classic anchor download (desktop + Android Chrome)
+  // Desktop + Android: classic anchor download works reliably
+  const blob = new Blob([contents], { type: mime });
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
   a.href = url;
   a.download = filename;
   a.rel = "noopener";
-  a.target = "_blank";
   document.body.appendChild(a);
   a.click();
   document.body.removeChild(a);
   setTimeout(() => URL.revokeObjectURL(url), 1000);
-
-  // Last-resort fallback for iOS Safari: open data URL in a new tab
-  const ua = navigator.userAgent;
-  const isIOS = /iPad|iPhone|iPod/.test(ua) && !(window as unknown as { MSStream?: unknown }).MSStream;
-  if (isIOS) {
-    const reader = new FileReader();
-    reader.onload = () => {
-      const dataUrl = reader.result as string;
-      const win = window.open();
-      if (win) {
-        win.document.write(
-          `<title>${filename}</title><pre style="white-space:pre-wrap;font-family:monospace;font-size:12px;padding:12px;">${contents.replace(/[<>&]/g, (c) => ({ "<": "&lt;", ">": "&gt;", "&": "&amp;" }[c] as string))}</pre>`,
-        );
-        win.document.title = filename;
-      }
-      void dataUrl;
-    };
-    reader.readAsDataURL(blob);
-  }
 };
 
 const SampleGenerator = () => {
