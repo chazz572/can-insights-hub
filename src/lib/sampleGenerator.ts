@@ -572,9 +572,10 @@ const computeShiftEvent = (
   v: VehicleProfile,
   speedKph: number,
   prevSpeedKph: number,
+  loadHint: number = 0.2,
 ): ShiftInfo => {
-  const sel = selectGear(v, speedKph);
-  const prev = selectGear(v, prevSpeedKph);
+  const sel = selectGear(v, speedKph, loadHint);
+  const prev = selectGear(v, prevSpeedKph, loadHint);
   if (sel.gear !== prev.gear && sel.gear > prev.gear) {
     // Right at a shift boundary — emit a brief blend
     return { gear: sel.gear, rpm: sel.rpm, shiftBlend: 1, inShift: true };
