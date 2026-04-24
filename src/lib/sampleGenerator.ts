@@ -419,6 +419,28 @@ const buildVehicleProfile = (desc: string, override?: VehicleSpecOverride): Vehi
     cruiseKph = Math.min(135, Math.max(95, Math.round(topSpeedKph * 0.45)));
   }
 
+  // Apply AI-derived / caller override (highest priority)
+  if (override) {
+    if (override.powertrain) powertrain = override.powertrain;
+    if (override.topSpeedKph) topSpeedKph = override.topSpeedKph;
+    if (override.zeroTo100Sec) zeroTo100Sec = override.zeroTo100Sec;
+    if (override.sixtyTo130Sec) sixtyTo130Sec = override.sixtyTo130Sec;
+    if (override.redlineRpm) redlineRpm = override.redlineRpm;
+    if (override.idleRpm) idleRpm = override.idleRpm;
+    if (override.gearCount) gearCount = override.gearCount;
+    if (override.gearRatios && override.gearRatios.length) gearRatios = override.gearRatios;
+    if (override.finalDrive) finalDrive = override.finalDrive;
+    if (override.packKwh !== undefined) packKwh = override.packKwh;
+    if (override.nominalPackVolts) nominalPackVolts = override.nominalPackVolts;
+    if (override.peakPowerHp) peakPowerHp = override.peakPowerHp;
+    if (override.peakMotorTorqueNm) peakMotorTorqueNm = override.peakMotorTorqueNm;
+    if (override.curbWeightKg) curbWeightKg = override.curbWeightKg;
+    if (override.induction) induction = override.induction;
+    if (override.drivetrain) drivetrain = override.drivetrain;
+    if (override.tireRadiusM) tireRadiusM = override.tireRadiusM;
+    cruiseKph = Math.min(135, Math.max(95, Math.round(topSpeedKph * 0.45)));
+  }
+
   const rpmPerKphByGear = computeRpmPerKphTable(gearRatios, finalDrive, tireRadiusM, gearCount, redlineRpm, topSpeedKph);
 
   return {
