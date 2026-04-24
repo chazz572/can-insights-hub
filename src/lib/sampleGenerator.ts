@@ -1374,9 +1374,11 @@ const buildLog = (
   const startTs = Date.now() / 1000;
   for (const f of frames) {
     counters[f.id] = 0;
-    const jitterBase = f.cycleMs * 0.02; // 2% jitter
+    // Realism: timestamp jitter blends bus-load jitter (cycle-relative) + scheduler jitter (~0.2 ms)
+    const cycleJitter = f.cycleMs * 0.025; // ~2.5% of cycle
+    const schedulerJitterMs = 0.3;
     for (let t = 0; t < duration * 1000; t += f.cycleMs) {
-      const jitter = (rand() - 0.5) * jitterBase;
+      const jitter = (rand() - 0.5) * cycleJitter + (rand() - 0.5) * schedulerJitterMs;
       const tsSec = startTs + (t + jitter) / 1000;
       const tSec = (t + jitter) / 1000;
       const values = f.shape(tSec, ctx);
