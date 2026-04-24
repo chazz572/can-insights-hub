@@ -153,9 +153,9 @@ export const AppNav = () => {
           {[
             links[0],
             links[2],
-            links[4],
             links[3],
-            links[7],
+            links[4],
+            links[8],
           ].map((item) => (
             <RouterNavLink key={item.label} to={item.to} className={({ isActive }) => cn(navClass({ isActive }), "flex-col justify-center gap-1 px-1 py-1.5 text-[9px]")} end={item.end}>
               <item.icon className="size-4" />
