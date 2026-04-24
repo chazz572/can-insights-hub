@@ -879,117 +879,13 @@ const buildIceFramesAll = (): FrameDef[] => [
       { name: "Checksum_C0", startBit: 56, length: 8, factor: 1, offset: 0, min: 0, max: 255, unit: "" },
     ],
     shape: (t, ctx) => {
-      const r = ctx.rand;
-      const v = ctx.vehicle;
-      const idleRpm = v.idleRpm;
-      const redline = v.redlineRpm;
-      const gearTopIdx = Math.max(1, v.gearCount);
-      let rpm = idleRpm;
-      let throttle = 0;
-      let load = 8;
-      switch (ctx.state) {
-        case "launch_0_60": {
-          // Use real gear-ratio-based RPM mapping
-          const accelPhase = Math.min(1, t / Math.max(0.5, v.zeroTo100Sec));
-          const speed = 100 * (1 - Math.exp(-3.0 * accelPhase));
-          const sel = selectGear(v, speed);
-          rpm = Math.min(redline, sel.rpm + Math.sin(t * 8) * 60);
-          throttle = t <= v.zeroTo100Sec ? 95 + (r() - 0.5) * 2 : 30;
-          load = t <= v.zeroTo100Sec ? 92 : 35;
-          break;
-        }
-        case "drag_pass": {
-          // Quarter mile: full launch, hard shifts, RPM sawtooth between redline and ~70%
-          const accelPhase = Math.min(1, t / Math.max(0.5, v.zeroTo100Sec * 2.4));
-          const speed = (v.topSpeedKph * 0.6) * (1 - Math.exp(-2.6 * accelPhase));
-          const sel = selectGear(v, speed);
-          rpm = Math.min(redline, sel.rpm + Math.sin(t * 12) * 80);
-          throttle = 100;
-          load = 98;
-          break;
-        }
-        case "burnout": {
-          // Stationary wheels-spinning: very high RPM cycling, throttle stabbing
-          const swing = (Math.sin(t * 3) + 1) / 2; // 0..1
-          rpm = idleRpm + swing * (redline - idleRpm) * 0.85 + (r() - 0.5) * 200;
-          throttle = 60 + swing * 35;
-          load = 70 + swing * 25;
-          break;
-        }
-        case "track_lap": {
-          // Lap pattern: ~25s lap, accelerate / brake / corner repeatedly
-          const lap = (t % 25) / 25;
-          const targetSpeed = lap < 0.4 ? lap * 2.5 * (v.topSpeedKph * 0.85)
-            : lap < 0.55 ? v.topSpeedKph * 0.85 - (lap - 0.4) * 6 * (v.topSpeedKph * 0.5)
-            : lap < 0.85 ? 80 + Math.sin(lap * 12) * 30
-            : (1 - lap) * 6 * (v.topSpeedKph * 0.5);
-          const sel = selectGear(v, Math.max(20, targetSpeed));
-          rpm = Math.min(redline, sel.rpm + Math.sin(t * 9) * 100);
-          throttle = lap < 0.4 ? 95 : lap < 0.55 ? 5 : 60 + Math.sin(lap * 8) * 30;
-          load = lap < 0.4 ? 95 : lap < 0.55 ? 8 : 60;
-          break;
-        }
-        case "top_speed_run": {
-          const vMax = Math.max(80, v.topSpeedKph);
-          const fracToHundred = Math.min(0.95, 100 / vMax);
-          const tau60 = Math.max(0.6, v.zeroTo100Sec / -Math.log(1 - fracToHundred));
-          const fracV = 1 - Math.exp(-t / tau60);
-          const speed = vMax * fracV;
-          const sel = selectGear(v, speed);
-          // Use real per-gear RPM with shift-induced sawtooth
-          rpm = Math.min(redline, sel.rpm + Math.sin(t * 4) * 120);
-          throttle = 100 - fracV * 3;
-          load = 95;
-          break;
-        }
-        case "idle_ac_on":
-          rpm = idleRpm + Math.sin(t * 2) * 25 + (r() - 0.5) * 15;
-          throttle = 0;
-          load = 12;
-          break;
-        case "regen_braking":
-          rpm = idleRpm + 800 - (t / ctx.duration) * 600;
-          throttle = 0;
-          load = 5;
-          break;
-        case "highway_cruise": {
-          const sel = selectGear(v, v.cruiseKph);
-          rpm = sel.rpm + Math.sin(t * 0.3) * 60 + (r() - 0.5) * 20;
-          throttle = 18 + Math.sin(t * 0.3) * 2;
-          load = 32;
-          break;
-        }
-        case "charging_20_80": // ICE doesn't charge — engine off
-          rpm = 0;
-          throttle = 0;
-          load = 0;
-          break;
-        case "city_stop_go": {
-          const phase = (t % 30) / 30;
-          rpm = phase < 0.4 ? idleRpm + phase * 6000 : phase < 0.7 ? 2400 : idleRpm + 200;
-          throttle = phase < 0.4 ? 50 : phase < 0.7 ? 18 : 0;
-          load = phase < 0.4 ? 70 : 25;
-          break;
-        }
-        default:
-          rpm = 2200;
-          throttle = 22;
-          load = 30;
-      }
-      // Realism: shift dip + ignition retard under load + jitter + quantization
-      // Estimate "is in shift" by detecting near-redline crossings via deterministic sin pulse
-      const shiftPulse = Math.max(0, Math.sin(t * 4.0 + Math.PI / 2)) > 0.985 ? 1 : 0;
-      const shiftDip = shiftPulse * (rpm * 0.32); // brief 32% RPM drop
-      const rpmFinal = Math.max(0, Math.min(redline + 50, rpm - shiftDip + gauss(r, 1.2)));
-      const loadClamped = Math.max(0, Math.min(100, load + gauss(r, 0.4)));
-      // Ignition advance: drops under heavy load (knock retard), rises at light load
-      const baseAdvance = 24 - (loadClamped / 100) * 22; // 24° at idle → ~2° at WOT
-      const advance = baseAdvance + gauss(r, 0.5);
-      const throttleJ = Math.max(0, Math.min(100, throttle + gauss(r, 0.3)));
+      const motion = computeVehicleMotion(t, ctx);
+      const baseAdvance = 24 - (motion.load / 100) * 22 - motion.shiftBlend * 5;
+      const advance = clamp(baseAdvance + gauss(ctx.rand, 0.5), -4, 36);
       return {
-        EngineRPM: quantize(rpmFinal, 4), // ECU typically reports in ~4 rpm steps
-        ThrottlePosition: quantize(throttleJ, 0.4),
-        EngineLoad: quantize(loadClamped, 0.4),
+        EngineRPM: quantize(motion.rpm, 4),
+        ThrottlePosition: quantize(motion.throttle, 0.4),
+        EngineLoad: quantize(motion.load, 0.4),
         IgnitionAdvance: quantize(advance, 0.5),
       };
     },
