@@ -620,6 +620,22 @@ const Results = () => {
     }
   };
 
+  const createShare = async () => {
+    if (!data) return;
+    setSharing(true);
+    setShareUrl(null);
+    try {
+      const { url } = await createShareLink({ fileId, result: data, title: `CAN Analysis ${fileId ?? ""}`.trim(), expiresInDays: 30 });
+      setShareUrl(url);
+      try { await navigator.clipboard.writeText(url); setActionMessage("Share link created and copied to clipboard. Expires in 30 days."); }
+      catch { setActionMessage("Share link created. Copy it below to share."); }
+    } catch (e) {
+      setActionMessage(e instanceof Error ? e.message : "Failed to create share link.");
+    } finally {
+      setSharing(false);
+    }
+  };
+
   return (
     <main className="mx-auto min-h-screen max-w-7xl px-4 py-8 sm:px-6 lg:px-10">
       <div className="mb-8 flex flex-col justify-between gap-4 sm:flex-row sm:items-end">
@@ -633,12 +649,21 @@ const Results = () => {
         </div>
         <div className="flex flex-wrap gap-3">
           <Button type="button" variant="default" onClick={downloadPdfReport}><FileText className="size-4" /> Download PDF Report</Button>
+          <Button type="button" variant="outline" onClick={createShare} disabled={sharing}>{sharing ? <Loader2 className="size-4 animate-spin" /> : <Link2 className="size-4" />} Create Share Link</Button>
           <Button type="button" variant="outline" onClick={saveSnapshot}><Save className="size-4" /> Save Analysis</Button>
           <Button type="button" variant="outline" onClick={downloadReport}><Download className="size-4" /> Health Report</Button>
           <Button type="button" variant="outline" onClick={downloadPlainEnglishSummary}><Download className="size-4" /> Plain English Summary</Button>
           <Button asChild variant="outline"><Link to="/upload">Analyze Another Log</Link></Button>
         </div>
       </div>
+      {shareUrl ? (
+        <div className="mb-4 flex flex-col gap-2 rounded-lg border border-primary/40 bg-glass p-3 shadow-glow backdrop-blur sm:flex-row sm:items-center">
+          <Link2 className="size-4 shrink-0 text-primary" />
+          <input readOnly value={shareUrl} className="flex-1 truncate rounded-sm border border-glass-border bg-background/60 px-2 py-1 font-mono text-xs text-foreground" onFocus={(e) => e.currentTarget.select()} />
+          <Button type="button" size="sm" variant="outline" onClick={() => { navigator.clipboard.writeText(shareUrl); setActionMessage("Link copied to clipboard."); }}>Copy</Button>
+          <Button type="button" size="sm" variant="ghost" asChild><a href={shareUrl} target="_blank" rel="noreferrer">Open</a></Button>
+        </div>
+      ) : null}
       {actionMessage ? <div className="mb-6 rounded-lg border border-glass-border bg-glass p-3 text-sm text-muted-foreground shadow-glow backdrop-blur">{actionMessage}</div> : null}
 
       {isLoading ? (
