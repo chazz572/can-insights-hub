@@ -28,6 +28,7 @@ export const AppNav = () => {
 
   useEffect(() => {
     setFileId(localStorage.getItem("can_ai_file_id"));
+    setMobileMoreOpen(false);
   }, [location.pathname]);
 
   useEffect(() => {
