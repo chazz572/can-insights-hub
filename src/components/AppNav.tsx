@@ -55,8 +55,8 @@ export const AppNav = () => {
   const links = [
     { to: "/", label: "Home", icon: Home, end: true },
     { to: "/workspace", label: "Bay", icon: LayoutDashboard },
-    { to: "/upload", label: "Intake", icon: UploadCloud },
-    { to: resultsPath, label: "Diagnose", icon: BarChart3 },
+    { to: "/upload", label: "Intake", icon: UploadCloud, end: true },
+    { to: resultsPath, label: "Diagnose", icon: BarChart3, end: !fileId },
     { to: "/compare", label: "Compare", icon: GitCompareArrows },
     { to: "/engineering", label: "Bench", icon: TerminalSquare },
     { to: "/visualize", label: "Scope", icon: ChartNoAxesCombined },
