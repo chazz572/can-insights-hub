@@ -43,11 +43,16 @@ export const CanFrameTable = ({ frames, autoScroll, changedMaskByID, onSelect, s
   return (
     <div className="data-panel relative h-full overflow-hidden">
       {/* Header */}
-      <div className="grid grid-cols-[10rem_7rem_4rem_3.5rem_1fr] gap-2 border-b border-glass-border bg-secondary/60 px-4 py-2 font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
+      <div className="hidden sm:grid grid-cols-[10rem_7rem_4rem_3.5rem_1fr] gap-2 border-b border-glass-border bg-secondary/60 px-4 py-2 font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
         <span>Timestamp</span>
         <span>ID</span>
         <span>Bus</span>
         <span>DLC</span>
+        <span>Data</span>
+      </div>
+      <div className="grid sm:hidden grid-cols-[5rem_5rem_1fr] gap-2 border-b border-glass-border bg-secondary/60 px-3 py-2 font-mono text-[9px] uppercase tracking-widest text-muted-foreground">
+        <span>Time</span>
+        <span>ID</span>
         <span>Data</span>
       </div>
       <div
@@ -70,7 +75,7 @@ export const CanFrameTable = ({ frames, autoScroll, changedMaskByID, onSelect, s
                   onClick={() => onSelect?.(f)}
                   style={{ height: ROW_H }}
                   className={cn(
-                    "grid w-full grid-cols-[10rem_7rem_4rem_3.5rem_1fr] items-center gap-2 border-b border-glass-border/40 px-4 text-left font-mono text-[11px] transition-colors",
+                    "grid w-full grid-cols-[5rem_5rem_1fr] sm:grid-cols-[10rem_7rem_4rem_3.5rem_1fr] items-center gap-2 border-b border-glass-border/40 px-3 sm:px-4 text-left font-mono text-[10px] sm:text-[11px] transition-colors",
                     "hover:bg-primary/10",
                     selected && "bg-primary/15",
                     isLast && "animate-fade-up",
@@ -83,9 +88,9 @@ export const CanFrameTable = ({ frames, autoScroll, changedMaskByID, onSelect, s
                   >
                     {formatId(f.id)}
                   </span>
-                  <span className="truncate text-foreground/80">{String(f.bus)}</span>
-                  <span className="text-foreground/80">{f.dlc}</span>
-                  <span className="flex gap-[3px] truncate text-foreground">
+                  <span className="hidden sm:block truncate text-foreground/80">{String(f.bus)}</span>
+                  <span className="hidden sm:block text-foreground/80">{f.dlc}</span>
+                  <span className="flex gap-[2px] sm:gap-[3px] overflow-hidden text-foreground">
                     {f.data.map((b, bi) => (
                       <span
                         key={bi}
