@@ -156,7 +156,7 @@ const Analyzer = () => {
   const statusLabel = state.paused && state.status !== "disconnected" ? "paused" : state.status;
 
   return (
-    <main className="mx-auto min-h-screen max-w-[1600px] px-4 py-6 sm:px-6 lg:px-8">
+    <main className="mx-auto min-h-screen max-w-[1600px] px-3 pb-28 pt-4 sm:px-6 sm:py-6 lg:px-8 lg:pb-8">
       {/* Hero header */}
       <section className="mb-6 animate-fade-up data-panel scanline-panel riveted relative overflow-hidden p-5 sm:p-6">
         <div className="hazard-stripe absolute inset-x-0 top-0 h-1.5 opacity-80" />
