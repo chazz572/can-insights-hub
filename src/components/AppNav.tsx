@@ -1,8 +1,10 @@
-import { Activity, BarChart3, Beaker, Bell, Car, ChartNoAxesCombined, CheckCircle2, Download, GitCompareArrows, Home, LayoutDashboard, Moon, Settings, Sun, TerminalSquare, UploadCloud, UserCircle, Wrench } from "lucide-react";
+import { Activity, BarChart3, Beaker, Bell, Car, ChartNoAxesCombined, CheckCircle2, Download, GitCompareArrows, Home, LayoutDashboard, MoreHorizontal, Moon, Settings, Sun, TerminalSquare, UploadCloud, UserCircle, Wrench } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Link, NavLink as RouterNavLink, useLocation } from "react-router-dom";
 
 import { SettingsDialog } from "@/components/SettingsDialog";
+import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
+import { useApplyGlobalSettings } from "@/lib/settings";
 import { cn } from "@/lib/utils";
 
 const navClass = ({ isActive, highlight }: { isActive: boolean; highlight?: boolean }) =>
@@ -16,14 +18,17 @@ const navClass = ({ isActive, highlight }: { isActive: boolean; highlight?: bool
   );
 
 export const AppNav = () => {
+  useApplyGlobalSettings();
   const location = useLocation();
   const [fileId, setFileId] = useState<string | null>(() => localStorage.getItem("can_ai_file_id"));
   const [theme, setTheme] = useState<"dark" | "light">(() => (localStorage.getItem("can_ai_theme") === "light" ? "light" : "dark"));
   const [notice, setNotice] = useState<string | null>(null);
   const [clock, setClock] = useState<string>(() => new Date().toLocaleTimeString([], { hour12: false }));
+  const [mobileMoreOpen, setMobileMoreOpen] = useState(false);
 
   useEffect(() => {
     setFileId(localStorage.getItem("can_ai_file_id"));
+    setMobileMoreOpen(false);
   }, [location.pathname]);
 
   useEffect(() => {
@@ -153,21 +158,97 @@ export const AppNav = () => {
         ) : null}
       </header>
 
-      {/* Mobile bottom toolbar */}
+      {/* Mobile bottom toolbar — 4 quick links + More sheet exposing every tool */}
       <header className="fixed inset-x-2 bottom-2 z-40 rounded-sm border border-sidebar-border bg-sidebar/98 p-1.5 backdrop-blur md:hidden">
         <nav className="grid grid-cols-5 gap-1">
           {[
-            links[0],
-            links[2],
-            links[3],
+            links.find((l) => l.to === "/")!,
+            links.find((l) => l.to === "/upload")!,
+            links.find((l) => l.label === "Diagnose")!,
             links.find((l) => l.to === "/analyzer")!,
-            links[4],
           ].map((item) => (
             <RouterNavLink key={item.label} to={item.to} className={({ isActive }) => cn(navClass({ isActive }), "flex-col justify-center gap-1 px-1 py-1.5 text-[9px]")} end={item.end}>
               <item.icon className="size-4" />
               <span>{item.label}</span>
             </RouterNavLink>
           ))}
+          <Sheet open={mobileMoreOpen} onOpenChange={setMobileMoreOpen}>
+            <SheetTrigger asChild>
+              <button
+                type="button"
+                className={cn(
+                  "group relative flex flex-col items-center justify-center gap-1 rounded-sm border border-transparent px-1 py-1.5 text-[9px] font-semibold uppercase tracking-wider transition-all",
+                  "text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground hover:border-glass-border",
+                )}
+                aria-label="More tools"
+              >
+                <MoreHorizontal className="size-4" />
+                <span>More</span>
+              </button>
+            </SheetTrigger>
+            <SheetContent side="bottom" className="max-h-[85vh] overflow-y-auto rounded-t-md border-sidebar-border bg-sidebar p-4">
+              <SheetHeader className="text-left">
+                <SheetTitle className="font-display uppercase tracking-wider">All Service Stations</SheetTitle>
+              </SheetHeader>
+
+              <div className="mt-4 grid grid-cols-3 gap-2">
+                {links.map((item) => (
+                  <RouterNavLink
+                    key={`m-${item.label}`}
+                    to={item.to}
+                    end={item.end}
+                    className={({ isActive }) =>
+                      cn(
+                        "flex flex-col items-center justify-center gap-1.5 rounded-sm border px-2 py-3 text-center text-[10px] font-semibold uppercase tracking-wider transition-colors",
+                        isActive
+                          ? "border-primary bg-primary text-primary-foreground"
+                          : "border-glass-border bg-card text-foreground hover:border-primary/50",
+                      )
+                    }
+                  >
+                    <item.icon className="size-5" />
+                    <span className="leading-tight">{item.label}</span>
+                  </RouterNavLink>
+                ))}
+              </div>
+
+              <div className="mt-4 grid grid-cols-3 gap-2 border-t border-glass-border pt-4">
+                <button
+                  type="button"
+                  onClick={() => { setTheme((c) => c === "dark" ? "light" : "dark"); }}
+                  className="flex flex-col items-center gap-1.5 rounded-sm border border-glass-border bg-card px-2 py-3 text-[10px] font-semibold uppercase tracking-wider text-foreground hover:border-primary/50"
+                >
+                  {theme === "dark" ? <Moon className="size-5" /> : <Sun className="size-5" />}
+                  <span>Theme</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => { showNotice("All systems nominal · No active faults"); setMobileMoreOpen(false); }}
+                  className="flex flex-col items-center gap-1.5 rounded-sm border border-glass-border bg-card px-2 py-3 text-[10px] font-semibold uppercase tracking-wider text-foreground hover:border-primary/50"
+                >
+                  <Bell className="size-5" />
+                  <span>Notify</span>
+                </button>
+                <SettingsDialog
+                  trigger={
+                    <button
+                      type="button"
+                      className="flex flex-col items-center gap-1.5 rounded-sm border border-glass-border bg-card px-2 py-3 text-[10px] font-semibold uppercase tracking-wider text-foreground hover:border-primary/50"
+                    >
+                      <Settings className="size-5" />
+                      <span>Settings</span>
+                    </button>
+                  }
+                />
+                <RouterNavLink
+                  to="/auth"
+                  className="col-span-3 flex items-center justify-center gap-2 rounded-sm border border-glass-border bg-card px-3 py-3 text-xs font-semibold uppercase tracking-wider text-foreground hover:border-primary/50"
+                >
+                  <UserCircle className="size-4 text-primary" /> Tech Account
+                </RouterNavLink>
+              </div>
+            </SheetContent>
+          </Sheet>
         </nav>
       </header>
     </>
