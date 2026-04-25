@@ -43,6 +43,7 @@ const App = () => {
               <Route path="/analyzer" element={<Analyzer />} />
               <Route path="/reports" element={<Reports />} />
               <Route path="/sample-generator" element={<SampleGenerator />} />
+              <Route path="/shared/:token" element={<SharedAnalysis />} />
               <Route path="/visualize" element={<Visualize />} />
               <Route path="/results/:file_id" element={<Results />} />
               <Route path="/shared/:token" element={<SharedAnalysis />} />
