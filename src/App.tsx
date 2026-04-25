@@ -17,6 +17,7 @@ import Reports from "./pages/Reports.tsx";
 import SampleGenerator from "./pages/SampleGenerator.tsx";
 import Visualize from "./pages/Visualize.tsx";
 import Workspace from "./pages/Workspace.tsx";
+import SharedAnalysis from "./pages/SharedAnalysis.tsx";
 import NotFound from "./pages/NotFound.tsx";
 
 const queryClient = new QueryClient();
@@ -44,6 +45,7 @@ const App = () => {
               <Route path="/sample-generator" element={<SampleGenerator />} />
               <Route path="/visualize" element={<Visualize />} />
               <Route path="/results/:file_id" element={<Results />} />
+              <Route path="/shared/:token" element={<SharedAnalysis />} />
               {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
               <Route path="*" element={<NotFound />} />
             </Routes>
