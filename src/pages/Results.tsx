@@ -629,6 +629,7 @@ const Results = () => {
           <p className="mt-3 max-w-2xl text-muted-foreground">File ID: <span className="font-mono text-foreground">{fileId ?? "—"}</span></p>
         </div>
         <div className="flex flex-wrap gap-3">
+          <Button type="button" variant="default" onClick={downloadPdfReport}><FileText className="size-4" /> Download PDF Report</Button>
           <Button type="button" variant="outline" onClick={saveSnapshot}><Save className="size-4" /> Save Analysis</Button>
           <Button type="button" variant="outline" onClick={downloadReport}><Download className="size-4" /> Health Report</Button>
           <Button type="button" variant="outline" onClick={downloadPlainEnglishSummary}><Download className="size-4" /> Plain English Summary</Button>
