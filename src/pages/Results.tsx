@@ -498,6 +498,8 @@ const Results = () => {
   const [aiLoading, setAiLoading] = useState<AiInsightKind | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [speedUnit, setSpeedUnit] = useSpeedUnit();
+  const [shareUrl, setShareUrl] = useState<string | null>(null);
+  const [sharing, setSharing] = useState(false);
 
   useEffect(() => {
     let isMounted = true;
