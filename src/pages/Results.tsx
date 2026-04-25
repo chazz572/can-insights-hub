@@ -15,7 +15,7 @@ import { buildPartialDbcDraft, generatePartialDbcCandidates, inferVehicleIdentif
 import { requestAiInsight, saveAnalysisSnapshot, type AiInsightKind } from "@/lib/saasApi";
 import { generatePdfReport } from "@/lib/pdfReport";
 import { createShareLink } from "@/lib/shareApi";
-import { ShareExpirySetting } from "@/lib/settings";
+import { AutoSaveSetting, ShareExpirySetting } from "@/lib/settings";
 import { cn } from "@/lib/utils";
 import { convertSpeedsInText, type SpeedUnit, useSpeedUnit } from "@/lib/units";
 
@@ -520,6 +520,11 @@ const Results = () => {
         if (isMounted) {
           setAnalysis(result);
           localStorage.setItem("can_ai_file_id", fileId);
+          if (AutoSaveSetting.read() === "on") {
+            void saveAnalysisSnapshot({ fileId, result }).then(() => {
+              if (isMounted) setActionMessage("Auto-saved analysis to your workspace.");
+            }).catch(() => { /* silent */ });
+          }
         }
       } catch (analysisError) {
         if (isMounted) setError(analysisError instanceof Error ? analysisError.message : "Analysis request failed.");
