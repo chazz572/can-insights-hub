@@ -620,6 +620,8 @@ const Results = () => {
     }
   };
 
+
+
   const createShare = async () => {
     if (!data) return;
     setSharing(true);
