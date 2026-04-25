@@ -1,4 +1,4 @@
-import { AlertTriangle, Activity, BarChart3, Binary, BrainCircuit, Car, ChevronDown, Clock, Cpu, Download, FileCode2, FileText, Gauge, GitBranch, Hash, Layers3, Loader2, Map, MessageSquareText, Radar, Save, ScanLine, ShieldCheck, Sparkles, TimerReset, Wrench, Zap } from "lucide-react";
+import { AlertTriangle, Activity, BarChart3, Binary, BrainCircuit, Car, ChevronDown, Clock, Cpu, Download, FileCode2, FileText, Gauge, GitBranch, Hash, Layers3, Link2, Loader2, Map, MessageSquareText, Radar, Save, ScanLine, ShieldCheck, Sparkles, TimerReset, Wrench, Zap } from "lucide-react";
 import { useEffect, useState } from "react";
 import type { ReactNode } from "react";
 import { Link, useParams } from "react-router-dom";
@@ -14,6 +14,7 @@ import { analyzeFile, AnalysisResult, type JsonRecord } from "@/lib/canApi";
 import { buildPartialDbcDraft, generatePartialDbcCandidates, inferVehicleIdentification } from "@/lib/intelligence";
 import { requestAiInsight, saveAnalysisSnapshot, type AiInsightKind } from "@/lib/saasApi";
 import { generatePdfReport } from "@/lib/pdfReport";
+import { createShareLink } from "@/lib/shareApi";
 import { cn } from "@/lib/utils";
 import { convertSpeedsInText, type SpeedUnit, useSpeedUnit } from "@/lib/units";
 
