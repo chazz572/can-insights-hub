@@ -13,6 +13,7 @@ import { Tooltip as UiTooltip, TooltipContent, TooltipTrigger } from "@/componen
 import { analyzeFile, AnalysisResult, type JsonRecord } from "@/lib/canApi";
 import { buildPartialDbcDraft, generatePartialDbcCandidates, inferVehicleIdentification } from "@/lib/intelligence";
 import { requestAiInsight, saveAnalysisSnapshot, type AiInsightKind } from "@/lib/saasApi";
+import { generatePdfReport } from "@/lib/pdfReport";
 import { cn } from "@/lib/utils";
 import { convertSpeedsInText, type SpeedUnit, useSpeedUnit } from "@/lib/units";
 
