@@ -290,6 +290,45 @@ export type Database = {
           },
         ]
       }
+      shared_analyses: {
+        Row: {
+          created_at: string
+          expires_at: string | null
+          file_id: string | null
+          id: string
+          result_snapshot: Json
+          revoked_at: string | null
+          share_token: string
+          title: string | null
+          user_id: string
+          view_count: number
+        }
+        Insert: {
+          created_at?: string
+          expires_at?: string | null
+          file_id?: string | null
+          id?: string
+          result_snapshot?: Json
+          revoked_at?: string | null
+          share_token: string
+          title?: string | null
+          user_id: string
+          view_count?: number
+        }
+        Update: {
+          created_at?: string
+          expires_at?: string | null
+          file_id?: string | null
+          id?: string
+          result_snapshot?: Json
+          revoked_at?: string | null
+          share_token?: string
+          title?: string | null
+          user_id?: string
+          view_count?: number
+        }
+        Relationships: []
+      }
       team_members: {
         Row: {
           created_at: string
