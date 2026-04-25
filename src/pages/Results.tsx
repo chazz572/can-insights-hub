@@ -13,6 +13,7 @@ import { Tooltip as UiTooltip, TooltipContent, TooltipTrigger } from "@/componen
 import { analyzeFile, AnalysisResult, type JsonRecord } from "@/lib/canApi";
 import { buildPartialDbcDraft, generatePartialDbcCandidates, inferVehicleIdentification } from "@/lib/intelligence";
 import { requestAiInsight, saveAnalysisSnapshot, type AiInsightKind } from "@/lib/saasApi";
+import { generatePdfReport } from "@/lib/pdfReport";
 import { cn } from "@/lib/utils";
 import { convertSpeedsInText, type SpeedUnit, useSpeedUnit } from "@/lib/units";
 
@@ -606,6 +607,16 @@ const Results = () => {
     URL.revokeObjectURL(url);
   };
 
+  const downloadPdfReport = () => {
+    if (!data) return;
+    try {
+      generatePdfReport({ data, fileId, componentHealth, busLoad, timingScore, networkScore });
+      setActionMessage("PDF report generated and downloaded.");
+    } catch (e) {
+      setActionMessage(e instanceof Error ? e.message : "Failed to generate PDF.");
+    }
+  };
+
   return (
     <main className="mx-auto min-h-screen max-w-7xl px-4 py-8 sm:px-6 lg:px-10">
       <div className="mb-8 flex flex-col justify-between gap-4 sm:flex-row sm:items-end">
@@ -618,6 +629,7 @@ const Results = () => {
           <p className="mt-3 max-w-2xl text-muted-foreground">File ID: <span className="font-mono text-foreground">{fileId ?? "—"}</span></p>
         </div>
         <div className="flex flex-wrap gap-3">
+          <Button type="button" variant="default" onClick={downloadPdfReport}><FileText className="size-4" /> Download PDF Report</Button>
           <Button type="button" variant="outline" onClick={saveSnapshot}><Save className="size-4" /> Save Analysis</Button>
           <Button type="button" variant="outline" onClick={downloadReport}><Download className="size-4" /> Health Report</Button>
           <Button type="button" variant="outline" onClick={downloadPlainEnglishSummary}><Download className="size-4" /> Plain English Summary</Button>
