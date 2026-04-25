@@ -15,6 +15,7 @@ import { buildPartialDbcDraft, generatePartialDbcCandidates, inferVehicleIdentif
 import { requestAiInsight, saveAnalysisSnapshot, type AiInsightKind } from "@/lib/saasApi";
 import { generatePdfReport } from "@/lib/pdfReport";
 import { createShareLink } from "@/lib/shareApi";
+import { ShareExpirySetting } from "@/lib/settings";
 import { cn } from "@/lib/utils";
 import { convertSpeedsInText, type SpeedUnit, useSpeedUnit } from "@/lib/units";
 
@@ -626,11 +627,14 @@ const Results = () => {
     if (!data) return;
     setSharing(true);
     setShareUrl(null);
+    const expiryPref = ShareExpirySetting.read();
+    const expiresInDays = expiryPref === "never" ? null : Number(expiryPref);
+    const expiryLabel = expiryPref === "never" ? "no expiration" : `expires in ${expiryPref} day${expiryPref === "1" ? "" : "s"}`;
     try {
-      const { url } = await createShareLink({ fileId, result: data, title: `CAN Analysis ${fileId ?? ""}`.trim(), expiresInDays: 30 });
+      const { url } = await createShareLink({ fileId, result: data, title: `CAN Analysis ${fileId ?? ""}`.trim(), expiresInDays });
       setShareUrl(url);
-      try { await navigator.clipboard.writeText(url); setActionMessage("Share link created and copied to clipboard. Expires in 30 days."); }
-      catch { setActionMessage("Share link created. Copy it below to share."); }
+      try { await navigator.clipboard.writeText(url); setActionMessage(`Share link created and copied to clipboard · ${expiryLabel}.`); }
+      catch { setActionMessage(`Share link created · ${expiryLabel}. Copy it below to share.`); }
     } catch (e) {
       setActionMessage(e instanceof Error ? e.message : "Failed to create share link.");
     } finally {
