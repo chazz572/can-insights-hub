@@ -148,7 +148,7 @@ const SampleGenerator = () => {
   };
 
   return (
-    <main className="mx-auto w-full max-w-6xl space-y-6 px-4 py-8 md:px-8">
+    <main className="mx-auto w-full max-w-6xl space-y-6 px-3 pb-28 pt-4 sm:px-4 sm:py-8 md:px-8 md:pb-8">
       <header className="data-panel riveted relative overflow-hidden p-5 md:p-6">
         <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
           <div className="min-w-0">
@@ -289,7 +289,7 @@ const SampleGenerator = () => {
             description="Generic, fictional signal database — not affiliated with any OEM."
             icon={<FileCode2 className="size-5" />}
           >
-            <div className="flex items-center justify-end gap-2 pb-2">
+            <div className="flex flex-wrap items-center justify-end gap-2 pb-2">
               <Button variant="secondary" size="sm" onClick={() => copy("DBC", result.dbc)}>
                 <Copy className="mr-1.5 size-3.5" /> Copy
               </Button>
@@ -298,7 +298,7 @@ const SampleGenerator = () => {
                 size="sm"
                 onClick={() => downloadText(`${baseName}.dbc`, result.dbc, "application/octet-stream")}
               >
-                <Download className="mr-1.5 size-3.5" /> Download .dbc
+                <Download className="mr-1.5 size-3.5" /> <span className="hidden sm:inline">Download&nbsp;</span>.dbc
               </Button>
             </div>
             <pre className="max-h-96 overflow-auto rounded-md border border-glass-border bg-background/60 p-3 font-mono text-[11px] leading-relaxed text-foreground">
@@ -311,7 +311,7 @@ const SampleGenerator = () => {
             description="candump-style — pipe directly into the existing Intake / Diagnose pipeline."
             icon={<FileText className="size-5" />}
           >
-            <div className="flex items-center justify-end gap-2 pb-2">
+            <div className="flex flex-wrap items-center justify-end gap-2 pb-2">
               <Button variant="secondary" size="sm" onClick={() => copy("CAN log", result.log)}>
                 <Copy className="mr-1.5 size-3.5" /> Copy
               </Button>
@@ -320,7 +320,7 @@ const SampleGenerator = () => {
                 size="sm"
                 onClick={() => downloadText(`${baseName}.log`, result.log, "application/octet-stream")}
               >
-                <Download className="mr-1.5 size-3.5" /> Download .log
+                <Download className="mr-1.5 size-3.5" /> <span className="hidden sm:inline">Download&nbsp;</span>.log
               </Button>
             </div>
             <pre className="max-h-96 overflow-auto rounded-md border border-glass-border bg-background/60 p-3 font-mono text-[11px] leading-relaxed text-foreground">
