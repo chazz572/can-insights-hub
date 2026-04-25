@@ -12,6 +12,7 @@ import BatchResults from "./pages/BatchResults.tsx";
 import Compare from "./pages/Compare.tsx";
 import Engineering from "./pages/Engineering.tsx";
 import Fleet from "./pages/Fleet.tsx";
+import Analyzer from "./pages/Analyzer.tsx";
 import Reports from "./pages/Reports.tsx";
 import SampleGenerator from "./pages/SampleGenerator.tsx";
 import Visualize from "./pages/Visualize.tsx";
@@ -38,6 +39,7 @@ const App = () => {
               <Route path="/compare" element={<Compare />} />
               <Route path="/engineering" element={<Engineering />} />
               <Route path="/fleet" element={<Fleet />} />
+              <Route path="/analyzer" element={<Analyzer />} />
               <Route path="/reports" element={<Reports />} />
               <Route path="/sample-generator" element={<SampleGenerator />} />
               <Route path="/visualize" element={<Visualize />} />

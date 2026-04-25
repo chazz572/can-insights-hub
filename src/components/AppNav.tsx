@@ -1,4 +1,4 @@
-import { BarChart3, Beaker, Bell, Car, ChartNoAxesCombined, CheckCircle2, Download, GitCompareArrows, Home, LayoutDashboard, Moon, Settings, Sun, TerminalSquare, UploadCloud, UserCircle, Wrench } from "lucide-react";
+import { Activity, BarChart3, Beaker, Bell, Car, ChartNoAxesCombined, CheckCircle2, Download, GitCompareArrows, Home, LayoutDashboard, Moon, Settings, Sun, TerminalSquare, UploadCloud, UserCircle, Wrench } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Link, NavLink as RouterNavLink, useLocation } from "react-router-dom";
 
@@ -60,6 +60,7 @@ export const AppNav = () => {
     { to: "/compare", label: "Compare", icon: GitCompareArrows },
     { to: "/engineering", label: "Bench", icon: TerminalSquare },
     { to: "/visualize", label: "Scope", icon: ChartNoAxesCombined },
+    { to: "/analyzer", label: "Analyzer", icon: Activity, highlight: true },
     { to: "/fleet", label: "Fleet", icon: Car },
     { to: "/sample-generator", label: "Sample Gen", icon: Beaker },
     { to: "/reports", label: "Work Order", icon: Download },
