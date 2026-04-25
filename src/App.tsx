@@ -46,7 +46,6 @@ const App = () => {
               <Route path="/shared/:token" element={<SharedAnalysis />} />
               <Route path="/visualize" element={<Visualize />} />
               <Route path="/results/:file_id" element={<Results />} />
-              <Route path="/shared/:token" element={<SharedAnalysis />} />
               {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
               <Route path="*" element={<NotFound />} />
             </Routes>
