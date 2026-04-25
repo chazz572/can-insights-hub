@@ -1,8 +1,10 @@
-import { Activity, BarChart3, Beaker, Bell, Car, ChartNoAxesCombined, CheckCircle2, Download, GitCompareArrows, Home, LayoutDashboard, Moon, Settings, Sun, TerminalSquare, UploadCloud, UserCircle, Wrench } from "lucide-react";
+import { Activity, BarChart3, Beaker, Bell, Car, ChartNoAxesCombined, CheckCircle2, Download, GitCompareArrows, Home, LayoutDashboard, MoreHorizontal, Moon, Settings, Sun, TerminalSquare, UploadCloud, UserCircle, Wrench } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Link, NavLink as RouterNavLink, useLocation } from "react-router-dom";
 
 import { SettingsDialog } from "@/components/SettingsDialog";
+import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
+import { useApplyGlobalSettings } from "@/lib/settings";
 import { cn } from "@/lib/utils";
 
 const navClass = ({ isActive, highlight }: { isActive: boolean; highlight?: boolean }) =>
@@ -16,11 +18,13 @@ const navClass = ({ isActive, highlight }: { isActive: boolean; highlight?: bool
   );
 
 export const AppNav = () => {
+  useApplyGlobalSettings();
   const location = useLocation();
   const [fileId, setFileId] = useState<string | null>(() => localStorage.getItem("can_ai_file_id"));
   const [theme, setTheme] = useState<"dark" | "light">(() => (localStorage.getItem("can_ai_theme") === "light" ? "light" : "dark"));
   const [notice, setNotice] = useState<string | null>(null);
   const [clock, setClock] = useState<string>(() => new Date().toLocaleTimeString([], { hour12: false }));
+  const [mobileMoreOpen, setMobileMoreOpen] = useState(false);
 
   useEffect(() => {
     setFileId(localStorage.getItem("can_ai_file_id"));
