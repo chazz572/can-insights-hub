@@ -15,6 +15,7 @@ import { buildPartialDbcDraft, generatePartialDbcCandidates, inferVehicleIdentif
 import { requestAiInsight, saveAnalysisSnapshot, type AiInsightKind } from "@/lib/saasApi";
 import { generatePdfReport } from "@/lib/pdfReport";
 import { createShareLink } from "@/lib/shareApi";
+import { createShareLink } from "@/lib/shareApi";
 import { cn } from "@/lib/utils";
 import { convertSpeedsInText, type SpeedUnit, useSpeedUnit } from "@/lib/units";
 
@@ -617,6 +618,22 @@ const Results = () => {
       setActionMessage("PDF report generated and downloaded.");
     } catch (e) {
       setActionMessage(e instanceof Error ? e.message : "Failed to generate PDF.");
+    }
+  };
+
+  const handleCreateShareLink = async () => {
+    if (!data) return;
+    setSharing(true);
+    setShareUrl(null);
+    try {
+      const { url } = await createShareLink({ fileId, result: data, title: `CAN Analysis ${fileId ?? ""}`.trim() });
+      setShareUrl(url);
+      setActionMessage("Share link created — anyone with this URL can view a read-only snapshot.");
+      try { await navigator.clipboard.writeText(url); } catch { /* ignore */ }
+    } catch (e) {
+      setActionMessage(e instanceof Error ? e.message : "Failed to create share link.");
+    } finally {
+      setSharing(false);
     }
   };
 
