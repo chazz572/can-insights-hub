@@ -29,14 +29,14 @@ export const createShareLink = async ({ fileId, result, title, expiresInDays }: 
   const token = generateToken();
   const expiresAt = expiresInDays ? new Date(Date.now() + expiresInDays * 86400000).toISOString() : null;
 
-  const { error } = await supabase.from("shared_analyses").insert({
+  const { error } = await supabase.from("shared_analyses").insert([{
     user_id: userData.user.id,
     share_token: token,
     file_id: fileId ?? null,
     title: title ?? null,
     result_snapshot: result as unknown as Record<string, unknown>,
     expires_at: expiresAt,
-  });
+  }]);
 
   if (error) throw new Error(error.message || "Failed to create share link.");
 
