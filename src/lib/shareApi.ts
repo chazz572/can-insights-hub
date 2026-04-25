@@ -34,7 +34,7 @@ export const createShareLink = async ({ fileId, result, title, expiresInDays }: 
     share_token: token,
     file_id: fileId ?? null,
     title: title ?? null,
-    result_snapshot: result as unknown as Record<string, unknown>,
+    result_snapshot: result as never,
     expires_at: expiresAt,
   }]);
 
