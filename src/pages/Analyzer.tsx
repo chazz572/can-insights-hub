@@ -31,6 +31,8 @@ import {
   idHue,
 } from "@/lib/canAnalyzer";
 import { CanFrameTable } from "@/components/CanFrameTable";
+import { ExplainFrameCard } from "@/components/ExplainFrameCard";
+import { InferredSubsystemsPanel } from "@/components/InferredSubsystemsPanel";
 import { cn } from "@/lib/utils";
 
 // Singleton analyzer for the page
@@ -404,6 +406,19 @@ const Analyzer = () => {
             )}
           </div>
 
+          {selectedStat ? (
+            <ExplainFrameCard
+              frame={{
+                id: selectedStat.id,
+                bus: selectedStat.bus,
+                dlc: selectedStat.dlc,
+                data: selectedStat.lastData,
+                hz: selectedStat.hz,
+                count: selectedStat.count,
+              }}
+            />
+          ) : null}
+
           {/* Top IDs */}
           <div className="data-panel flex-1 overflow-hidden p-4">
             <p className="stencil mb-3 text-[10px] text-primary">— Top IDs —</p>
@@ -439,6 +454,12 @@ const Analyzer = () => {
             </div>
           </div>
         </aside>
+      </section>
+
+      <section className="mt-6">
+        <InferredSubsystemsPanel
+          idStats={idStats.map((s) => ({ id: s.id, count: s.count, hz: s.hz, dlc: s.dlc })) as Array<Record<string, unknown>>}
+        />
       </section>
     </main>
   );

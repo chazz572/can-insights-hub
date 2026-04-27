@@ -6,6 +6,7 @@ import { Bar, BarChart, CartesianGrid, Line, LineChart, ResponsiveContainer, Too
 
 import { AnalysisCard } from "@/components/AnalysisCard";
 import { IntelligenceSuite } from "@/components/IntelligenceSuite";
+import { InferredSubsystemsPanel } from "@/components/InferredSubsystemsPanel";
 import { JsonTable } from "@/components/JsonTable";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -467,6 +468,7 @@ const LogPipelinePanels = ({ data, diagnostics, idStats, anomalies, vehicleBehav
     <CollapsiblePanel title="ECU Activity Map" icon={<Map className="size-5" />}><ModuleActivityMap systems={diagnostics.systems} /></CollapsiblePanel>
     <CollapsiblePanel title="Anomalies & Health Indicators" icon={<AlertTriangle className="size-5" />} defaultOpen><JsonTable data={anomalies} /></CollapsiblePanel>
     <CollapsiblePanel title="Reverse-Engineering Insights" icon={<Radar className="size-5" />}><JsonTable data={data.reverse_engineering} /><div className="mt-4"><JsonTable data={diagnostics.counter_checksum_analysis} /></div></CollapsiblePanel>
+    <CollapsiblePanel title="Inferred Subsystems (AI Auto-Classification)" icon={<BrainCircuit className="size-5" />} defaultOpen><InferredSubsystemsPanel idStats={idStats} /></CollapsiblePanel>
     <CollapsiblePanel title="Vehicle Behavior Candidates" icon={<Gauge className="size-5" />}><div className="grid gap-5 lg:grid-cols-3"><div className="space-y-3"><h3 className="font-semibold">Speed Candidates</h3>{renderList(vehicleBehavior.possible_speed_ids)}</div><div className="space-y-3"><h3 className="font-semibold">RPM Candidates</h3>{renderList(vehicleBehavior.possible_rpm_ids)}</div><div className="space-y-3"><h3 className="font-semibold">Pedal Candidates</h3>{renderList(vehicleBehavior.possible_pedal_ids)}</div></div></CollapsiblePanel>
     <CollapsiblePanel title="Partial DBC Draft Available" icon={<Download className="size-5" />}><pre className="whitespace-pre-wrap rounded-lg border border-glass-border bg-glass p-4 text-sm text-foreground">{partialDbcDraft}</pre></CollapsiblePanel>
   </div>
@@ -825,6 +827,10 @@ const Results = () => {
 
             <CollapsiblePanel title="Reverse Engineering" icon={<Radar className="size-5" />}>
               <JsonTable data={data.reverse_engineering} />
+            </CollapsiblePanel>
+
+            <CollapsiblePanel title="Inferred Subsystems (AI Auto-Classification)" icon={<BrainCircuit className="size-5" />} defaultOpen>
+              <InferredSubsystemsPanel idStats={idStats as Array<Record<string, unknown>>} />
             </CollapsiblePanel>
 
             <CollapsiblePanel title="Vehicle Behavior" icon={<Gauge className="size-5" />}>
