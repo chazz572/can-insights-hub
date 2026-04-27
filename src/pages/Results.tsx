@@ -829,6 +829,10 @@ const Results = () => {
               <JsonTable data={data.reverse_engineering} />
             </CollapsiblePanel>
 
+            <CollapsiblePanel title="Inferred Subsystems (AI Auto-Classification)" icon={<BrainCircuit className="size-5" />} defaultOpen>
+              <InferredSubsystemsPanel idStats={idStats as Array<Record<string, unknown>>} />
+            </CollapsiblePanel>
+
             <CollapsiblePanel title="Vehicle Behavior" icon={<Gauge className="size-5" />}>
               <div className="grid gap-5">
                 <div className="grid gap-5 lg:grid-cols-3">
