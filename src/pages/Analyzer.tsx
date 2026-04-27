@@ -406,6 +406,19 @@ const Analyzer = () => {
             )}
           </div>
 
+          {selectedStat ? (
+            <ExplainFrameCard
+              frame={{
+                id: selectedStat.id,
+                bus: selectedStat.bus,
+                dlc: selectedStat.dlc,
+                data: selectedStat.lastData,
+                hz: selectedStat.hz,
+                count: selectedStat.count,
+              }}
+            />
+          ) : null}
+
           {/* Top IDs */}
           <div className="data-panel flex-1 overflow-hidden p-4">
             <p className="stencil mb-3 text-[10px] text-primary">— Top IDs —</p>
