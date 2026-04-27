@@ -24,7 +24,8 @@ const toFrameLikes = (rows: Array<Record<string, unknown>>): FrameLike[] =>
       const count = Number(row.count ?? row.messages ?? row.total ?? row.frequency ?? 0) || 0;
       const hz = Number(row.hz ?? row.rate ?? row.frequency_hz ?? 0) || 0;
       const dlc = Number(row.dlc ?? row.length ?? 0) || undefined;
-      return { id, count, hz, dlc };
+      const frame: FrameLike = { id, count, hz, dlc };
+      return frame;
     })
     .filter((f): f is FrameLike => f !== null);
 
