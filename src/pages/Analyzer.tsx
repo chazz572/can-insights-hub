@@ -455,6 +455,12 @@ const Analyzer = () => {
           </div>
         </aside>
       </section>
+
+      <section className="mt-6">
+        <InferredSubsystemsPanel
+          idStats={idStats.map((s) => ({ id: s.id, count: s.count, hz: s.hz, dlc: s.dlc })) as Array<Record<string, unknown>>}
+        />
+      </section>
     </main>
   );
 };
