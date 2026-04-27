@@ -31,6 +31,8 @@ import {
   idHue,
 } from "@/lib/canAnalyzer";
 import { CanFrameTable } from "@/components/CanFrameTable";
+import { ExplainFrameCard } from "@/components/ExplainFrameCard";
+import { InferredSubsystemsPanel } from "@/components/InferredSubsystemsPanel";
 import { cn } from "@/lib/utils";
 
 // Singleton analyzer for the page
