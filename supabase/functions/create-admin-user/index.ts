@@ -7,12 +7,24 @@ Deno.serve(async (req) => {
     Deno.env.get("SUPABASE_URL")!,
     Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
   );
-  const { data, error } = await admin.auth.admin.createUser({
+  let { data, error } = await admin.auth.admin.createUser({
     email,
     password,
     email_confirm: true,
     user_metadata: { full_name: "Admin" },
   });
+  if (error && (error as any).code === "email_exists") {
+    const list = await admin.auth.admin.listUsers();
+    const existing = list.data.users.find((u) => u.email === email);
+    if (existing) {
+      const upd = await admin.auth.admin.updateUserById(existing.id, {
+        password,
+        email_confirm: true,
+      });
+      data = upd.data as any;
+      error = upd.error;
+    }
+  }
   return new Response(JSON.stringify({ data, error }), {
     headers: { "Content-Type": "application/json" },
     status: error ? 400 : 200,
